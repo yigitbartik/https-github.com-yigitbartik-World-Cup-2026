@@ -1,62 +1,63 @@
-# Vercel'de PDF extraction sorununu çözme — kurulum adımları
+# Vercel fix — adım 2: "Request Entity Too Large" hatası
 
-## Neden bozuktu
-`server.ts` bir Express `app.listen()` sunucusu. Bu yapı Google AI Studio'nun
-Cloud Run hosting modeline uygun, ama Vercel bunu otomatik çalıştırmıyor —
-sadece Vite ile statik frontend'i build edip serve ediyor. Bu yüzden
-`/api/extract` isteği Vercel'in 404 sayfasına düşüyor ve "Unexpected token 'T',
-"The page c"..." hatasını alıyordun (bu, Vercel'in "The page could not be
-found" yazılı HTML 404 sayfasının JSON olarak parse edilmeye çalışılmasıydı).
+## Neden oldu
+İlk fix'ten sonra `/api/extract` route'u artık çalışıyordu (404 gitti), ama
+PDF'i base64'e çevirip JSON body içinde göndermeye devam ediyorduk. Vercel'in
+Node.js serverless function'larında istek gövdesi **~4.5MB ile sabit** —
+platform seviyesinde, hiçbir config ile artırılamıyor. Base64 encoding
+orijinal dosya boyutuna ~%33 ekliyor, yani ~3MB'tan büyük FIFA PMSR PDF'leri
+bu limiti aşıp "Request Entity Too Large" hatası veriyordu.
 
 ## Yapılan değişiklik
-`server.ts` içindeki `/api/extract` ve `/api/tactical-dna` mantığı, Vercel'in
-native olarak desteklediği serverless function formatına taşındı:
+PDF artık `/api/extract`'e hiç gönderilmiyor. Bunun yerine:
 
-```
-api/
-  _lib/gemini.ts      <- ortak Gemini client + retry helper (route değil, _ ile başlıyor)
-  extract.ts          <- POST /api/extract
-  tactical-dna.ts     <- POST /api/tactical-dna
-  health.ts           <- GET  /api/health
-vercel.json            <- extract fonksiyonuna daha uzun timeout + bellek
-```
+1. Tarayıcı, PDF'i doğrudan **Vercel Blob** depolamaya yüklüyor
+   (`api/blob-upload.ts` bu yüklemeyi yetkilendiriyor)
+2. `App.tsx`, yükleme bitince elde ettiği küçük bir URL'i `/api/extract`'e
+   gönderiyor (artık dosyanın kendisi değil)
+3. `api/extract.ts`, bu URL'den PDF'i **sunucu tarafında** indirip Gemini'ye
+   öyle gönderiyor
 
-Vercel, repo kökünde bir `api/` klasörü gördüğünde içindeki her dosyayı
-otomatik olarak bir serverless function / route olarak deploy eder — ayrıca
-bir build adımı veya `app.listen()` gerekmez.
+Bu şekilde `/api/extract`'in kendi request body'si birkaç yüz byte'lık bir
+JSON oluyor — 4.5MB limitine hiç yaklaşmıyor bile.
+
+## Değişen / eklenen dosyalar
+- **YENİ**: `api/blob-upload.ts` — Blob yükleme tokenı üreten endpoint
+- **GÜNCELLENDİ**: `api/extract.ts` — artık `pdfUrl` kabul ediyor (eski
+  `pdfBase64` de geriye dönük uyumluluk için duruyor ama kullanılmayacak)
+- **GÜNCELLENDİ**: `App.tsx` — `handlePdfUpload` fonksiyonu artık
+  `@vercel/blob/client`'taki `upload()` ile yüklüyor, FileReader/base64
+  mantığı kaldırıldı
+- **GÜNCELLENDİ**: `package.json` — `@vercel/blob` ve `@vercel/node` eklendi
 
 ## Senin yapman gerekenler
 
-1. **Bu dosyaları projene kopyala**: `api/` klasörünü ve `vercel.json`'ı repo
-   köküne ekle (mevcut `server.ts` dosyasını silmene gerek yok — onu sadece
-   `npm run dev` ile lokal geliştirme için Express + Vite middleware modunda
-   kullanmaya devam edebilirsin; Vercel'de hiç çalışmayacak ama zararı da yok).
+1. **Vercel'de bir Blob store oluştur** (bu adım kritik, atlarsan
+   `BLOB_READ_WRITE_TOKEN` olmadığı için yükleme başarısız olur):
+   Vercel Dashboard → projen → **Storage** sekmesi → **Create Database** →
+   **Blob** seç → oluştur. Otomatik olarak projene bağlanır ve
+   `BLOB_READ_WRITE_TOKEN` env var'ı otomatik eklenir (sen elle bir şey
+   girmene gerek yok).
 
-2. **`@vercel/node` paketini ekle** (tip tanımları için):
+2. Reponda şu dosyaları güncelle/ekle (hepsini tekrar gönderdim):
+   - `api/blob-upload.ts` (yeni)
+   - `api/extract.ts` (güncellendi — eskisinin üzerine yaz)
+   - `App.tsx` (güncellendi — eskisinin üzerine yaz; sadece import satırı ve
+     `handlePdfUpload` içindeki yükleme kısmı değişti, dosyanın geri kalanı
+     aynı)
+   - `package.json` (güncellendi — eskisinin üzerine yaz)
+
+3. Bağımlılığı yükle:
    ```bash
-   npm install --save-dev @vercel/node
+   npm install
    ```
+   (bu `@vercel/blob` ve `@vercel/node`'u kuracak)
 
-3. **GEMINI_API_KEY'i Vercel'e gir** — bu kritik, çoğu zaman atlanan adım:
-   Vercel Dashboard → Project → Settings → Environment Variables →
-   `GEMINI_API_KEY` adıyla ekle (Production + Preview + Development hepsine).
-   `.env.local` dosyası deploy edilmez, sadece lokalde işe yarar.
+4. Commit + push et, Vercel otomatik deploy edecek.
 
-4. **Deploy et** (git push veya `vercel --prod`).
+5. Test et: küçük bir PDF ile dene, sonra gerçek PMSR raporunla dene.
 
-5. Test et: `https://<projen>.vercel.app/api/health` adresine gidip
-   `{"status":"ok",...}` JSON'u dönüp dönmediğine bak. Dönüyorsa API route'lar
-   artık canlı demektir.
-
-## Olası ikinci sorun: dosya boyutu limiti
-Vercel Node serverless function'larda istek gövdesi (request body) sabit
-şekilde ~4.5MB ile sınırlı — bu `vercel.json` veya kod ile artırılamaz.
-Base64 encoding orijinal PDF boyutuna ~%33 ekliyor, yani ~3MB'tan büyük FIFA
-PMSR PDF'leri muhtemelen "Request Entity Too Large" / "FUNCTION_PAYLOAD_TOO_LARGE"
-hatası verecek — bu, az önce çözdüğümüz 404 hatasından tamamen farklı bir hata
-olarak karşına çıkar.
-
-Eğer büyük PDF'lerle karşılaşırsan, çözüm: PDF'i base64 olarak JSON body'de
-göndermek yerine, tarayıcıdan doğrudan Vercel Blob (veya başka bir storage)'a
-yükleyip API'ye sadece dosya URL'ini göndermek. İstersen bu akışı da kurarım —
-şimdilik küçük/orta boy PDF'lerle test edip hata alırsan haber ver.
+## Maksimum dosya boyutu
+`api/blob-upload.ts` içinde `maximumSizeInBytes: 50 * 1024 * 1024` (50MB)
+olarak ayarladım — PMSR PDF'lerin için fazlasıyla yeterli olmalı, istersen
+değiştirebilirsin.

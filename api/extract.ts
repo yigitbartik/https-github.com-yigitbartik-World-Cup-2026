@@ -1,13 +1,13 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getGeminiClient, generateContentWithRetry, setCors } from "./_lib/gemini";
 
-// Vercel Node serverless functions have a hard ~4.5MB request body limit.
-// FIFA PMSR PDFs converted to base64 (which adds ~33% size) can exceed this for longer reports.
-// If you hit "Request Entity Too Large" / 413 errors, see the note at the bottom of this file.
+// Now that PDFs are uploaded directly to Vercel Blob from the browser, this function's
+// own request body is just a small JSON payload (the blob URL + filename), so a 1mb limit
+// is plenty. (Legacy pdfBase64 path, if ever used, would need this raised again — see note below.)
 export const config = {
   api: {
     bodyParser: {
-      sizeLimit: "10mb",
+      sizeLimit: "1mb",
     },
   },
 };
@@ -22,14 +22,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { pdfBase64, originalFileName } = req.body || {};
-    if (!pdfBase64) {
-      return res.status(400).json({ error: "Missing pdfBase64 field in request body." });
+    const { pdfBase64, pdfUrl, originalFileName } = req.body || {};
+    if (!pdfBase64 && !pdfUrl) {
+      return res.status(400).json({ error: "Missing pdfUrl (or legacy pdfBase64) field in request body." });
     }
 
     const ai = getGeminiClient();
 
-    const cleanBase64 = pdfBase64.replace(/^data:application\/pdf;base64,/, "");
+    let cleanBase64: string;
+    if (pdfUrl) {
+      // Preferred path: file was uploaded directly to Vercel Blob by the browser,
+      // so we only received a URL here (keeps this function's request body tiny).
+      const blobRes = await fetch(pdfUrl);
+      if (!blobRes.ok) {
+        return res.status(400).json({ error: `Failed to download PDF from blob storage (status ${blobRes.status}).` });
+      }
+      const arrayBuffer = await blobRes.arrayBuffer();
+      cleanBase64 = Buffer.from(arrayBuffer).toString("base64");
+    } else {
+      cleanBase64 = pdfBase64.replace(/^data:application\/pdf;base64,/, "");
+    }
 
     const pdfPart = {
       inlineData: {
@@ -534,13 +546,12 @@ Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as fo
 }
 
 /*
-NOTE ON FILE SIZE — read this if extraction now works for small PDFs but fails on larger FIFA PMSR reports:
-Vercel Node.js Serverless Functions cap the total request body at ~4.5MB, and this cannot be raised
-via the `sizeLimit` config above (that only controls parsing behavior under that cap). Base64 encoding
-adds ~33% overhead, so any PDF over roughly 3MB will likely fail with a 413 "Request Entity Too Large"
-or "FUNCTION_PAYLOAD_TOO_LARGE" error, even though this function itself is otherwise correct.
-If that happens, the fix is to stop sending the PDF inside the JSON body entirely — e.g. upload the PDF
-to Vercel Blob (or another storage bucket) directly from the browser first, then send only the resulting
-URL to this endpoint, which downloads the file server-side before calling Gemini. Let me know if your
-PMSR PDFs are large and I can wire that flow up.
+NOTE ON FILE SIZE:
+PDFs are now uploaded directly from the browser to Vercel Blob (see api/blob-upload.ts and the
+upload() call in App.tsx's handlePdfUpload), and this function only receives the resulting blob
+URL — not the file itself. This avoids Vercel's ~4.5MB serverless function request body limit,
+which is fixed at the platform level and cannot be raised via config.
+The legacy `pdfBase64` path above is kept only for backwards compatibility; if you ever reintroduce
+sending the file inline, you'd hit the same 4.5MB ceiling again for larger PMSR PDFs.
 */
+
