@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import * as XLSX from "xlsx";
+import { upload } from "@vercel/blob/client";
 import {
   Download,
   Upload,
@@ -1460,18 +1461,13 @@ export default function App() {
     }, 1200);
 
     try {
-      const reader = new FileReader();
-
-      const base64Promise = new Promise<string>((resolve, reject) => {
-        reader.onload = () => {
-          const result = reader.result as string;
-          resolve(result);
-        };
-        reader.onerror = error => reject(error);
+      // Upload the PDF directly from the browser to Vercel Blob storage.
+      // This bypasses the ~4.5MB request body limit on Vercel serverless functions,
+      // since the file never passes through our /api/extract function as base64.
+      const blob = await upload(file.name, file, {
+        access: "public",
+        handleUploadUrl: "/api/blob-upload",
       });
-
-      reader.readAsDataURL(file);
-      const base64Content = await base64Promise;
 
       const res = await fetch("/api/extract", {
         method: "POST",
@@ -1479,7 +1475,7 @@ export default function App() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          pdfBase64: base64Content,
+          pdfUrl: blob.url,
           originalFileName: file.name
         })
       });
