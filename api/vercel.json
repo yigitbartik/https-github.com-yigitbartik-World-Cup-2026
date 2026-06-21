@@ -1,0 +1,11 @@
+{
+  "functions": {
+    "api/extract.ts": {
+      "maxDuration": 60,
+      "memory": 1024
+    },
+    "api/tactical-dna.ts": {
+      "maxDuration": 30
+    }
+  }
+}
