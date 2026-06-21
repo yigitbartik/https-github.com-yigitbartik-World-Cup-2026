@@ -1,0 +1,6 @@
+{
+  "name": "FIFA PDF to Excel Match Report Converter",
+  "description": "Convert FIFA PDF Match Reports, perform advanced tactical & physical regressions, calculate positional percentiles, and generate AI-driven tournament DNA summaries.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
