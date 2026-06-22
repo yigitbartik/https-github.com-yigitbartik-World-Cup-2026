@@ -1438,7 +1438,7 @@ export default function App() {
     }, 5000);
   };
 
-  // PDF processing via client reading as base64 and server endpoint querying
+// PDF processing via client reading as base64 and server endpoint querying
   const handlePdfUpload = async (file: File) => {
     if (!file) return;
     if (file.type !== "application/pdf") {
@@ -1460,7 +1460,8 @@ export default function App() {
       }
     }, 1200);
 
-   try {
+    try {
+      // 1. Önce PDF'i Vercel Blob'a yükle
       const blob = await upload(file.name, file, {
         access: "public",
         handleUploadUrl: "/api/blob-upload",
@@ -1481,9 +1482,22 @@ export default function App() {
       const data1 = await res1.json();
       let accumulatedData = { ...data1.data };
 
-      // İlk veriyi ekrana yansıt
-      setMatchData(accumulatedData);
-
+      // İlk veriyi Turnuva Hafızasına (State'e) Kaydet ve Ekrana Yansıt
+      let matchKeyStr = "";
+      setUploadedMatches(prev => {
+        const partialMatch1 = normalizeMatchReport(accumulatedData);
+        matchKeyStr = `${partialMatch1.matchInfo.homeTeam}_vs_${partialMatch1.matchInfo.awayTeam}_on_${partialMatch1.matchInfo.date}`;
+        
+        const existsIdx = prev.findIndex(m => `${m.matchInfo.homeTeam}_vs_${m.matchInfo.awayTeam}_on_${m.matchInfo.date}` === matchKeyStr || m.matchInfo.title === partialMatch1.matchInfo.title);
+        if (existsIdx > -1) {
+          const updated = [...prev];
+          updated[existsIdx] = partialMatch1;
+          setTimeout(() => setActiveMatchIndex(existsIdx), 0);
+          return updated;
+        }
+        setTimeout(() => setActiveMatchIndex(prev.length), 0);
+        return [...prev, partialMatch1];
+      });
 
       // --- FAZ 2: Taktik ve Pas Ağları ---
       setParsingStep("FAZ 2: Taktik & Pas Ağları Çekiliyor...");
@@ -1498,10 +1512,18 @@ export default function App() {
       }
       const data2 = await res2.json();
       
-      // Önceki verinin üzerine ekle
+      // Önceki verinin üzerine Faz 2'yi ekle ve ekrana yansıt
       accumulatedData = { ...accumulatedData, ...data2.data };
-      setMatchData({ ...accumulatedData });
-
+      setUploadedMatches(prev => {
+        const partialMatch2 = normalizeMatchReport(accumulatedData);
+        const existsIdx = prev.findIndex(m => `${m.matchInfo.homeTeam}_vs_${m.matchInfo.awayTeam}_on_${m.matchInfo.date}` === matchKeyStr || m.matchInfo.title === partialMatch2.matchInfo.title);
+        if (existsIdx > -1) {
+          const updated = [...prev];
+          updated[existsIdx] = partialMatch2;
+          return updated;
+        }
+        return prev;
+      });
 
       // --- FAZ 3: Fiziksel Efor ve Defans ---
       setParsingStep("FAZ 3: Fiziksel & Defansif Veriler Çekiliyor...");
@@ -1516,49 +1538,21 @@ export default function App() {
       }
       const data3 = await res3.json();
       
-      // Son veriyi de üzerine ekle
+      // Son veriyi de üzerine ekle ve nihai halini kaydet
       accumulatedData = { ...accumulatedData, ...data3.data };
-      
-      clearInterval(timer); // Yükleme animasyonunu durdur
-
-      // Veriyi Turnuva Hafızasına (State'e) Kaydet (Eski kodunun orijinal hali)
-      const newMatch = normalizeMatchReport(accumulatedData);
       setUploadedMatches(prev => {
-        const matchKey = (m: MatchReport) => `${m.matchInfo.homeTeam}_vs_${m.matchInfo.awayTeam}_on_${m.matchInfo.date}`;
-        const newKey = matchKey(newMatch);
-        const existsIdx = prev.findIndex(m => matchKey(m) === newKey || m.matchInfo.title === newMatch.matchInfo.title);
+        const finalMatch = normalizeMatchReport(accumulatedData);
+        const existsIdx = prev.findIndex(m => `${m.matchInfo.homeTeam}_vs_${m.matchInfo.awayTeam}_on_${m.matchInfo.date}` === matchKeyStr || m.matchInfo.title === finalMatch.matchInfo.title);
         if (existsIdx > -1) {
           const updated = [...prev];
-          updated[existsIdx] = newMatch;
-          setActiveMatchIndex(existsIdx);
+          updated[existsIdx] = finalMatch;
           return updated;
         }
-        setActiveMatchIndex(prev.length);
-        return [...prev, newMatch];
+        return prev;
       });
       
+      clearInterval(timer); // Yükleme animasyonunu durdur
       triggerToast(`Successfully translated and added "${file.name}" to tournament ledger!`);
-
-    } catch (err: any) {
-      // ... (Hata yakalama kısmı aynı kalacak)
-        const newMatch = normalizeMatchReport(responsePayload.data);
-        setUploadedMatches(prev => {
-          const matchKey = (m: MatchReport) => `${m.matchInfo.homeTeam}_vs_${m.matchInfo.awayTeam}_on_${m.matchInfo.date}`;
-          const newKey = matchKey(newMatch);
-          const existsIdx = prev.findIndex(m => matchKey(m) === newKey || m.matchInfo.title === newMatch.matchInfo.title);
-          if (existsIdx > -1) {
-            const updated = [...prev];
-            updated[existsIdx] = newMatch;
-            setActiveMatchIndex(existsIdx);
-            return updated;
-          }
-          setActiveMatchIndex(prev.length);
-          return [...prev, newMatch];
-        });
-        triggerToast(`Successfully translated and added "${file.name}" to tournament ledger!`);
-      } else {
-        throw new Error("Parsed data was incomplete or not formatted accurately in response.");
-      }
 
     } catch (err: any) {
       console.error(err);
@@ -1577,7 +1571,6 @@ export default function App() {
       setIsParsing(false);
     }
   };
-
   const onDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
