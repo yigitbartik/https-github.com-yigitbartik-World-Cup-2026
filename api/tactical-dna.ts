@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { getGeminiClient, generateContentWithRetry, setCors } from "./_lib/gemini";
+// SADECE AŞAĞIDAKİ SATIRA .js EKLENDİ:
+import { getGeminiClient, generateContentWithRetry, setCors } from "./_lib/gemini.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(res);
