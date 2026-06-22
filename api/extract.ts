@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { getGeminiClient, generateContentWithRetry, setCors } from "./_lib/gemini";
+// SADECE AŞAĞIDAKİ SATIRA .js EKLENDİ:
+import { getGeminiClient, generateContentWithRetry, setCors } from "./_lib/gemini.js";
 
 // Now that PDFs are uploaded directly to Vercel Blob from the browser, this function's
 // own request body is just a small JSON payload (the blob URL + filename), so a 1mb limit
@@ -554,4 +555,3 @@ which is fixed at the platform level and cannot be raised via config.
 The legacy `pdfBase64` path above is kept only for backwards compatibility; if you ever reintroduce
 sending the file inline, you'd hit the same 4.5MB ceiling again for larger PMSR PDFs.
 */
-
