@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
-import { setCors } from "./_lib/gemini";
+import { setCors } from "./_lib/gemini.js"; // <-- İşte hayat kurtaran o .js uzantısı eklendi
 
 // This endpoint authorizes direct browser -> Vercel Blob uploads.
 // Requires a Blob store to be created and linked to this project in
