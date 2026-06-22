@@ -1460,35 +1460,87 @@ export default function App() {
       }
     }, 1200);
 
-    try {
-      // Upload the PDF directly from the browser to Vercel Blob storage.
-      // This bypasses the ~4.5MB request body limit on Vercel serverless functions,
-      // since the file never passes through our /api/extract function as base64.
+   try {
       const blob = await upload(file.name, file, {
         access: "public",
         handleUploadUrl: "/api/blob-upload",
       });
 
-      const res = await fetch("/api/extract", {
+      // --- FAZ 1: Kadrolar ve Temel Veriler ---
+      setParsingStep("FAZ 1: Temel Veriler Çekiliyor...");
+      const res1 = await fetch("/api/extract", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          pdfUrl: blob.url,
-          originalFileName: file.name
-        })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pdfUrl: blob.url, originalFileName: file.name, phase: "phase1" })
       });
-
-      clearInterval(timer);
-
-      if (!res.ok) {
-        const errJson = await res.json();
-        throw new Error(errJson.error || "The server rejected the file analysis or Gemini is temporarily busy.");
+      
+      if (!res1.ok) {
+        const errJson = await res1.json();
+        throw new Error(errJson.error || "Faz 1 (Temel Veriler) çöktü. Lütfen tekrar deneyin.");
       }
+      const data1 = await res1.json();
+      let accumulatedData = { ...data1.data };
 
-      const responsePayload = await res.json();
-      if (responsePayload.success && responsePayload.data) {
+      // İlk veriyi ekrana yansıt
+      setMatchData(accumulatedData);
+
+
+      // --- FAZ 2: Taktik ve Pas Ağları ---
+      setParsingStep("FAZ 2: Taktik & Pas Ağları Çekiliyor...");
+      const res2 = await fetch("/api/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pdfUrl: blob.url, originalFileName: file.name, phase: "phase2" })
+      });
+      
+      if (!res2.ok) {
+        throw new Error("Faz 2 (Taktik Veriler) çöktü, ancak Faz 1 verileri kaydedildi.");
+      }
+      const data2 = await res2.json();
+      
+      // Önceki verinin üzerine ekle
+      accumulatedData = { ...accumulatedData, ...data2.data };
+      setMatchData({ ...accumulatedData });
+
+
+      // --- FAZ 3: Fiziksel Efor ve Defans ---
+      setParsingStep("FAZ 3: Fiziksel & Defansif Veriler Çekiliyor...");
+      const res3 = await fetch("/api/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pdfUrl: blob.url, originalFileName: file.name, phase: "phase3" })
+      });
+      
+      if (!res3.ok) {
+        throw new Error("Faz 3 (Fiziksel Veriler) çöktü, ancak ilk iki faz kaydedildi.");
+      }
+      const data3 = await res3.json();
+      
+      // Son veriyi de üzerine ekle
+      accumulatedData = { ...accumulatedData, ...data3.data };
+      
+      clearInterval(timer); // Yükleme animasyonunu durdur
+
+      // Veriyi Turnuva Hafızasına (State'e) Kaydet (Eski kodunun orijinal hali)
+      const newMatch = normalizeMatchReport(accumulatedData);
+      setUploadedMatches(prev => {
+        const matchKey = (m: MatchReport) => `${m.matchInfo.homeTeam}_vs_${m.matchInfo.awayTeam}_on_${m.matchInfo.date}`;
+        const newKey = matchKey(newMatch);
+        const existsIdx = prev.findIndex(m => matchKey(m) === newKey || m.matchInfo.title === newMatch.matchInfo.title);
+        if (existsIdx > -1) {
+          const updated = [...prev];
+          updated[existsIdx] = newMatch;
+          setActiveMatchIndex(existsIdx);
+          return updated;
+        }
+        setActiveMatchIndex(prev.length);
+        return [...prev, newMatch];
+      });
+      
+      triggerToast(`Successfully translated and added "${file.name}" to tournament ledger!`);
+
+    } catch (err: any) {
+      // ... (Hata yakalama kısmı aynı kalacak)
         const newMatch = normalizeMatchReport(responsePayload.data);
         setUploadedMatches(prev => {
           const matchKey = (m: MatchReport) => `${m.matchInfo.homeTeam}_vs_${m.matchInfo.awayTeam}_on_${m.matchInfo.date}`;
