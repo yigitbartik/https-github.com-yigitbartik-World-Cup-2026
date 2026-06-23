@@ -317,17 +317,17 @@ export default function DistributionAndComparison({ matchData }: DistributionAnd
     if (!playerA || !playerB) return [];
 
     const stats = [
-      { key: "speed", label: "Sürat", max: 36, valA: playerA.topSpeed, valB: playerB.topSpeed },
-      { key: "distance", label: "Kondisyon", max: 12500, valA: playerA.totalDistance, valB: playerB.totalDistance },
-      { key: "sprints", label: "Hızlanma / Süratlenme", max: 65, valA: playerA.sprints, valB: playerB.sprints },
-      { key: "passing", label: "Pas İsabeti %", max: 100, valA: playerA.passCompletionPct, valB: playerB.passCompletionPct },
-      { key: "attacks", label: "Hücum Katkısı", max: 8, valA: playerA.attemptsAtGoal * 2 + playerA.goals * 4, valB: playerB.attemptsAtGoal * 2 + playerB.goals * 4 },
-      { key: "defense", label: "Defansif Direnç", max: 15, valA: playerA.tacklesCompleted + playerA.interceptions + playerA.blocks, valB: playerB.tacklesCompleted + playerB.interceptions + playerB.blocks }
+      { key: "attack", label: "Hücum & Gol Tehdidi", max: 6, valA: (playerA.attemptsAtGoal || 0) * 1.5 + (playerA.goals || 0) * 3, valB: (playerB.attemptsAtGoal || 0) * 1.5 + (playerB.goals || 0) * 3 },
+      { key: "passAcc", label: "Pas İsabet %", max: 100, valA: playerA.passCompletionPct || 0, valB: playerB.passCompletionPct || 0 },
+      { key: "passVol", label: "Pas Hacmi", max: 70, valA: playerA.passesCompleted || 0, valB: playerB.passesCompleted || 0 },
+      { key: "lineBreaks", label: "Hat Kıran Paslar", max: 8, valA: playerA.lineBreaksCompleted || 0, valB: playerB.lineBreaksCompleted || 0 },
+      { key: "distance", label: "Toplam Koşu (m)", max: 12500, valA: playerA.totalDistance || 0, valB: playerB.totalDistance || 0 },
+      { key: "speed", label: "Maksimum Sürat", max: 35, valA: playerA.topSpeed || 0, valB: playerB.topSpeed || 0 },
+      { key: "sprints", label: "Z5 Sprintleri", max: 35, valA: playerA.sprints || 0, valB: playerB.sprints || 0 },
+      { key: "duels", label: "İkili Mücadele", max: 8, valA: (playerA.duelsWonAerial || 0) + (playerA.duelsWonPhysical || 0), valB: (playerB.duelsWonAerial || 0) + (playerB.duelsWonPhysical || 0) },
+      { key: "defense", label: "Defansif Aksiyonlar", max: 12, valA: (playerA.tacklesWon || 0) + (playerA.interceptions || 0) + (playerA.blocks || 0), valB: (playerB.tacklesWon || 0) + (playerB.interceptions || 0) + (playerB.blocks || 0) },
+      { key: "pressure", label: "Pres & Doğrudan Baskı", max: 18, valA: playerA.pressingDirect || 0, valB: playerB.pressingDirect || 0 }
     ];
-
-    // Workaround for undefined properties
-    stats[5].valA = (playerA.tacklesWon || 0) + (playerA.interceptions || 0) + (playerA.blocks || 0);
-    stats[5].valB = (playerB.tacklesWon || 0) + (playerB.interceptions || 0) + (playerB.blocks || 0);
 
     return stats.map(s => {
       const pctA = Math.min(100, Math.round((s.valA / s.max) * 100)) || 10;
@@ -778,23 +778,27 @@ export default function DistributionAndComparison({ matchData }: DistributionAnd
                 <h4 className="text-center font-sans font-bold text-xs text-slate-800 tracking-wide uppercase mb-3 pr-2">Relative Attribute Standing (%)</h4>
                 <div className="w-full h-[280px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarChartData}>
-                      <PolarGrid stroke="#e2e8f0" />
-                      <PolarAngleAxis dataKey="subject" tick={{ fill: "#475569", fontSize: 10, fontWeight: 600 }} />
-                      <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: "#94a3b8" }} />
+                    <RadarChart cx="50%" cy="48%" outerRadius="75%" data={radarChartData}>
+                      <PolarGrid gridType="circle" stroke="#e2e8f0" strokeDasharray="3 3" />
+                      <PolarAngleAxis dataKey="subject" tick={{ fill: "#334155", fontSize: 9, fontWeight: 700, fontFamily: "Inter" }} />
+                      <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: "#64748b", fontSize: 8, fontWeight: 500 }} />
                       <Radar
                         name={playerA.name}
                         dataKey={playerA.name}
                         stroke="#FF4D1A"
                         fill="#FF4D1A"
-                        fillOpacity={0.25}
+                        fillOpacity={0.2}
+                        dot={{ r: 4, stroke: "#7c2d12", strokeWidth: 1.5, fill: "#ffedd5" }}
+                        activeDot={{ r: 6, stroke: "#7c2d12", strokeWidth: 2 }}
                       />
                       <Radar
                         name={playerB.name}
                         dataKey={playerB.name}
                         stroke="#9D4EDD"
                         fill="#9D4EDD"
-                        fillOpacity={0.25}
+                        fillOpacity={0.2}
+                        dot={{ r: 4, stroke: "#4c1d95", strokeWidth: 1.5, fill: "#f3e8ff" }}
+                        activeDot={{ r: 6, stroke: "#4c1d95", strokeWidth: 2 }}
                       />
                     </RadarChart>
                   </ResponsiveContainer>

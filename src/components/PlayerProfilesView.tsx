@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { motion } from "motion/react";
+import { findPlayerPhoto } from "../lib/db";
+import { TeamFlag } from "./TournamentAnalyticsView";
 import {
   User,
   Search,
@@ -168,12 +170,21 @@ function getPlaystyleRole(player: PlayerAggregateValue): { title: string; desc: 
 }
 
 export default function PlayerProfilesView({
-  aggregatedPlayers,
+  aggregatedPlayers: rawAggregatedPlayers,
   squadPhotos = {},
   getTeamFlag,
   selectedPlayerKey: propSelectedPlayerKey,
   setSelectedPlayerKey: propSetSelectedPlayerKey
 }: PlayerProfilesViewProps) {
+  const aggregatedPlayers = useMemo(() => {
+    return (rawAggregatedPlayers || []).filter(p => {
+      if (!p || !p.name) return false;
+      const uName = String(p.name).toLowerCase().trim();
+      const isBase64 = uName.includes("data:") || uName.includes("base64") || uName.length > 40 || uName.startsWith("ivbor") || uName.includes(";base64,");
+      return !isBase64;
+    });
+  }, [rawAggregatedPlayers]);
+
   // Filters & selection state
   const [teamFilter, setTeamFilter] = useState<string>("All");
   const [positionFilter, setPositionFilter] = useState<string>("All");
@@ -333,26 +344,34 @@ export default function PlayerProfilesView({
   const radarChartData = useMemo(() => {
     if (!metricsStats) return [];
     
-    // Pick 5 descriptive dimensions based on SAME-POSITION percentiles
-    const scoringPct = metricsStats["attemptsAtGoal"]?.percentilePosition || 20;
-    const goalsPct = metricsStats["goals"]?.percentilePosition || 10;
-    const playmakingPct = metricsStats["lineBreaksCompleted"]?.percentilePosition || 20;
-    const passingPct = metricsStats["passesCompletionPct"]?.percentilePosition || 30;
-    const defendingPct = metricsStats["tackles"]?.percentilePosition || 15;
-    const interceptionsPct = metricsStats["interceptions"]?.percentilePosition || 15;
-    const duelPct = metricsStats["duelsWon"]?.percentilePosition || 25;
-    const progressionPct = metricsStats["ballProgressions"]?.percentilePosition || 20;
+    // Pick descriptive dimensions based on SAME-POSITION percentiles
+    const scoringPct = metricsStats["attemptsAtGoal"]?.percentilePosition ?? 20;
+    const goalsPct = metricsStats["goals"]?.percentilePosition ?? 10;
+    const playmakingPct = metricsStats["lineBreaksCompleted"]?.percentilePosition ?? 20;
+    const passesCompletedPct = metricsStats["passesCompleted"]?.percentilePosition ?? 30;
+    const passingPct = metricsStats["passesCompletionPct"]?.percentilePosition ?? 30;
+    const defendingPct = metricsStats["tackles"]?.percentilePosition ?? 15;
+    const interceptionsPct = metricsStats["interceptions"]?.percentilePosition ?? 15;
+    const regainsPct = metricsStats["regains"]?.percentilePosition ?? 20;
+    const duelPct = metricsStats["duelsWon"]?.percentilePosition ?? 25;
+    const progressionPct = metricsStats["ballProgressions"]?.percentilePosition ?? 20;
+    const clearancesPct = metricsStats["clearances"]?.percentilePosition ?? 15;
 
     return [
-      { subject: "Bitiricilik (Finish)", A: Math.round((scoringPct + goalsPct) / 2) || 10, fullMark: 100 },
-      { subject: "Oyun Kurma (Build)", A: Math.round((playmakingPct + passingPct) / 2) || 20, fullMark: 100 },
-      { subject: "Top Sürme (Carry)", A: progressionPct || 10, fullMark: 100 },
-      { subject: "Savunma (Protect)", A: Math.round((defendingPct + interceptionsPct) / 2) || 15, fullMark: 100 },
-      { subject: "Mücadele (Duels)", A: duelPct || 20, fullMark: 100 }
+      { subject: "Finishing (Bitiricilik)", A: Math.round((goalsPct * 1.3 + scoringPct) / 2.3) || 10, fullMark: 100 },
+      { subject: "Shot Volume (Şut Sıklığı)", A: scoringPct || 10, fullMark: 100 },
+      { subject: "Pass Vol (Pas Hacmi)", A: passesCompletedPct || 20, fullMark: 100 },
+      { subject: "Pass Acc (Pas İsabet %)", A: passingPct || 30, fullMark: 100 },
+      { subject: "Line Breaking (Hat Kırma)", A: playmakingPct || 20, fullMark: 100 },
+      { subject: "Carries (Top Taşıma)", A: progressionPct || 10, fullMark: 100 },
+      { subject: "Tackling (Top Çalma)", A: defendingPct || 15, fullMark: 100 },
+      { subject: "Interceptions (Pas Kesme)", A: interceptionsPct || 15, fullMark: 100 },
+      { subject: "Regains (Top Kazanma)", A: regainsPct || 20, fullMark: 100 },
+      { subject: "Duels (İkili Mücadele)", A: duelPct || 20, fullMark: 100 }
     ];
   }, [metricsStats]);
 
-  const activePhoto = activePlayer ? squadPhotos[activePlayer.name.toLowerCase().trim()] : null;
+  const activePhoto = activePlayer ? findPlayerPhoto(activePlayer.name, squadPhotos) : null;
   const activeFlag = activePlayer && getTeamFlag ? getTeamFlag(activePlayer.team) : "";
   const playstyle = activePlayer ? getPlaystyleRole(activePlayer) : null;
 
@@ -467,7 +486,7 @@ export default function PlayerProfilesView({
             {filteredPlayersList.map((p) => {
               const pKey = `${p.name}_(${p.team})`;
               const isSelected = activeKey === pKey;
-              const hasPhoto = squadPhotos[p.name.toLowerCase().trim()];
+              const hasPhoto = findPlayerPhoto(p.name, squadPhotos);
               const flag = getTeamFlag ? getTeamFlag(p.team) : "";
               
               return (
@@ -500,8 +519,8 @@ export default function PlayerProfilesView({
                       <strong className={`block truncate text-xs ${isSelected ? "text-indigo-950 font-bold" : "text-slate-800"}`}>
                         {p.name}
                       </strong>
-                      <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                        <span>{flag}</span>
+                      <span className="text-[10px] text-slate-400 flex items-center gap-1.5">
+                        <TeamFlag team={p.team} getTeamFlag={getTeamFlag} className="w-4 h-2.5 object-cover rounded-xs border border-slate-200" fallbackTextSize="text-xs" />
                         <span className="truncate">{p.team} • {p.position || "MF"}</span>
                       </span>
                     </div>
@@ -563,7 +582,7 @@ export default function PlayerProfilesView({
                     <div>
                       <h3 className="font-sans font-extrabold text-slate-900 text-xl tracking-tight flex items-center justify-center md:justify-start gap-2">
                         {activePlayer.name}
-                        {activeFlag && <span className="text-xl leading-none">{activeFlag}</span>}
+                        <TeamFlag team={activePlayer.team} getTeamFlag={getTeamFlag} className="w-6 h-4 object-cover rounded shadow-2xs border border-slate-200 shrink-0" fallbackTextSize="text-xl" />
                       </h3>
                       <p className="text-xs text-slate-500 font-medium">
                         {activePlayer.team} • {activePlayer.position || "MF"} • {activePlayer.gp} Turnuva Maçı
@@ -676,20 +695,22 @@ export default function PlayerProfilesView({
                   })()}
                 </div>
                 
-                <div className="flex-1 min-h-[200px] flex items-center justify-center mt-3">
-                  <ResponsiveContainer width="100%" height={210}>
-                    <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarChartData}>
-                      <PolarGrid stroke="#f1f5f9" />
-                      <PolarAngleAxis dataKey="subject" tick={{ fill: "#64748b", fontSize: 9, fontWeight: 600 }} />
-                      <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 8, fill: "#94a3b8" }} />
+                <div className="flex-1 min-h-[220px] flex items-center justify-center mt-3">
+                  <ResponsiveContainer width="100%" height={240}>
+                    <RadarChart cx="50%" cy="48%" outerRadius="75%" data={radarChartData}>
+                      <PolarGrid gridType="circle" stroke="#e2e8f0" strokeDasharray="3 3" />
+                      <PolarAngleAxis dataKey="subject" tick={{ fill: "#334155", fontSize: 8.5, fontWeight: 700, fontFamily: "Inter" }} />
+                      <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 7.5, fill: "#64748b", fontWeight: 500 }} />
                       <Radar
                         name={activePlayer.name}
                         dataKey="A"
                         stroke="#4f46e5"
                         fill="#6366f1"
-                        fillOpacity={0.4}
+                        fillOpacity={0.25}
+                        dot={{ r: 4.5, stroke: "#312e81", strokeWidth: 1.5, fill: "#e0e7ff" }}
+                        activeDot={{ r: 6.5, stroke: "#312e81", strokeWidth: 2 }}
                       />
-                      <RechartsTooltip />
+                      <RechartsTooltip contentStyle={{ fontSize: 10, fontFamily: "sans-serif", borderRadius: 8 }} />
                     </RadarChart>
                   </ResponsiveContainer>
                 </div>
@@ -772,7 +793,7 @@ export default function PlayerProfilesView({
                     
                     {rankerData.ladder.map((item, idx) => {
                       const isSelf = item.name === activePlayer.name && item.team === activePlayer.team;
-                      const hasPhoto = squadPhotos[item.name.toLowerCase().trim()];
+                      const hasPhoto = findPlayerPhoto(item.name, squadPhotos);
                       return (
                         <div
                           key={idx}
@@ -796,7 +817,8 @@ export default function PlayerProfilesView({
                                 {item.name.substring(0, 2)}
                               </div>
                             )}
-                            <strong className="text-slate-850 truncate font-semibold block max-w-[120px]">{item.name}</strong>
+                            <TeamFlag team={item.team} getTeamFlag={getTeamFlag} className="w-4 h-2.5 object-cover rounded-3xs shrink-0 border border-slate-200" fallbackTextSize="text-[10px]" />
+                            <strong className="text-slate-850 truncate font-semibold block max-w-[115px]">{item.name}</strong>
                             <span className="text-[9px] text-slate-400">({item.team})</span>
                           </div>
                           
@@ -824,7 +846,8 @@ export default function PlayerProfilesView({
                               {activePlayer.name.substring(0, 2)}
                             </div>
                           )}
-                          <strong className="text-indigo-950 truncate font-bold block max-w-[120px]">{activePlayer.name} (Siz)</strong>
+                          <TeamFlag team={activePlayer.team} getTeamFlag={getTeamFlag} className="w-4 h-2.5 object-cover rounded-3xs shrink-0 border border-slate-200" fallbackTextSize="text-[10px]" />
+                          <strong className="text-indigo-950 truncate font-bold block max-w-[115px]">{activePlayer.name} (Siz)</strong>
                           <span className="text-[9px] text-indigo-650">({activePlayer.team})</span>
                         </div>
                         

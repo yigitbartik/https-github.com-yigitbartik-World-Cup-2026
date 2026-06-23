@@ -85,22 +85,51 @@ interface CustomGroupBuilderProps {
 }
 
 export default function CustomGroupBuilder({
-  aggregatedPlayers,
+  aggregatedPlayers: rawAggregatedPlayers,
   getTeamFlag
 }: CustomGroupBuilderProps) {
-  // Group states
-  const [groupAName, setGroupAName] = useState<string>("5'li Stoper Grubu (AUS)");
-  const [groupBName, setGroupBName] = useState<string>("4'lü Stoper Grubu (TUR)");
+  const aggregatedPlayers = useMemo(() => {
+    return (rawAggregatedPlayers || []).filter(p => {
+      if (!p || !p.name) return false;
+      const uName = String(p.name).toLowerCase().trim();
+      const isBase64 = uName.includes("data:") || uName.includes("base64") || uName.length > 40 || uName.startsWith("ivbor") || uName.includes(";base64,");
+      return !isBase64;
+    });
+  }, [rawAggregatedPlayers]);
 
-  const [groupAKeys, setGroupAKeys] = useState<string[]>([
-    "Alessandro Circati_(AUSTRALIA)",
-    "Harry Souttar_(AUSTRALIA)",
-    "Cameron Burgess_(AUSTRALIA)"
-  ]);
-  const [groupBKeys, setGroupBKeys] = useState<string[]>([
-    "Merih Demiral_(TURKEY)",
-    "Abdülkerim Bardakcı_(TURKEY)"
-  ]);
+  // Group states
+  const [groupAName, setGroupAName] = useState<string>("Genel Grup A");
+  const [groupBName, setGroupBName] = useState<string>("Genel Grup B");
+
+  const [groupAKeys, setGroupAKeys] = useState<string[]>([]);
+  const [groupBKeys, setGroupBKeys] = useState<string[]>([]);
+
+  // Dynamically seed group keys from actual uploaded players if current keys have no matches
+  React.useEffect(() => {
+    if (aggregatedPlayers.length > 0) {
+      // Check if current keys actually exist in aggregatedPlayers
+      const validA = groupAKeys.filter(key => aggregatedPlayers.some(p => `${p.name}_(${p.team})` === key));
+      const validB = groupBKeys.filter(key => aggregatedPlayers.some(p => `${p.name}_(${p.team})` === key));
+      
+      if (validA.length === 0 && validB.length === 0) {
+        const pKeys = aggregatedPlayers.map(p => `${p.name}_(${p.team})`);
+        const seedA = pKeys.slice(0, Math.min(2, pKeys.length));
+        const seedB = pKeys.slice(seedA.length, seedA.length + Math.min(2, pKeys.length - seedA.length));
+        
+        setGroupAKeys(seedA);
+        setGroupBKeys(seedB);
+        
+        if (aggregatedPlayers[0]) {
+          setGroupAName(`${aggregatedPlayers[0].team} Grubu A`);
+        }
+        if (aggregatedPlayers[seedA.length]) {
+          setGroupBName(`${aggregatedPlayers[seedA.length].team} Grubu B`);
+        } else {
+          setGroupBName("Kıyaslama Grubu B");
+        }
+      }
+    }
+  }, [aggregatedPlayers]);
 
   // Player pool filters
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -126,42 +155,46 @@ export default function CustomGroupBuilder({
     });
   }, [sortedPlayers, searchQuery, teamFilter, positionFilter]);
 
-  // Presets trigger
+  // Presets trigger based dynamically on positions within uploaded data
   const loadPreset = (presetType: "stoper" | "bek" | "playmaker") => {
+    if (aggregatedPlayers.length === 0) return;
+
     if (presetType === "stoper") {
-      setGroupAName("5'li Stoper Grubu (AUS)");
-      setGroupBName("4'lü Stoper Grubu (TUR)");
-      setGroupAKeys([
-        "Alessandro Circati_(AUSTRALIA)",
-        "Harry Souttar_(AUSTRALIA)",
-        "Cameron Burgess_(AUSTRALIA)"
-      ]);
-      setGroupBKeys([
-        "Merih Demiral_(TURKEY)",
-        "Abdülkerim Bardakcı_(TURKEY)"
-      ]);
+      const defenders = aggregatedPlayers.filter(p => ["DF", "CB", "DEF", "STOPER"].includes(p.position?.toUpperCase() || ""));
+      const pKeys = defenders.map(p => `${p.name}_(${p.team})`);
+      const splitIdx = Math.ceil(pKeys.length / 2);
+      
+      const seedA = pKeys.slice(0, Math.min(3, splitIdx));
+      const seedB = pKeys.slice(splitIdx, splitIdx + Math.min(3, pKeys.length - splitIdx));
+      
+      setGroupAKeys(seedA.length > 0 ? seedA : [aggregatedPlayers[0] ? `${aggregatedPlayers[0].name}_(${aggregatedPlayers[0].team})` : ""]);
+      setGroupBKeys(seedB.length > 0 ? seedB : [aggregatedPlayers[1] ? `${aggregatedPlayers[1].name}_(${aggregatedPlayers[1].team})` : ""]);
+      setGroupAName("Saha İçi Stoper / Savunma Grubu A");
+      setGroupBName("Saha İçi Stoper / Savunma Grubu B");
     } else if (presetType === "bek") {
-      setGroupAName("Avustralya Kanat Bekleri (3-5-2)");
-      setGroupBName("Türkiye Bek Grubu (4-2-3-1)");
-      setGroupAKeys([
-        "Lewis Miller_(AUSTRALIA)",
-        "Aziz Behich_(AUSTRALIA)"
-      ]);
-      setGroupBKeys([
-        "Mert Müldür_(TURKEY)",
-        "Ferdi Kadıoğlu_(TURKEY)"
-      ]);
+      const defendersBek = aggregatedPlayers.filter(p => ["DF", "FB", "BEK", "MF"].includes(p.position?.toUpperCase() || ""));
+      const pKeys = defendersBek.map(p => `${p.name}_(${p.team})`);
+      const splitIdx = Math.ceil(pKeys.length / 2);
+      
+      const seedA = pKeys.slice(0, Math.min(3, splitIdx));
+      const seedB = pKeys.slice(splitIdx, splitIdx + Math.min(3, pKeys.length - splitIdx));
+      
+      setGroupAKeys(seedA.length > 0 ? seedA : [aggregatedPlayers[0] ? `${aggregatedPlayers[0].name}_(${aggregatedPlayers[0].team})` : ""]);
+      setGroupBKeys(seedB.length > 0 ? seedB : [aggregatedPlayers[1] ? `${aggregatedPlayers[1].name}_(${aggregatedPlayers[1].team})` : ""]);
+      setGroupAName("Saha İçi Dinamik Bek / Kanat Grubu A");
+      setGroupBName("Saha İçi Dinamik Bek / Kanat Grubu B");
     } else if (presetType === "playmaker") {
-      setGroupAName("Meksika Oyun Kurucuları (MEX)");
-      setGroupBName("Türkiye Pasörleri (TUR)");
-      setGroupAKeys([
-        "Alvaro Fidalgo_(MEXICO)",
-        "Roberto Alvarado_(MEXICO)"
-      ]);
-      setGroupBKeys([
-        "Arda Güler_(TURKEY)",
-        "Hakan Çalhanoğlu_(TURKEY)"
-      ]);
+      const playmakers = aggregatedPlayers.filter(p => ["MF", "AM", "FW", "FORVET", "ORTA SAHA"].includes(p.position?.toUpperCase() || ""));
+      const pKeys = playmakers.map(p => `${p.name}_(${p.team})`);
+      const splitIdx = Math.ceil(pKeys.length / 2);
+      
+      const seedA = pKeys.slice(0, Math.min(3, splitIdx));
+      const seedB = pKeys.slice(splitIdx, splitIdx + Math.min(3, pKeys.length - splitIdx));
+      
+      setGroupAKeys(seedA.length > 0 ? seedA : [aggregatedPlayers[0] ? `${aggregatedPlayers[0].name}_(${aggregatedPlayers[0].team})` : ""]);
+      setGroupBKeys(seedB.length > 0 ? seedB : [aggregatedPlayers[1] ? `${aggregatedPlayers[1].name}_(${aggregatedPlayers[1].team})` : ""]);
+      setGroupAName("Saha İçi Oyun Kurucu / Hücum Grubu A");
+      setGroupBName("Saha İçi Oyun Kurucu / Hücum Grubu B");
     }
   };
 
@@ -301,11 +334,15 @@ export default function CustomGroupBuilder({
   const comparisonChartData = useMemo(() => {
     return [
       { name: "Toplam Koşu (x100m)", A: Math.round(avgA.totalDistance / 100), B: Math.round(avgB.totalDistance / 100) },
-      { name: "Zone 5 Sprints", A: Math.round(avgA.sprints), B: Math.round(avgB.sprints) },
-      { name: "Zone 4 Koşuları (m)", A: Math.round(avgA.zone4), B: Math.round(avgB.zone4) },
+      { name: "Z5 Sprints (Sürat)", A: Math.round(avgA.sprints), B: Math.round(avgB.sprints) },
+      { name: "Z4 Koşuları (m)", A: Math.round(avgA.zone4), B: Math.round(avgB.zone4) },
+      { name: "Yüksek Şiddet (m/10)", A: Math.round(avgA.highSpeedRuns / 10), B: Math.round(avgB.highSpeedRuns / 10) },
       { name: "Hat Kıran Paslar", A: Math.round(avgA.lineBreaksCompleted * 3), B: Math.round(avgB.lineBreaksCompleted * 3) },
-      { name: "Top Çalmalılar", A: Math.round(avgA.tackles * 10), B: Math.round(avgB.tackles * 10) },
-      { name: "Pas Araları", A: Math.round(avgA.interceptions * 10), B: Math.round(avgB.interceptions * 10) }
+      { name: "Pas İsabeti (Adet)", A: Math.round(avgA.passesCompleted), B: Math.round(avgB.passesCompleted) },
+      { name: "Top Çalmalılar (x5)", A: Math.round(avgA.tackles * 5), B: Math.round(avgB.tackles * 5) },
+      { name: "Pas Araları (x5)", A: Math.round(avgA.interceptions * 5), B: Math.round(avgB.interceptions * 5) },
+      { name: "Top Kazanmalar (x5)", A: Math.round(avgA.regains * 5), B: Math.round(avgB.regains * 5) },
+      { name: "Uzaklaştırma (x5)", A: Math.round(avgA.clearances * 5), B: Math.round(avgB.clearances * 5) }
     ];
   }, [avgA, avgB]);
 
@@ -866,33 +903,37 @@ export default function CustomGroupBuilder({
             </div>
 
             {/* Right side: Modern Radar Comparison */}
-            <div className="lg:col-span-5 h-[230px] flex items-center justify-center bg-slate-50 rounded-2xl border border-slate-100 relative">
+            <div className="lg:col-span-5 h-[270px] flex items-center justify-center bg-slate-50 rounded-2xl border border-slate-100 relative shadow-inner">
               {groupAKeys.length === 0 && groupBKeys.length === 0 ? (
                 <div className="text-center p-4 text-slate-400 text-xs font-sans">
                   Grafiği yüklemek için gruba oyuncu ekleyin
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart cx="50%" cy="50%" outerRadius="75%" data={comparisonChartData}>
-                    <PolarGrid stroke="#e2e8f0" />
-                    <PolarAngleAxis dataKey="name" tick={{ fill: "#64748b", fontSize: 9, fontWeight: 700 }} />
-                    <PolarRadiusAxis angle={30} domain={[0, "auto"]} tick={{ fill: "#94a3b8", fontSize: 8 }} />
+                  <RadarChart cx="50%" cy="48%" outerRadius="72%" data={comparisonChartData}>
+                    <PolarGrid gridType="circle" stroke="#cbd5e1" strokeDasharray="3 3" />
+                    <PolarAngleAxis dataKey="name" tick={{ fill: "#334155", fontSize: 8.5, fontWeight: 700, fontFamily: "Inter" }} />
+                    <PolarRadiusAxis angle={30} domain={[0, "auto"]} tick={{ fill: "#64748b", fontSize: 8, fontWeight: 500 }} />
                     
                     <Radar 
                       name={groupAName} 
                       dataKey="A" 
                       stroke="#4f46e5" 
                       fill="#818cf8" 
-                      fillOpacity={0.3} 
+                      fillOpacity={0.25} 
+                      dot={{ r: 4.5, stroke: "#312e81", strokeWidth: 1.5, fill: "#e0e7ff" }}
+                      activeDot={{ r: 6.5, stroke: "#312e81", strokeWidth: 2 }}
                     />
                     <Radar 
                       name={groupBName} 
                       dataKey="B" 
                       stroke="#059669" 
                       fill="#34d399" 
-                      fillOpacity={0.3} 
+                      fillOpacity={0.25} 
+                      dot={{ r: 4.5, stroke: "#064e3b", strokeWidth: 1.5, fill: "#d1fae5" }}
+                      activeDot={{ r: 6.5, stroke: "#064e3b", strokeWidth: 2 }}
                     />
-                    <Tooltip contentStyle={{ fontSize: 10, fontFamily: "sans-serif", borderRadius: 8 }} />
+                    <Tooltip contentStyle={{ fontSize: 10, fontFamily: "sans-serif", borderRadius: 8, boxShadow: "0 4px 12px rgba(0,0,0,0.05)" }} />
                   </RadarChart>
                 </ResponsiveContainer>
               )}

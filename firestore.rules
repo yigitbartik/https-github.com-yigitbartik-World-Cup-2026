@@ -1,0 +1,70 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default-deny catch-all rule as the absolute global safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Primitive / Global helper functions
+    function isValidId(id) {
+      return id is string && id.size() <= 200 && id.size() > 0;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // 1. Match validation helper (Strict Type, Size and Key Enforcement)
+    function isValidMatch(data) {
+      return data.keys().hasAll(['id', 'data', 'uploadedAt'])
+        && data.keys().size() == 3
+        && data.id is string && data.id.size() <= 200
+        && data.data is string && data.data.size() <= 10000000
+        && data.uploadedAt is string && data.uploadedAt.size() <= 50;
+    }
+
+    // 2. PlayerPhoto validation helper (Strict Type, Size and Key Enforcement)
+    function isValidPlayerPhoto(data) {
+      return data.keys().hasAll(['pname', 'base64', 'fileName', 'uploadedAt'])
+        && data.keys().size() == 4
+        && data.pname is string && data.pname.size() <= 100
+        && data.base64 is string && data.base64.size() <= 10000000
+        && data.fileName is string && data.fileName.size() <= 200
+        && data.uploadedAt is string && data.uploadedAt.size() <= 50;
+    }
+
+    // 3. TeamFlag validation helper (Strict Type, Size and Key Enforcement)
+    function isValidTeamFlag(data) {
+      return data.keys().hasAll(['teamName', 'base64', 'fileName', 'uploadedAt'])
+        && data.keys().size() == 4
+        && data.teamName is string && data.teamName.size() <= 100
+        && data.base64 is string && data.base64.size() <= 10000000
+        && data.fileName is string && data.fileName.size() <= 200
+        && data.uploadedAt is string && data.uploadedAt.size() <= 50;
+    }
+
+    // matches Collection Match Rules
+    match /matches/{matchId} {
+      allow read, delete: if true;
+      allow create, update: if isValidId(matchId) && isValidMatch(incoming());
+    }
+
+    // player_photos Collection Match Rules
+    match /player_photos/{pname} {
+      allow read, delete: if true;
+      allow create, update: if isValidId(pname) && isValidPlayerPhoto(incoming());
+    }
+
+    // team_flags Collection Match Rules
+    match /team_flags/{teamId} {
+      allow read, delete: if true;
+      allow create, update: if isValidId(teamId) && isValidTeamFlag(incoming());
+    }
+  }
+}

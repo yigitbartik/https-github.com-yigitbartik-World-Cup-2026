@@ -1,0 +1,53 @@
+{
+  "entities": {
+    "Match": {
+      "title": "Match",
+      "description": "Stored tactical match report JSON",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "data": { "type": "string" },
+        "uploadedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "data", "uploadedAt"]
+    },
+    "PlayerPhoto": {
+      "title": "PlayerPhoto",
+      "description": "Base64 encoded squad photo of a player",
+      "type": "object",
+      "properties": {
+        "pname": { "type": "string" },
+        "base64": { "type": "string" },
+        "fileName": { "type": "string" },
+        "uploadedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["pname", "base64", "uploadedAt"]
+    },
+    "TeamFlag": {
+      "title": "TeamFlag",
+      "description": "Base64 encoded flag/logo of a team",
+      "type": "object",
+      "properties": {
+        "teamName": { "type": "string" },
+        "base64": { "type": "string" },
+        "fileName": { "type": "string" },
+        "uploadedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["teamName", "base64", "uploadedAt"]
+    }
+  },
+  "firestore": {
+    "matches/{matchId}": {
+      "schema": "Match",
+      "description": "Archived tactical match reports"
+    },
+    "player_photos/{pname}": {
+      "schema": "PlayerPhoto",
+      "description": "Uploaded player profile pictures"
+    },
+    "team_flags/{teamId}": {
+      "schema": "TeamFlag",
+      "description": "Uploaded team crests and flags"
+    }
+  }
+}

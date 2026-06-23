@@ -38,6 +38,7 @@ import {
   ReferenceArea,
   ReferenceLine
 } from "recharts";
+import { TeamFlag } from "./TournamentAnalyticsView";
 
 interface PlayerAggregateValue {
   name: string;
@@ -89,9 +90,18 @@ interface VaryansImpactRankerProps {
 }
 
 export default function VaryansImpactRanker({
-  aggregatedPlayers,
+  aggregatedPlayers: rawAggregatedPlayers,
   getTeamFlag
 }: VaryansImpactRankerProps) {
+  const aggregatedPlayers = useMemo(() => {
+    return (rawAggregatedPlayers || []).filter(p => {
+      if (!p || !p.name) return false;
+      const uName = String(p.name).toLowerCase().trim();
+      const isBase64 = uName.includes("data:") || uName.includes("base64") || uName.length > 40 || uName.startsWith("ivbor") || uName.includes(";base64,");
+      return !isBase64;
+    });
+  }, [rawAggregatedPlayers]);
+
   // Config / weights for custom calibrations
   const [physicalWeight, setPhysicalWeight] = useState<number>(0.4);
   const [technicalWeight, setTechnicalWeight] = useState<number>(0.6);
@@ -653,7 +663,10 @@ export default function VaryansImpactRanker({
                         className="flex flex-col items-center cursor-pointer group min-w-[80px] sm:min-w-[120px]"
                       >
                         <span className="text-xl">🥈</span>
-                        <span className="text-[10px] font-bold text-slate-700 truncate max-w-[80px] sm:max-w-[110px] mt-1">{item.player.name} {flag}</span>
+                        <div className="flex items-center gap-1 mt-1 justify-center max-w-[80px] sm:max-w-[110px]">
+                          <span className="text-[10px] font-bold text-slate-700 truncate">{item.player.name}</span>
+                          <TeamFlag team={item.player.team} getTeamFlag={getTeamFlag} className="w-4.5 h-3 object-cover rounded shadow shadow-slate-200 border border-slate-200" fallbackTextSize="text-[10px]" />
+                        </div>
                         <span className="text-[8px] text-slate-400 font-mono font-bold">{item.player.team}</span>
                         <div className="w-16 sm:w-24 bg-gradient-to-t from-slate-300 via-slate-200 to-slate-100 h-16 rounded-t-xl flex flex-col items-center justify-center border-t border-slate-300/40 shadow-xs mt-2 relative overflow-hidden">
                           <span className="text-[10px] font-mono font-black text-slate-800">{scoreVal}</span>
@@ -678,7 +691,10 @@ export default function VaryansImpactRanker({
                         className="flex flex-col items-center cursor-pointer group min-w-[100px] sm:min-w-[140px] transform -translate-y-2"
                       >
                         <span className="text-2xl animate-bounce">👑</span>
-                        <span className="text-xs font-black text-indigo-950 truncate max-w-[100px] sm:max-w-[130px] mt-1">{item.player.name} {flag}</span>
+                        <div className="flex items-center gap-1 mt-1 justify-center max-w-[100px] sm:max-w-[130px]">
+                          <span className="text-xs font-black text-indigo-950 truncate">{item.player.name}</span>
+                          <TeamFlag team={item.player.team} getTeamFlag={getTeamFlag} className="w-4.5 h-3 object-cover rounded shadow shadow-slate-200 border border-slate-200" fallbackTextSize="text-xs" />
+                        </div>
                         <span className="text-[8px] text-indigo-600 font-mono font-black uppercase tracking-wider">{item.player.team}</span>
                         <div className="w-20 sm:w-28 bg-gradient-to-t from-amber-400 via-amber-300 to-yellow-100 h-24 rounded-t-xl flex flex-col items-center justify-center border-t border-amber-350 shadow-md mt-2 relative overflow-hidden">
                           <div className="absolute top-0 w-full h-1 bg-yellow-450"></div>
@@ -704,7 +720,10 @@ export default function VaryansImpactRanker({
                         className="flex flex-col items-center cursor-pointer group min-w-[80px] sm:min-w-[120px]"
                       >
                         <span className="text-xl">🥉</span>
-                        <span className="text-[10px] font-bold text-slate-700 truncate max-w-[80px] sm:max-w-[110px] mt-1">{item.player.name} {flag}</span>
+                        <div className="flex items-center gap-1 mt-1 justify-center max-w-[80px] sm:max-w-[110px]">
+                          <span className="text-[10px] font-bold text-slate-700 truncate">{item.player.name}</span>
+                          <TeamFlag team={item.player.team} getTeamFlag={getTeamFlag} className="w-4.5 h-3 object-cover rounded shadow shadow-slate-200 border border-slate-200" fallbackTextSize="text-[10px]" />
+                        </div>
                         <span className="text-[8px] text-slate-400 font-mono font-bold">{item.player.team}</span>
                         <div className="w-16 sm:w-24 bg-gradient-to-t from-amber-700 via-amber-600 to-amber-500 h-12 rounded-t-xl flex flex-col items-center justify-center border-t border-amber-700/40 shadow-xs mt-2 relative overflow-hidden">
                           <span className="text-[10px] font-mono font-black text-white">{scoreVal}</span>
@@ -762,7 +781,7 @@ export default function VaryansImpactRanker({
                             <strong className="text-xs font-sans font-black text-slate-800 truncate leading-snug">
                               {item.player.name}
                             </strong>
-                            {flag && <span className="text-xs leading-none shrink-0">{flag}</span>}
+                            <TeamFlag team={item.player.team} getTeamFlag={getTeamFlag} className="w-5 h-3.5 object-cover rounded shadow-3xs shrink-0 border border-slate-200" fallbackTextSize="text-xs" />
                           </div>
                           
                           <div className="flex items-center gap-2 mt-0.5">

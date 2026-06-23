@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback } from "react";
 import { motion } from "motion/react";
 import { MatchReport } from "../data/mexico_south_rich_data";
+import { findPlayerPhoto } from "../lib/db";
 import {
   TrendingUp,
   Award,
@@ -47,6 +48,18 @@ import TournamentTrendsDNA from "./TournamentTrendsDNA";
 import TacticalPhysicalMatrix from "./TacticalPhysicalMatrix";
 import CustomGroupBuilder from "./CustomGroupBuilder";
 import VaryansImpactRanker from "./VaryansImpactRanker";
+import GuidedChatbotView from "./GuidedChatbotView";
+
+export const cleanGroupName = (name: string): string => {
+  if (!name) return "Grup Belirtilmedi";
+  // Remove suffix patterns matching optional hyphen, then space, then Match/Maç, then optional space, then number(s).
+  // e.g., "Group E - Match 10" -> "Group E", "Group A - Match 1" -> "Group A", "Grup K - Maç 3" -> "Grup K"
+  let cleaned = name.replace(/\s*-\s*(Match|Maç)\s*\d+/gi, "");
+  cleaned = cleaned.replace(/\s*(Match|Maç)\s*\d+/gi, "");
+  // Trim any trailing hyphens/spaces
+  cleaned = cleaned.replace(/\s*-\s*$/g, "");
+  return cleaned.trim() || "Genel";
+};
 
 interface TournamentAnalyticsViewProps {
   uploadedMatches: MatchReport[];
@@ -54,6 +67,10 @@ interface TournamentAnalyticsViewProps {
   setActiveTab: (tab: any) => void;
   squadPhotos?: Record<string, { base64: string; fileName: string }>;
   getTeamFlag?: (teamName: string) => string;
+  initialPlayerKey?: string;
+  clearInitialPlayerKey?: () => void;
+  initialTeamKey?: string;
+  clearInitialTeamKey?: () => void;
 }
 
 interface TeamAggregate {
@@ -162,21 +179,72 @@ const SCATTER_METRICS = [
   { value: "looseBallReceptions", label: "Loose Ball Receptions (Sahipsiz Top Kazanma)" }
 ];
 
-function ScatterTooltip({ active, payload }: any) {
+interface TeamFlagProps {
+  team: string;
+  getTeamFlag?: (teamName: string) => string;
+  className?: string;
+  fallbackTextSize?: string;
+}
+
+export function TeamFlag({ 
+  team, 
+  getTeamFlag, 
+  className = "w-4.5 h-3 object-cover rounded-xs inline-block shrink-0 align-middle border border-slate-200 shadow-3xs", 
+  fallbackTextSize = "text-sm" 
+}: TeamFlagProps) {
+  if (!team) return <span className={`${fallbackTextSize} select-none align-middle`}>🏳️</span>;
+  const flag = getTeamFlag ? getTeamFlag(team) : "🏳️";
+  if (flag && flag.startsWith("data:")) {
+    return (
+      <img
+        src={flag}
+        alt={team}
+        className={className}
+        referrerPolicy="no-referrer"
+      />
+    );
+  }
+  return <span className={`${fallbackTextSize} select-none align-middle shrink-0 leading-none`}>{flag}</span>;
+}
+
+function ScatterTooltip({ active, payload, squadPhotos = {}, getTeamFlag }: any) {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
     if (!data) return null;
+
+    const playerName = String(data.name || "").toLowerCase().trim();
+    const photoObj = findPlayerPhoto(data.name, squadPhotos);
+    const flag = getTeamFlag ? getTeamFlag(data.team) : "🏳️";
+    const isImageFlag = flag && flag.startsWith("data:");
+
     return (
-      <div className="bg-slate-900 border border-slate-800 text-slate-100 rounded-xl p-3 shadow-lg max-w-[280px] font-sans text-xs pointer-events-none select-none">
-        <div className="flex items-center gap-2 mb-1.5 border-b border-slate-800 pb-1.5">
-          <div className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center justify-center font-bold text-[10px] shrink-0">
-            {data.number || data.jerseyNumber || data.jerseyNo || "#"}
-          </div>
-          <div className="min-w-0">
-            <strong className="text-white block truncate">{data.name}</strong>
-            <span className="text-[10px] text-slate-400 block truncate">{data.team} • {data.position || "MF"}</span>
+      <div className="bg-slate-900 border border-slate-800 text-slate-100 rounded-2xl p-4 shadow-xl max-w-[280px] font-sans text-xs pointer-events-none select-none animate-fadeIn flex flex-col gap-3">
+        {/* Upper Profile Container */}
+        <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+          {/* Player Photo (or initials fallback) */}
+          {photoObj && photoObj.base64 ? (
+            <img 
+              src={photoObj.base64} 
+              alt={data.name} 
+              className="w-11 h-11 rounded-full object-cover border-2 border-indigo-500 shrink-0 shadow-sm" 
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <div className="w-11 h-11 rounded-full bg-slate-800 text-slate-300 border border-slate-700 flex items-center justify-center font-bold text-sm shrink-0">
+              {String(data.name || "?").substring(0, 2).toUpperCase()}
+            </div>
+          )}
+          
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <TeamFlag team={data.team} getTeamFlag={getTeamFlag} className="w-4 h-3 object-cover rounded-xs shrink-0" fallbackTextSize="text-xs" />
+              <span className="text-[9.5px] font-mono text-indigo-400 font-extrabold uppercase tracking-widest">{data.position || "MF"}</span>
+            </div>
+            <strong className="text-white text-sm block truncate mt-0.5">{data.name}</strong>
+            <span className="text-[10px] text-slate-400 block truncate">{data.team} • #{data.number || data.jerseyNo || "-"}</span>
           </div>
         </div>
+
         <div className="space-y-1 font-mono text-[10px] text-slate-300">
           <div className="flex justify-between gap-4">
             <span className="text-slate-400">X Değeri:</span>
@@ -201,7 +269,7 @@ function ScatterTooltip({ active, payload }: any) {
 }
 
 function ScatterDotShape(props: any) {
-  const { cx, cy, payload, squadPhotos = {}, onNodeClick } = props;
+  const { cx, cy, payload, squadPhotos = {}, getTeamFlag, onNodeClick } = props;
   if (!cx || !cy) return null;
 
   // Filter props to keep only standard SVG/event properties, preventing custom player data fields (or isActive) from leaking to the DOM.
@@ -229,10 +297,6 @@ function ScatterDotShape(props: any) {
     dotColor = "#ec4899"; // Pink/Fuchsia for Attackers
   }
 
-  const playerName = String(payload.name || "").toLowerCase().trim();
-  const photoObj = squadPhotos[playerName];
-  const clipId = `avatar-clip-${playerName.replace(/[^a-zA-Z0-9]/g, "-")}`;
-
   const clickHandler = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (onNodeClick && payload.name) {
@@ -240,61 +304,64 @@ function ScatterDotShape(props: any) {
     }
   };
 
-  if (photoObj && photoObj.base64) {
+  const flag = getTeamFlag ? getTeamFlag(payload.team) : "🏳️";
+  const isImageFlag = flag && flag.startsWith("data:");
+
+  if (isImageFlag) {
+    const flagClipId = `flag-clip-${String(payload.team || "team").replace(/[^a-zA-Z0-9]/g, "-")}-${Math.floor(Math.random() * 10000)}`;
     return (
-      <g onClick={clickHandler} className="cursor-pointer group" {...safeSvgProps}>
+      <g onClick={clickHandler} className="cursor-pointer group animate-fadeIn" {...safeSvgProps}>
         <defs>
-          <clipPath id={clipId}>
-            <circle cx={cx} cy={cy} r={12} />
+          <clipPath id={flagClipId}>
+            <circle cx={cx} cy={cy} r={11} />
           </clipPath>
         </defs>
         <circle
           cx={cx}
           cy={cy}
-          r={14}
-          fill="transparent"
+          r={13}
+          fill="#ffffff"
           stroke={dotColor}
-          strokeWidth={2.5}
-          className="transition-all duration-150 cursor-pointer group-hover:stroke-indigo-400 group-hover:stroke-[3.5px]"
-          filter="drop-shadow(0px 1px 3px rgba(0,0,0,0.2))"
+          strokeWidth={2}
+          className="transition-all duration-150 cursor-pointer group-hover:stroke-indigo-400 group-hover:stroke-[3px]"
+          filter="drop-shadow(0px 1.5px 3px rgba(0,0,0,0.3))"
         />
         <image
-          x={cx - 12}
-          y={cy - 12}
-          width={24}
-          height={24}
-          href={photoObj.base64}
-          clipPath={`url(#${clipId})`}
+          x={cx - 11}
+          y={cy - 11}
+          width={22}
+          height={22}
+          href={flag}
+          clipPath={`url(#${flagClipId})`}
           className="transition-all duration-150 cursor-pointer group-hover:brightness-110"
+          preserveAspectRatio="xMidYMid slice"
           referrerPolicy="no-referrer"
         />
       </g>
     );
   }
 
+  // Fallback to emoji flag rendering inside a cool dark node
   return (
-    <g onClick={clickHandler} className="cursor-pointer group" {...safeSvgProps}>
+    <g onClick={clickHandler} className="cursor-pointer group animate-fadeIn" {...safeSvgProps}>
       <circle
         cx={cx}
         cy={cy}
-        r={10}
-        fill={dotColor}
-        className="transition-all duration-150 group-hover:stroke-indigo-300 group-hover:stroke-[2px] group-hover:brightness-105"
-        stroke="#ffffff"
+        r={12}
+        fill="#1e293b"
+        stroke={dotColor}
         strokeWidth={1.5}
-        filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.15))"
+        className="transition-all duration-150 group-hover:stroke-indigo-400 group-hover:stroke-[2.5px]"
+        filter="drop-shadow(0px 1.5px 2.1px rgba(0,0,0,0.25))"
       />
       <text
         x={cx}
-        y={cy + 3}
+        y={cy + 4.5}
         textAnchor="middle"
-        fill="#ffffff"
-        fontSize="8px"
-        fontWeight="bold"
-        fontFamily="sans-serif"
-        className="pointer-events-none select-none"
+        fontSize="13px"
+        className="pointer-events-none select-none leading-none align-middle"
       >
-        {payload.number || payload.jerseyNo || (payload.name ? payload.name.substring(0, 1) : "?")}
+        {flag}
       </text>
     </g>
   );
@@ -362,11 +429,42 @@ export default function TournamentAnalyticsView({
   setActiveMatchIndex,
   setActiveTab,
   squadPhotos = {},
-  getTeamFlag
+  getTeamFlag,
+  initialPlayerKey,
+  clearInitialPlayerKey,
+  initialTeamKey,
+  clearInitialTeamKey
 }: TournamentAnalyticsViewProps) {
-  const [subTab, setSubTab] = useState<"tournament" | "group" | "team" | "player" | "macroTrends" | "customGroup" | "vesRanker">("tournament");
+  const [subTab, setSubTab] = useState<"tournament" | "group" | "team" | "player" | "macroTrends" | "customGroup" | "vesRanker" | "tournamentSummary" | "guidedChatbot">("tournament");
   const [selectedPlayerKey, setSelectedPlayerKey] = useState<string>("");
-  const [selectedTeam, setSelectedTeam] = useState<string>("Mexico");
+  const defaultTeam = uploadedMatches[0]?.matchInfo.homeTeam || "Mexico";
+  const [selectedTeam, setSelectedTeam] = useState<string>(defaultTeam);
+
+  React.useEffect(() => {
+    if (initialPlayerKey) {
+      setSelectedPlayerKey(initialPlayerKey);
+      setSubTab("player");
+      if (clearInitialPlayerKey) {
+        clearInitialPlayerKey();
+      }
+    }
+  }, [initialPlayerKey, clearInitialPlayerKey]);
+
+  React.useEffect(() => {
+    if (initialTeamKey) {
+      const uniqueTeams = Array.from(new Set(uploadedMatches.flatMap(m => [m.matchInfo.homeTeam, m.matchInfo.awayTeam])));
+      const found = uniqueTeams.find(t => t.toLowerCase() === initialTeamKey.toLowerCase() || t.toLowerCase().includes(initialTeamKey.toLowerCase()) || initialTeamKey.toLowerCase().includes(t.toLowerCase()));
+      if (found) {
+        setSelectedTeam(found);
+      } else {
+        setSelectedTeam(initialTeamKey);
+      }
+      setSubTab("team");
+      if (clearInitialTeamKey) {
+        clearInitialTeamKey();
+      }
+    }
+  }, [initialTeamKey, clearInitialTeamKey, uploadedMatches]);
   
   // Macro Trends State
   const [macroPossessionMin, setMacroPossessionMin] = useState<number>(55);
@@ -504,7 +602,7 @@ export default function TournamentAnalyticsView({
     const list = new Set<string>();
     uploadedMatches.forEach(m => {
       if (m.matchInfo.group) {
-        list.add(m.matchInfo.group);
+        list.add(cleanGroupName(m.matchInfo.group));
       }
     });
     return ["All", ...Array.from(list)];
@@ -881,7 +979,7 @@ export default function TournamentAnalyticsView({
       const away = m.matchInfo.awayTeam;
       const hGoals = Number(m.matchInfo.homeScore ?? 0);
       const aGoals = Number(m.matchInfo.awayScore ?? 0);
-      const grp = m.matchInfo.group || "Group A";
+      const grp = cleanGroupName(m.matchInfo.group || "Group A");
 
       if (!stats[home]) {
         stats[home] = {
@@ -1148,7 +1246,15 @@ export default function TournamentAnalyticsView({
       p.passesCompletionPct = p.passesAttempted > 0 ? Math.round((p.passesCompleted / p.passesAttempted) * 100) : 0;
     });
 
-    return res;
+    // Filter out any player entries containing base64 images under the name attribute coming from PDF extractor artifacts
+    const cleanResults = res.filter(p => {
+      if (!p.name) return false;
+      const uName = String(p.name).toLowerCase().trim();
+      const isBase64 = uName.includes("data:") || uName.includes("base64") || uName.length > 40 || uName.startsWith("ivbor") || uName.includes(";base64,");
+      return !isBase64;
+    });
+
+    return cleanResults;
   }, [uploadedMatches]);
 
   const compositePlayerData = useMemo(() => {
@@ -1523,6 +1629,70 @@ export default function TournamentAnalyticsView({
   const [tacticalDnaText, setTacticalDnaText] = useState<string>("");
   const [loadingDna, setLoadingDna] = useState<boolean>(false);
 
+  const goalsPerGroup = useMemo(() => {
+    const groupGoalsMap: Record<string, { totalGoals: number; matchesCount: number }> = {};
+    uploadedMatches.forEach(m => {
+      const gpName = cleanGroupName(m.matchInfo.group || "Grup A");
+      const goals = (m.matchInfo.homeScore ?? 0) + (m.matchInfo.awayScore ?? 0);
+      if (!groupGoalsMap[gpName]) {
+        groupGoalsMap[gpName] = { totalGoals: 0, matchesCount: 0 };
+      }
+      groupGoalsMap[gpName].totalGoals += goals;
+      groupGoalsMap[gpName].matchesCount += 1;
+    });
+    return Object.entries(groupGoalsMap).map(([groupName, info]) => ({
+      name: groupName,
+      totalGoals: info.totalGoals,
+      avgGoals: parseFloat((info.totalGoals / info.matchesCount).toFixed(2))
+    }));
+  }, [uploadedMatches]);
+
+  const [aiSummaryText, setAiSummaryText] = useState<string>("");
+  const [loadingSummary, setLoadingSummary] = useState<boolean>(false);
+
+  const handleGenerateSummary = async () => {
+    setLoadingSummary(true);
+    setAiSummaryText("");
+    try {
+      const topFiveScorers = topScorers.slice(0, 5).map(p => ({ name: p.name, team: p.team, goals: p.goals }));
+      const topFiveLineBreakers = topLineBreakers.slice(0, 5).map(p => ({ name: p.name, team: p.team, count: p.lineBreaksCompleted }));
+      const topFiveRegainers = topRegainers.slice(0, 5).map(p => ({ name: p.name, team: p.team, count: p.regains }));
+      const topFivePassers = topPassOrchestrators.slice(0, 5).map(p => ({ name: p.name, team: p.team, count: p.passesCompleted }));
+
+      const response = await fetch("/api/tournament-ai-summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          overallTally,
+          groupGoals: goalsPerGroup,
+          topPerformers: {
+            topScorers: topFiveScorers,
+            topLineBreakers: topFiveLineBreakers,
+            topRegainers: topFiveRegainers,
+            topPassOrchestrators: topFivePassers
+          }
+        })
+      });
+      const data = await response.json();
+      if (data.success && data.text) {
+        setAiSummaryText(data.text);
+      } else {
+        setAiSummaryText("Yapay zeka özeti şu anda oluşturulamadı. Lütfen sunucu bağlantısını kontrol edin.");
+      }
+    } catch (err) {
+      console.error(err);
+      setAiSummaryText("Hata: Sunucu bağlantı hatası oluştu.");
+    } finally {
+      setLoadingSummary(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (subTab === "tournamentSummary" && !aiSummaryText && !loadingSummary) {
+      handleGenerateSummary();
+    }
+  }, [subTab]);
+
   React.useEffect(() => {
     if (subTab !== "macroTrends") return;
     if (tacticalDnaText) return; // Only load once
@@ -1627,6 +1797,18 @@ export default function TournamentAnalyticsView({
         </button>
         <div className="text-slate-300 text-xs select-none">/</div>
         <button
+          onClick={() => setSubTab("tournamentSummary")}
+          className={`pb-2 px-3 font-sans text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border-b-2 cursor-pointer transition-all ${
+            subTab === "tournamentSummary"
+              ? "border-indigo-600 text-indigo-750 font-extrabold"
+              : "border-transparent text-slate-400 hover:text-slate-700"
+          }`}
+        >
+          <Sparkles className="w-4 h-4 text-violet-500 animate-pulse" />
+          <span>🤖 Seviye 1.5: AI Turnuva Raporu</span>
+        </button>
+        <div className="text-slate-300 text-xs select-none">/</div>
+        <button
           onClick={() => setSubTab("group")}
           className={`pb-2 px-3 font-sans text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border-b-2 cursor-pointer transition-all ${
             subTab === "group"
@@ -1697,7 +1879,159 @@ export default function TournamentAnalyticsView({
           <Zap className="w-4 h-4 text-indigo-600" />
           <span>🧠 Seviye 5: Makro Trend & Karar Motoru</span>
         </button>
+        <div className="text-slate-300 text-xs select-none">/</div>
+        <button
+          onClick={() => setSubTab("guidedChatbot")}
+          className={`pb-2 px-3 font-sans text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border-b-2 cursor-pointer transition-all ${
+            subTab === "guidedChatbot"
+              ? "border-indigo-600 text-indigo-750 font-extrabold"
+              : "border-transparent text-slate-400 hover:text-slate-700"
+          }`}
+        >
+          <Sparkles className="w-4 h-4 text-indigo-600 animate-pulse" />
+          <span>🤖 Akıllı Taktiksel Rehber & Chatbot</span>
+        </button>
       </div>
+
+      {subTab === "tournamentSummary" && (
+        <div className="flex flex-col gap-6 font-sans">
+          {/* Main Hero Card */}
+          <div className="bg-gradient-to-br from-indigo-900 to-slate-900 text-white rounded-3xl p-6 relative overflow-hidden shadow-xl border border-indigo-950">
+            <div className="absolute right-0 top-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none -mr-28 -mt-28"></div>
+            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="flex flex-col gap-2">
+                <span className="px-3 py-1 bg-indigo-500/20 border border-indigo-400/20 rounded-full text-indigo-200 text-[10px] uppercase font-mono font-bold tracking-wider self-start flex items-center gap-1.5 animate-pulse">
+                  <Sparkles className="w-3 h-3 text-violet-400" />
+                  Yapay Zeka Turnuva Analiz Paneli
+                </span>
+                <h3 className="text-xl md:text-2xl font-black tracking-tight text-white leading-tight">
+                  Tüm Maç Verilerinden Üretilen Akıllı Raporlar
+                </h3>
+                <p className="text-xs text-slate-350 max-w-xl">
+                  Yazılım, veri tabanındaki tüm kayıtlı maçları (şu anda {uploadedMatches.length} maç) tarar. Gruplardaki gol patlamalarını, turnuvaya yön veren lider oyuncuları ve kritik taktik paradigmaları karşılaştırır.
+                </p>
+              </div>
+              <button
+                onClick={handleGenerateSummary}
+                disabled={loadingSummary}
+                className={`px-5 py-3 rounded-xl font-bold text-xs uppercase tracking-wide cursor-pointer flex items-center gap-2 transition-all shrink-0 ${
+                  loadingSummary
+                    ? "bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed"
+                    : "bg-white text-indigo-950 hover:bg-slate-50 border border-slate-100 shadow-lg shadow-white/5 active:scale-95"
+                }`}
+              >
+                <Sparkles className={`w-4 h-4 ${loadingSummary ? "animate-spin text-slate-550" : "text-indigo-650"}`} />
+                <span>{loadingSummary ? "Analiz Ediliyor..." : "Raporu Yenile"}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* Left: Stats & Group Goals Column */}
+            <div className="lg:col-span-1 flex flex-col gap-6">
+              
+              {/* Overall Tally Checklist */}
+              <div className="bg-white border border-slate-100 rounded-3xl p-5 shadow-xs">
+                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400">TURNUVA METRİKLERİ</span>
+                <h4 className="text-sm font-sans font-extrabold text-slate-900 mt-0.5 mb-4">Genel İstatistik Özetleri</h4>
+                
+                <div className="grid grid-cols-2 gap-3.5">
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100/50">
+                    <span className="text-[10px] text-slate-400 font-medium">Toplam Gol</span>
+                    <div className="text-lg font-black text-slate-800 font-mono mt-0.5">{overallTally.totalGoals} Gol</div>
+                  </div>
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100/50">
+                    <span className="text-[10px] text-slate-400 font-medium font-sans">Maç Başına Gol</span>
+                    <div className="text-lg font-black text-slate-800 font-mono mt-0.5">{overallTally.avgGoals}</div>
+                  </div>
+                  <div className="bg-slate-50 p- 3 rounded-xl border border-slate-100/50 col-span-2">
+                    <span className="text-[10px] text-slate-400 font-medium">Toplam Hat Kıran Koşu</span>
+                    <div className="text-base font-black text-indigo-700 font-mono mt-0.5">{overallTally.totalLineBreaks} Pas/Drilling</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Group Goals Board */}
+              <div className="bg-white border border-slate-100 rounded-3xl p-5 shadow-xs flex-1">
+                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 block mb-0.5">GRUP BAZLI GOL SEVİYESİ</span>
+                <h4 className="text-sm font-sans font-extrabold text-slate-900 mb-4">Grup Aşamasında Gol Dağılımları</h4>
+
+                {goalsPerGroup.length === 0 ? (
+                  <div className="text-center text-xs text-slate-400 py-6">Kayıtlı grup ve gol verisi bulunmuyor.</div>
+                ) : (
+                  <div className="flex flex-col gap-2.5">
+                    {goalsPerGroup.map((gp, idx) => (
+                      <div key={idx} className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100/50 hover:bg-slate-100/50 transition-colors">
+                        <span className="text-xs font-sans font-bold text-slate-700">{gp.name}</span>
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <span className="block text-xs font-mono font-black text-slate-850">{gp.totalGoals} Gol</span>
+                            <span className="block text-[8px] text-slate-400">Maç başı {gp.avgGoals}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {/* Right: AI analysis output */}
+            <div className="lg:col-span-2 flex flex-col gap-4">
+              <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-xs flex flex-col gap-4">
+                <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                  <span className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5 uppercase">
+                    <Sparkles className="w-4 h-4 text-indigo-600 shrink-0" />
+                    AI-Driven Tournament Summary Report
+                  </span>
+                  <span className="text-[10px] bg-slate-105 border border-slate-205 px-2 py-0.5 rounded-full font-mono font-bold text-slate-500 uppercase tracking-wider">
+                    Model: Gemini Flash 2.0
+                  </span>
+                </div>
+
+                {loadingSummary ? (
+                  <div className="flex flex-col gap-3 py-10">
+                    <div className="h-4 bg-slate-100 rounded-full w-3/4 animate-pulse"></div>
+                    <div className="h-4 bg-slate-100 rounded-full w-5/6 animate-pulse"></div>
+                    <div className="h-4 bg-slate-100 rounded-full w-2/3 animate-pulse"></div>
+                    <div className="h-4 bg-slate-100 rounded-full w-4/5 animate-pulse"></div>
+                    <div className="h-4 bg-slate-100 rounded-full w-1/2 animate-pulse"></div>
+                    <div className="mt-6 flex justify-center flex-col items-center gap-2">
+                      <div className="w-7 h-7 border-3 border-indigo-650 border-t-transparent rounded-full animate-spin"></div>
+                      <span className="text-xs text-slate-450 uppercase font-mono tracking-wider font-semibold animate-pulse">Turnuva trendleri analiz ediliyor...</span>
+                    </div>
+                  </div>
+                ) : aiSummaryText ? (
+                  <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-5 text-slate-750 font-sans text-xs sm:text-sm whitespace-pre-wrap leading-relaxed select-text shadow-inner">
+                    {aiSummaryText}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center p-12 text-center gap-4 bg-slate-50/50 border border-dashed border-slate-200 rounded-2xl">
+                    <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center animate-bounce">
+                      <Sparkles className="w-5 h-5 shrink-0" />
+                    </div>
+                    <div>
+                      <h5 className="font-extrabold text-slate-800 text-sm">Yapay Zeka Analizini Başlatın</h5>
+                      <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">
+                        Turnuvadaki gol, hat kıran koşular ve en yüksek performansa sahip oyuncuları birleştiren akıllı raporu oluşturmak için tıklayın.
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleGenerateSummary}
+                      className="px-4 py-2 bg-indigo-650 text-white hover:bg-indigo-705 rounded-xl font-bold text-xs uppercase tracking-wider cursor-pointer shadow-md shadow-indigo-650/10 active:scale-95 transition-all select-none"
+                    >
+                      Turnuva Raporunu Oku
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {subTab === "group" && (
         <>
@@ -1778,7 +2112,7 @@ export default function TournamentAnalyticsView({
                             className="cursor-pointer hover:text-indigo-600 hover:underline inline-flex items-center gap-1.5 group"
                             title={`${t.team} Detaylarını İncele`}
                           >
-                            <span className="text-lg">{getTeamFlag ? getTeamFlag(t.team) : "🏳️"}</span>
+                            <TeamFlag team={t.team} getTeamFlag={getTeamFlag} className="w-5.5 h-3.5 object-cover rounded-3xs shrink-0 border border-slate-200" fallbackTextSize="text-lg" />
                             <span>{t.team}</span>
                             <span className="text-[9px] font-mono bg-indigo-50 text-indigo-600 py-0.5 px-1.5 rounded-sm shrink-0 opacity-0 group-hover:opacity-100 transition">
                               Seviye 3 ➡️
@@ -1912,7 +2246,7 @@ export default function TournamentAnalyticsView({
                     <div key={t.team} className="p-3 bg-slate-50 hover:bg-slate-100/40 rounded-xl border border-slate-100/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors">
                       <div>
                         <strong className="text-xs text-slate-800 flex items-center gap-1.5 font-bold">
-                          <span>{getTeamFlag ? getTeamFlag(t.team) : "🏳️"}</span>
+                          <TeamFlag team={t.team} getTeamFlag={getTeamFlag} className="w-4 h-2.5 object-cover rounded-xs shrink-0 border border-slate-200" fallbackTextSize="text-xs" />
                           {t.team}
                         </strong>
                         <span className="text-[9.5px] text-slate-400 font-mono block mt-0.5">
@@ -2126,7 +2460,7 @@ export default function TournamentAnalyticsView({
             </h4>
             <div className="flex flex-col gap-2 mt-1">
               {topScorers.slice(0, 5).map((p, idx) => {
-                const pPhoto = squadPhotos[p.name.toLowerCase().trim()];
+                const pPhoto = findPlayerPhoto(p.name, squadPhotos);
                 const pFlag = getTeamFlag ? getTeamFlag(p.team) : "";
                 return (
                   <div key={idx} className="flex justify-between items-center text-xs bg-white p-2.5 rounded-xl border border-slate-50 shadow-2xs">
@@ -2147,7 +2481,7 @@ export default function TournamentAnalyticsView({
                       <div className="truncate">
                         <strong className="text-slate-850 block truncate font-bold font-sans text-xs">{p.name}</strong>
                         <span className="text-[9.5px] text-slate-400 truncate flex items-center gap-1 font-sans">
-                          {pFlag && <span className="text-[11px] shrink-0">{pFlag}</span>}
+                          <TeamFlag team={p.team} getTeamFlag={getTeamFlag} className="w-4 h-2.5 object-cover rounded-3xs shrink-0 border border-slate-200" fallbackTextSize="text-[10px]" />
                           <span>{p.team}</span>
                         </span>
                       </div>
@@ -2172,7 +2506,7 @@ export default function TournamentAnalyticsView({
             </h4>
             <div className="flex flex-col gap-2 mt-1">
               {topLineBreakers.slice(0, 5).map((p, idx) => {
-                const pPhoto = squadPhotos[p.name.toLowerCase().trim()];
+                const pPhoto = findPlayerPhoto(p.name, squadPhotos);
                 const pFlag = getTeamFlag ? getTeamFlag(p.team) : "";
                 return (
                   <div key={idx} className="flex justify-between items-center text-xs bg-white p-2.5 rounded-xl border border-slate-50 shadow-2xs">
@@ -2193,7 +2527,7 @@ export default function TournamentAnalyticsView({
                       <div className="truncate">
                         <strong className="text-slate-850 block truncate font-bold font-sans text-xs">{p.name}</strong>
                         <span className="text-[9.5px] text-slate-400 truncate flex items-center gap-1 font-sans">
-                          {pFlag && <span className="text-[11px] shrink-0">{pFlag}</span>}
+                          <TeamFlag team={p.team} getTeamFlag={getTeamFlag} className="w-4 h-2.5 object-cover rounded-3xs shrink-0 border border-slate-200" fallbackTextSize="text-[10px]" />
                           <span>{p.team}</span>
                         </span>
                       </div>
@@ -2218,7 +2552,7 @@ export default function TournamentAnalyticsView({
             </h4>
             <div className="flex flex-col gap-2 mt-1">
               {topRegainers.slice(0, 5).map((p, idx) => {
-                const pPhoto = squadPhotos[p.name.toLowerCase().trim()];
+                const pPhoto = findPlayerPhoto(p.name, squadPhotos);
                 const pFlag = getTeamFlag ? getTeamFlag(p.team) : "";
                 return (
                   <div key={idx} className="flex justify-between items-center text-xs bg-white p-2.5 rounded-xl border border-slate-50 shadow-2xs">
@@ -2239,7 +2573,7 @@ export default function TournamentAnalyticsView({
                       <div className="truncate">
                         <strong className="text-slate-850 block truncate font-bold font-sans text-xs">{p.name}</strong>
                         <span className="text-[9.5px] text-slate-400 truncate flex items-center gap-1 font-sans">
-                          {pFlag && <span className="text-[11px] shrink-0">{pFlag}</span>}
+                          <TeamFlag team={p.team} getTeamFlag={getTeamFlag} className="w-4 h-2.5 object-cover rounded-3xs shrink-0 border border-slate-200" fallbackTextSize="text-[10px]" />
                           <span>{p.team}</span>
                         </span>
                       </div>
@@ -2264,7 +2598,7 @@ export default function TournamentAnalyticsView({
             </h4>
             <div className="flex flex-col gap-2 mt-1">
               {topPassOrchestrators.slice(0, 5).map((p, idx) => {
-                const pPhoto = squadPhotos[p.name.toLowerCase().trim()];
+                const pPhoto = findPlayerPhoto(p.name, squadPhotos);
                 const pFlag = getTeamFlag ? getTeamFlag(p.team) : "";
                 return (
                   <div key={idx} className="flex justify-between items-center text-xs bg-white p-2.5 rounded-xl border border-slate-50 shadow-2xs">
@@ -2285,7 +2619,7 @@ export default function TournamentAnalyticsView({
                       <div className="truncate">
                         <strong className="text-slate-850 block truncate font-bold font-sans text-xs">{p.name}</strong>
                         <span className="text-[9.5px] text-slate-400 truncate flex items-center gap-1 font-sans">
-                          {pFlag && <span className="text-[11px] shrink-0">{pFlag}</span>}
+                          <TeamFlag team={p.team} getTeamFlag={getTeamFlag} className="w-4 h-2.5 object-cover rounded-3xs shrink-0 border border-slate-200" fallbackTextSize="text-[10px]" />
                           <span>{p.team}</span>
                         </span>
                       </div>
@@ -2504,8 +2838,8 @@ export default function TournamentAnalyticsView({
               </>
             )}
 
-            <RechartsTooltip wrapperStyle={{ pointerEvents: "none" }} isAnimationActive={false} cursor={{ strokeDasharray: "3 3", stroke: "#e2e8f0" }} content={<ScatterTooltip />} />
-            <Scatter name="Oyuncular" data={plotData} shape={<ScatterDotShape squadPhotos={squadPhotos} onNodeClick={navigateToPlayerProfile} />} />
+            <RechartsTooltip wrapperStyle={{ pointerEvents: "none" }} isAnimationActive={false} cursor={{ strokeDasharray: "3 3", stroke: "#e2e8f0" }} content={<ScatterTooltip squadPhotos={squadPhotos} getTeamFlag={getTeamFlag} />} />
+            <Scatter name="Oyuncular" data={plotData} shape={<ScatterDotShape squadPhotos={squadPhotos} getTeamFlag={getTeamFlag} onNodeClick={navigateToPlayerProfile} />} />
           </ScatterChart>
         </ResponsiveContainer>
       </div>
@@ -2817,7 +3151,7 @@ export default function TournamentAnalyticsView({
                           : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
                       }`}
                     >
-                      <span className="text-sm">{getTeamFlag ? getTeamFlag(t) : "🏳️"}</span>
+                      <TeamFlag team={t} getTeamFlag={getTeamFlag} className="w-4.5 h-3 object-cover rounded-xs shrink-0 border border-slate-205/60" fallbackTextSize="text-sm" />
                       <span>{t}</span>
                     </button>
                   );
@@ -2831,7 +3165,7 @@ export default function TournamentAnalyticsView({
               <div className="md:col-span-4 bg-slate-50 p-5 rounded-2xl border border-slate-100 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-3xl">{getTeamFlag ? getTeamFlag(activeTeamName) : "🏳️"}</span>
+                    <TeamFlag team={activeTeamName} getTeamFlag={getTeamFlag} className="w-10 h-7 object-cover rounded shadow-2xs border border-slate-200" fallbackTextSize="text-3xl" />
                     <div>
                       <h4 className="font-sans font-black text-slate-900 text-sm leading-tight">{activeTeamName}</h4>
                       <p className="text-[10px] font-mono text-indigo-600 font-bold uppercase mt-0.5">Savunma Formasyonu: {currentForm}</p>
@@ -3562,7 +3896,7 @@ export default function TournamentAnalyticsView({
 
             <div className="flex-1 overflow-y-auto max-h-[310px] divide-y divide-slate-100 pr-1 select-none">
               {efficiencyPlayerData.slice(0, 15).map((player, idx) => {
-                const photo = squadPhotos[player.name.toLowerCase().trim()];
+                const photo = findPlayerPhoto(player.name, squadPhotos);
                 const flag = getTeamFlag ? getTeamFlag(player.team) : "";
                 const backType = getBacklineType(player.formation);
                 return (
@@ -3584,7 +3918,7 @@ export default function TournamentAnalyticsView({
                       <div className="truncate">
                         <strong className="text-slate-850 block truncate font-bold font-sans text-xs">{player.name}</strong>
                         <span className="text-[9px] text-slate-400 truncate flex items-center gap-1 font-mono">
-                          {flag && <span className="text-[11px] shrink-0">{flag}</span>}
+                          <TeamFlag team={player.team} getTeamFlag={getTeamFlag} className="w-4 h-2.5 object-cover rounded-3xs shrink-0 border border-slate-200" fallbackTextSize="text-[10px]" />
                           <span>{player.team} • {player.formation} ({backType.split(" ")[0]})</span>
                         </span>
                       </div>
@@ -3796,7 +4130,7 @@ export default function TournamentAnalyticsView({
           {/* Dynamically Generated Rank List */}
           <div className="divide-y divide-slate-100 max-h-[380px] overflow-y-auto pr-1">
             {compositePlayerData.map((player, idx) => {
-              const photo = squadPhotos[player.name.toLowerCase().trim()];
+              const photo = findPlayerPhoto(player.name, squadPhotos);
               const flag = getTeamFlag ? getTeamFlag(player.team) : "";
               return (
                 <div key={idx} className="py-2.5 flex items-center justify-between gap-4">
@@ -3821,7 +4155,7 @@ export default function TournamentAnalyticsView({
                     >
                       <strong className="text-slate-800 block truncate font-bold font-sans text-xs group-hover:text-indigo-650 group-hover:underline">{player.name}</strong>
                       <span className="text-[10px] text-slate-400 font-mono truncate flex items-center gap-1 mt-0.5">
-                        {flag && <span className="text-[11px] leading-none shrink-0">{flag}</span>}
+                        <TeamFlag team={player.team} getTeamFlag={getTeamFlag} className="w-4 h-2.5 object-cover rounded-3xs shrink-0 border border-slate-200" fallbackTextSize="text-[10.5px]" />
                         <span>{player.team} • {player.position}</span>
                       </span>
                     </button>
@@ -4906,6 +5240,14 @@ export default function TournamentAnalyticsView({
       )}
 
     </div>
+  )}
+
+  {subTab === "guidedChatbot" && (
+    <GuidedChatbotView
+      uploadedMatches={uploadedMatches}
+      aggregatedPlayers={aggregatedPlayers}
+      getTeamFlag={getTeamFlag || (() => "")}
+    />
   )}
 
   {/* Edit Plot Name Modal overlay */}

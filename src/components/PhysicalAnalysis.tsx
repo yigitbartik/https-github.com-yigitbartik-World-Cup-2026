@@ -734,9 +734,18 @@ export function PhysicalAnalysis({ sheets }: PhysicalAnalysisProps) {
 
                   <div className="space-y-3">
                     {classificationList.map((player, index) => (
-                      <div key={index} className="bg-white border border-slate-150 p-3 rounded-xl flex flex-col gap-2 hover:border-slate-300 transition-colors">
+                      <div 
+                        key={index} 
+                        onClick={() => {
+                          if ((window as any).navigateToPlayer) {
+                            (window as any).navigateToPlayer(player.name, player.teamName);
+                          }
+                        }}
+                        className="bg-white border border-slate-150 p-3 rounded-xl flex flex-col gap-2 hover:border-indigo-200 hover:shadow-2xs transition-colors cursor-pointer group"
+                        title={`${player.name} Profilini Gör`}
+                      >
                         <div className="flex items-center justify-between gap-2">
-                          <strong className="text-xs text-slate-800">{player.name}</strong>
+                          <strong className="text-xs text-slate-800 group-hover:text-indigo-650 group-hover:underline">{player.name}</strong>
                           <span className="font-mono text-[9px] text-slate-400">({player.teamName.split(" ")[0]})</span>
                         </div>
 
@@ -813,6 +822,10 @@ export function PhysicalAnalysis({ sheets }: PhysicalAnalysisProps) {
                 p3Pct,
                 row
               };
+            }).filter(p => {
+              if (!p.name) return false;
+              const uName = String(p.name).toLowerCase();
+              return !uName.startsWith("data:") && !uName.includes("base64") && uName.length < 50;
             });
 
             // Calculate overall averages and standard deviations for Z-score normalization
@@ -1084,6 +1097,8 @@ export function PhysicalAnalysis({ sheets }: PhysicalAnalysisProps) {
                             />
                             <ZAxis type="category" dataKey="name" name="Oyuncu" />
                             <RechartsTooltip 
+                              wrapperStyle={{ pointerEvents: "none" }}
+                              isAnimationActive={false}
                               cursor={{ strokeDasharray: '3 3', stroke: '#cbd5e1' }}
                               content={({ active, payload }) => {
                                 if (active && payload && payload.length) {
@@ -1523,23 +1538,35 @@ export function PhysicalAnalysis({ sheets }: PhysicalAnalysisProps) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-150">
-                    {sortedAndFilteredTableData.map((row, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50 transition-colors group animate-fade-in-down">
-                        {data.allCols.map((col) => {
-                           const isPlayer = col.toLowerCase() === "player" || col.toLowerCase() === "oyuncu";
-                           const val = row[col];
-                           return (
-                             <td key={col} className={cn(
-                               "px-4 py-2.5 text-xs font-medium",
-                               isPlayer ? "font-bold border-r border-slate-200 sticky left-0 z-10 group-hover:bg-slate-50 bg-white" : "text-center font-mono text-[11.5px] text-slate-600",
-                               row._isTeam1 && isPlayer ? "text-rose-600" : !row._isTeam1 && isPlayer ? "text-indigo-600" : ""
-                             )}>
-                               {typeof val === "number" && val % 1 !== 0 ? val.toFixed(1) : (val === "0" || val === 0 ? <span className="text-slate-300">-</span> : val)}
-                             </td>
-                           );
-                        })}
-                      </tr>
-                    ))}
+                    {sortedAndFilteredTableData.map((row, idx) => {
+                       const rowTeam = row._isTeam1 ? sheet1Name : sheet2Name;
+                       return (
+                         <tr key={idx} className="hover:bg-slate-50 transition-colors group animate-fade-in-down">
+                           {data.allCols.map((col) => {
+                              const isPlayer = col.toLowerCase() === "player" || col.toLowerCase() === "oyuncu";
+                              const val = row[col];
+                              return (
+                                <td 
+                                  key={col} 
+                                  className={cn(
+                                    "px-4 py-2.5 text-xs font-medium",
+                                    isPlayer ? "font-bold border-r border-slate-200 sticky left-0 z-10 group-hover:bg-slate-50 bg-white cursor-pointer" : "text-center font-mono text-[11.5px] text-slate-600",
+                                    row._isTeam1 && isPlayer ? "text-rose-600 hover:text-rose-800 hover:underline" : !row._isTeam1 && isPlayer ? "text-indigo-600 hover:text-indigo-850 hover:underline" : ""
+                                  )}
+                                  onClick={() => {
+                                    if (isPlayer && (window as any).navigateToPlayer) {
+                                      (window as any).navigateToPlayer(String(val), rowTeam);
+                                    }
+                                  }}
+                                  title={isPlayer ? `${val} Profilini Gör` : undefined}
+                                >
+                                  {typeof val === "number" && val % 1 !== 0 ? val.toFixed(1) : (val === "0" || val === 0 ? <span className="text-slate-300">-</span> : val)}
+                                </td>
+                              );
+                           })}
+                         </tr>
+                       );
+                    })}
 
                     {sortedAndFilteredTableData.length === 0 && (
                       <tr>

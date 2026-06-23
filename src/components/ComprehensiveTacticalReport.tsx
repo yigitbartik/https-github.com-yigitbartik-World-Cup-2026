@@ -515,15 +515,17 @@ export default function ComprehensiveTacticalReport({ matchData, squadPhotos = {
       return Math.round(((smallerCount + 1) / allVals.length) * 100);
     };
 
-    const speedVal = stats.totalDistance ? safeInt(stats.totalDistance / 280) : 30; // Max distance scaled
-
     return [
       { axis: "🏃 Efor Sıklığı", value: calculatePercentile("totalDistance", stats.totalDistance) },
-      { axis: "⚡ Süratli Koşu", value: calculatePercentile("zone4Sprinting", stats.zone4Sprinting) },
-      { axis: "🥋 Pres Baskısı", value: calculatePercentile("pressingSuccess", stats.pressingSuccess) },
+      { axis: "⚡ Yüksek Şiddet", value: calculatePercentile("zone4Sprinting", stats.zone4Sprinting) },
+      { axis: "🔥 Z5 Sprintleri", value: calculatePercentile("zone5Sprinting", stats.zone5Sprinting) },
+      { axis: "🔄 Top Taşıma", value: calculatePercentile("ballProgressions", stats.ballProgressions) },
       { axis: "📐 Hat Kırma", value: calculatePercentile("lineBreaksPercent", stats.lineBreaksPercent) },
-      { axis: "🛰️ Alan Yaratımı", value: calculatePercentile("offersToReceive", stats.offersToReceive) },
+      { axis: "🎯 Hatlar Arası", value: calculatePercentile("receptionsInBetween", stats.receptionsInBetween) },
       { axis: "🚀 Blok Arkası", value: calculatePercentile("receptionsInBehind", stats.receptionsInBehind) },
+      { axis: "🛰️ Alan Yaratımı", value: calculatePercentile("offersToReceive", stats.offersToReceive) },
+      { axis: "🥋 Pres Baskısı", value: calculatePercentile("pressingSuccess", stats.pressingSuccess) },
+      { axis: "🛡️ Top Kazanma", value: calculatePercentile("forcedTurnovers", stats.forcedTurnovers) }
     ];
   }, [selectedPlayerForAnalysis, allPlayersBaseStats]);
 
@@ -715,13 +717,18 @@ export default function ComprehensiveTacticalReport({ matchData, squadPhotos = {
             Bu rapor eldeki zengin maç veri setlerini **Z-Skor Anomali Tespiti**, **K-Means Oyuncu Kümelemesi**, **Lojistik Regresyon Tahminleme**, **Ağ Merkeziliği** ve **Blok Kompaktlık Koordinat** modellerine döker.
           </p>
         </div>
-        <button
-          onClick={triggerPdfPrint}
-          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-650 hover:bg-indigo-600 active:bg-indigo-700 text-white font-sans font-bold text-xs rounded-xl shadow-lg cursor-pointer transition-all hover:scale-[1.02]"
-        >
-          <FileDown className="w-4 h-4" />
-          <span>📄 PDF Raporu Olarak Yazdır</span>
-        </button>
+        <div className="flex flex-col items-end gap-1.5">
+          <button
+            onClick={triggerPdfPrint}
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-650 hover:bg-indigo-600 active:bg-indigo-700 text-white font-sans font-bold text-xs rounded-xl shadow-lg cursor-pointer transition-all hover:scale-[1.02]"
+          >
+            <FileDown className="w-4 h-4" />
+            <span>📄 PDF Raporu Olarak Yazdır / Kaydet</span>
+          </button>
+          <span className="text-[9.5px] text-slate-400 max-w-[240px] text-right leading-tight">
+            💡 <strong>İpucu:</strong> Eğer PDF penceresi açılmıyorsa, lütfen sağ üstteki <strong>"Yeni Sekmede Aç"</strong> ikonuna tıklayın. Yazdırırken <strong>"Arka Plan Grafikleri"</strong> seçeneğini etkinleştirmeyi unutmayın!
+          </span>
+        </div>
       </div>
 
       {/* CORE INNER NAVIGATION TABS (NO-PRINT) */}
@@ -1838,9 +1845,21 @@ export default function ComprehensiveTacticalReport({ matchData, squadPhotos = {
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={momentumData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
                     <defs>
-                      <linearGradient id="colorMomentumHome" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.4} />
-                        <stop offset="95%" stopColor="#4f46e5" stopOpacity={0.0} />
+                      <linearGradient id="colorMomentum" x1="0" y1="0" x2="0" y2="1">
+                        {/* Upper/Home team part: Indigo */}
+                        <stop offset="0%" stopColor="#4f46e5" stopOpacity={0.5} />
+                        <stop offset="45%" stopColor="#4f46e5" stopOpacity={0.1} />
+                        <stop offset="50%" stopColor="#cbd5e1" stopOpacity={0} />
+                        {/* Lower/Away team part: Rose/Pink */}
+                        <stop offset="55%" stopColor="#f43f5e" stopOpacity={0.1} />
+                        <stop offset="100%" stopColor="#f43f5e" stopOpacity={0.5} />
+                      </linearGradient>
+                      <linearGradient id="strokeGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#4f46e5" />
+                        <stop offset="45%" stopColor="#6366f1" />
+                        <stop offset="50%" stopColor="#94a3b8" />
+                        <stop offset="55%" stopColor="#fb7185" />
+                        <stop offset="100%" stopColor="#f43f5e" />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -1859,7 +1878,7 @@ export default function ComprehensiveTacticalReport({ matchData, squadPhotos = {
                                 <span>Dakika {data.minute}</span>
                                 <span className="text-indigo-400 font-mono">{data.currentScore}</span>
                               </div>
-                              <div>Baskı Hakimiyeti: <strong className={value > 0 ? "text-indigo-300" : "text-amber-300"}>{teamLead} ({absVal})</strong></div>
+                              <div>Baskı Hakimiyeti: <strong className={value > 0 ? "text-indigo-300" : "text-rose-400"}>{teamLead} ({absVal})</strong></div>
                               {data.events.length > 0 && (
                                 <div className="mt-1.5 pt-1.5 border-t border-slate-900 text-emerald-400 font-sans font-semibold">
                                   {data.events.map((e: string, i: number) => <div key={i}>{e}</div>)}
@@ -1871,7 +1890,7 @@ export default function ComprehensiveTacticalReport({ matchData, squadPhotos = {
                         return null;
                       }}
                     />
-                    <Area type="monotone" dataKey="Momentum" stroke="#4f46e5" strokeWidth={2} fill="url(#colorMomentumHome)" />
+                    <Area type="monotone" dataKey="Momentum" stroke="url(#strokeGradient)" strokeWidth={2.5} fill="url(#colorMomentum)" />
                     {/* Horizontal zero axis line */}
                     <line x1="0" y1="50%" x2="100%" y2="50%" stroke="#cbd5e1" strokeDasharray="4,4" strokeWidth={1} />
                   </AreaChart>
@@ -1880,7 +1899,7 @@ export default function ComprehensiveTacticalReport({ matchData, squadPhotos = {
               <div className="flex justify-between items-center text-[10px] font-mono text-slate-400 border-t border-slate-50 pt-2 shrink-0">
                 <span className="text-indigo-600 font-bold">▲ {homeTeam} Üstünlüğü</span>
                 <span>Eşit Mücadele (Denge Noktası)</span>
-                <span className="text-amber-650 font-bold">▼ {awayTeam} Üstünlüğü</span>
+                <span className="text-rose-600 font-bold">▼ {awayTeam} Üstünlüğü</span>
               </div>
             </div>
 
@@ -2042,10 +2061,18 @@ export default function ComprehensiveTacticalReport({ matchData, squadPhotos = {
 
               {/* Quick details summary */}
               {activePlayerAnalysis ? (
-                <div className="bg-slate-900 text-white p-3.5 rounded-xl border border-slate-800 flex flex-col gap-1.5">
+                <div 
+                  onClick={() => {
+                    if ((window as any).navigateToPlayer) {
+                      (window as any).navigateToPlayer(activePlayerAnalysis.name, activePlayerAnalysis.team);
+                    }
+                  }}
+                  className="bg-slate-900 hover:bg-slate-850 text-white p-3.5 rounded-xl border border-slate-800 flex flex-col gap-1.5 cursor-pointer hover:shadow-md transition-all group/reportCard"
+                  title={`${activePlayerAnalysis.name} Profilini Gör`}
+                >
                   <div className="flex gap-2">
-                    <div className="w-5 h-5 rounded-full bg-cyan-500 text-slate-900 font-sans font-bold text-[10px] flex items-center justify-center shrink-0">{activePlayerAnalysis.number}</div>
-                    <strong className="text-[11.5px] block truncate text-slate-100">{activePlayerAnalysis.name}</strong>
+                    <div className="w-5 h-5 rounded-full bg-cyan-400 text-slate-900 font-sans font-bold text-[10px] flex items-center justify-center shrink-0 group-hover/reportCard:scale-110 transition-transform">{activePlayerAnalysis.number}</div>
+                    <strong className="text-[11.5px] block truncate text-slate-100 group-hover/reportCard:text-cyan-400 group-hover/reportCard:underline">{activePlayerAnalysis.name}</strong>
                   </div>
                   <div className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">{activePlayerAnalysis.team} • {activePlayerAnalysis.position}</div>
                   
@@ -2063,108 +2090,123 @@ export default function ComprehensiveTacticalReport({ matchData, squadPhotos = {
             </div>
 
             {/* Premium CUSTOM SVG RADAR/POLAR WEB GRAPH CHASSIS */}
-            <div className="lg:col-span-3 bg-slate-50 p-6 border border-slate-205 rounded-2xl flex items-center justify-center relative overflow-hidden h-80">
+            <div className="lg:col-span-3 bg-slate-50 p-4 border border-slate-200 rounded-2xl flex flex-col items-center justify-center relative overflow-hidden min-h-[360px]">
               {activePlayerCalculatedRadar ? (
-                <div className="relative w-72 h-72">
-                  <svg viewBox="0 0 200 200" className="w-full h-full">
-                    {/* Concentric helper grids */}
-                    {[20, 40, 60, 80, 100].map((level, i) => {
-                      const points: string[] = [];
-                      for (let angleId = 0; angleId < 6; angleId++) {
-                        const angle = (angleId * 60 * Math.PI) / 180;
-                        const r = (level / 100) * 72;
-                        const x = 100 + r * Math.sin(angle);
-                        const y = 100 + r * Math.cos(angle);
-                        points.push(`${Math.round(x)},${Math.round(y)}`);
-                      }
-                      return (
-                        <polygon
-                          key={i}
-                          points={points.join(" ")}
-                          fill="none"
-                          stroke="#cbd5e1"
-                          strokeWidth="0.5"
-                          strokeDasharray="2 2"
-                        />
-                      );
-                    })}
-
-                    {/* Outer axis web beams */}
-                    {activePlayerCalculatedRadar.map((ax, i) => {
-                      const angle = (i * 60 * Math.PI) / 180;
-                      const x1 = 100;
-                      const y1 = 100;
-                      const x2 = 100 + 72 * Math.sin(angle);
-                      const y2 = 100 + 72 * Math.cos(angle);
-
-                      // Text positioning offsets
-                      const textX = 100 + 82 * Math.sin(angle);
-                      const textY = 100 + 82 * Math.cos(angle);
-                      
-                      let textAnchor = "middle";
-                      if (Math.sin(angle) > 0.1) textAnchor = "start";
-                      else if (Math.sin(angle) < -0.1) textAnchor = "end";
-
-                      return (
-                        <g key={i}>
-                          <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#94a3b8" strokeWidth="0.5" />
-                          <text
-                            x={textX}
-                            y={textY}
-                            textAnchor={textAnchor}
-                            dominantBaseline="middle"
-                            fill="#475569"
-                            fontSize="7.5"
-                            fontWeight="bold"
-                            fontFamily="sans-serif"
-                          >
-                            {ax.axis}
-                          </text>
-                        </g>
-                      );
-                    })}
-
-                    {/* Calculated Player data polygon overlay */}
-                    {(() => {
-                      const polyPoints = activePlayerCalculatedRadar.map((ax, i) => {
-                        const angle = (i * 60 * Math.PI) / 180;
-                        const r = (ax.value / 100) * 72;
-                        const x = 100 + r * Math.sin(angle);
-                        const y = 100 + r * Math.cos(angle);
-                        return `${Math.round(x)},${Math.round(y)}`;
-                      });
-
-                      const dotPoints = activePlayerCalculatedRadar.map((ax, i) => {
-                        const angle = (i * 60 * Math.PI) / 180;
-                        const r = (ax.value / 100) * 72;
-                        const x = 100 + r * Math.sin(angle);
-                        const y = 100 + r * Math.cos(angle);
-                        return { x: Math.round(x), y: Math.round(y), val: ax.value };
-                      });
-
-                      return (
-                        <g>
+                <div className="flex flex-col items-center w-full">
+                  <div className="relative w-80 h-80">
+                    <svg viewBox="0 0 200 200" className="w-full h-full">
+                      {/* Concentric helper grids */}
+                      {[20, 40, 60, 80, 100].map((level, i) => {
+                        const points: string[] = [];
+                        const numAxes = activePlayerCalculatedRadar.length;
+                        for (let angleId = 0; angleId < numAxes; angleId++) {
+                          const angle = (angleId * (360 / numAxes) * Math.PI) / 180;
+                          const r = (level / 100) * 58;
+                          const x = 100 + r * Math.sin(angle);
+                          const y = 100 - r * Math.cos(angle); // Correct mathematical orientation (12 o'clock first)
+                          points.push(`${Math.round(x)},${Math.round(y)}`);
+                        }
+                        return (
                           <polygon
-                            points={polyPoints.join(" ")}
-                            fill="#818cf8"
-                            fillOpacity="0.4"
-                            stroke="#4f46e5"
-                            strokeWidth="1.5"
+                            key={i}
+                            points={points.join(" ")}
+                            fill="none"
+                            stroke="#cbd5e1"
+                            strokeWidth="0.5"
+                            strokeDasharray="2 2"
                           />
-                          {dotPoints.map((pt, idx) => (
-                            <g key={idx}>
-                              <circle cx={pt.x} cy={pt.y} r="3" fill="#4f46e5" stroke="white" strokeWidth="1" />
-                              <text x={pt.x} y={pt.y - 6} fill="#1e1b4b" fontSize="7.5" fontWeight="black" textAnchor="middle" fontFamily="monospace">
-                                {pt.val}%
-                              </text>
-                            </g>
-                          ))}
-                        </g>
-                      );
-                    })()}
-                  </svg>
-                  <div className="absolute top-1.5 right-1.5 text-[8.5px] font-mono text-indigo-750 font-bold uppercase bg-indigo-50 border border-indigo-150 px-2 py-0.5 rounded shadow-xs">
-                    % Yüzdelik Dilim (Percentile)
+                        );
+                      })}
+
+                      {/* Outer axis web beams */}
+                      {activePlayerCalculatedRadar.map((ax, i) => {
+                        const numAxes = activePlayerCalculatedRadar.length;
+                        const angle = (i * (360 / numAxes) * Math.PI) / 180;
+                        const x1 = 100;
+                        const y1 = 100;
+                        const x2 = 100 + 58 * Math.sin(angle);
+                        const y2 = 100 - 58 * Math.cos(angle);
+
+                        // Text positioning offsets
+                        const textX = 100 + 72 * Math.sin(angle);
+                        const textY = 100 - 72 * Math.cos(angle);
+                        
+                        let textAnchor = "middle";
+                        const sinVal = Math.sin(angle);
+                        if (sinVal > 0.15) textAnchor = "start";
+                        else if (sinVal < -0.15) textAnchor = "end";
+
+                        // Micro adjustment for top and bottom text to prevent clip
+                        let dy = "0.31em";
+                        const cosVal = Math.cos(angle);
+                        if (cosVal > 0.85) dy = "-0.2em";
+                        else if (cosVal < -0.85) dy = "0.8em";
+
+                        return (
+                          <g key={i}>
+                            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#94a3b8" strokeWidth="0.5" />
+                            <text
+                              x={textX}
+                              y={textY}
+                              textAnchor={textAnchor}
+                              dy={dy}
+                              fill="#334155"
+                              fontSize="6.8"
+                              fontWeight="bold"
+                              fontFamily="sans-serif"
+                            >
+                              {ax.axis}
+                            </text>
+                          </g>
+                        );
+                      })}
+
+                      {/* Calculated Player data polygon overlay */}
+                      {(() => {
+                        const numAxes = activePlayerCalculatedRadar.length;
+                        const polyPoints = activePlayerCalculatedRadar.map((ax, i) => {
+                          const angle = (i * (360 / numAxes) * Math.PI) / 180;
+                          const r = (ax.value / 100) * 58;
+                          const x = 100 + r * Math.sin(angle);
+                          const y = 100 - r * Math.cos(angle);
+                          return `${Math.round(x)},${Math.round(y)}`;
+                        });
+
+                        const dotPoints = activePlayerCalculatedRadar.map((ax, i) => {
+                          const angle = (i * (360 / numAxes) * Math.PI) / 180;
+                          const r = (ax.value / 100) * 58;
+                          const x = 100 + r * Math.sin(angle);
+                          const y = 100 - r * Math.cos(angle);
+                          return { x: Math.round(x), y: Math.round(y), val: ax.value };
+                        });
+
+                        return (
+                          <g>
+                            <polygon
+                              points={polyPoints.join(" ")}
+                              fill="#6366f1"
+                              fillOpacity="0.25"
+                              stroke="#4f46e5"
+                              strokeWidth="1.5"
+                            />
+                            {dotPoints.map((pt, idx) => (
+                              <g key={idx}>
+                                <circle cx={pt.x} cy={pt.y} r="2.5" fill="#4f46e5" stroke="white" strokeWidth="0.75" />
+                                <text x={pt.x} y={pt.y - 5} fill="#1e1b4b" fontSize="6.5" fontWeight="900" textAnchor="middle" fontFamily="monospace">
+                                  {pt.val}%
+                                </text>
+                              </g>
+                            ))}
+                          </g>
+                        );
+                      })()}
+                    </svg>
+                  </div>
+                  {/* Explanatory instruction box below radar */}
+                  <div className="mt-1 flex flex-wrap gap-2 items-center justify-center text-[10px] text-indigo-900 bg-indigo-50/70 border border-indigo-100 rounded-lg px-3 py-1.5 max-w-xs text-center font-sans">
+                    <span className="font-bold uppercase tracking-wider text-[9px] text-indigo-700">% Yüzdelik Dilim (Percentile)</span>
+                    <span className="text-slate-500">|</span>
+                    <p className="text-slate-600">Her değer, oyuncunun turnuvadaki tüm rakiplerine kıyasla başarı dilimidir.</p>
                   </div>
                 </div>
               ) : (

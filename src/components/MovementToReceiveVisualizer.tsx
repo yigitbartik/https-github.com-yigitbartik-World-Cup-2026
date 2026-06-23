@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { MatchReport } from "../data/mexico_south_rich_data";
 import { motion } from "motion/react";
-import { Sliders, HelpCircle, Activity, Play, Milestone } from "lucide-react";
+import { Sliders, HelpCircle, Activity, Play, Milestone, AlertTriangle } from "lucide-react";
 
 interface MovementToReceiveVisualizerProps {
   matchData: MatchReport;
@@ -110,7 +110,7 @@ export default function MovementToReceiveVisualizer({
           >
             {playersList.map((p, idx) => (
               <option key={idx} value={p.name}>
-                [{p.team}] #{p.number} {p.name} ({p.position})
+                {p.validationMismatch ? "⚠️ " : ""}[{p.team}] #{p.number} {p.name} ({p.position}){p.validationMismatch ? " (Validation Mismatch)" : ""}
               </option>
             ))}
           </select>
@@ -124,12 +124,17 @@ export default function MovementToReceiveVisualizer({
           <div className="lg:col-span-5 flex flex-col gap-5 justify-between">
             <div className="flex flex-col gap-4">
               {/* Profile card */}
-              <div className="bg-slate-50 rounded-2xl p-4.5 border border-slate-150 flex items-center gap-4">
+              <div className="bg-slate-50 rounded-2xl p-4.5 border border-slate-150 flex items-center gap-4 relative overflow-hidden">
+                {selectedPlayer.validationMismatch && (
+                  <div className="absolute top-0 right-0 bg-rose-50 border-l border-b border-rose-200 text-[9px] font-mono font-bold text-rose-600 px-2 py-0.5 rounded-bl-lg flex items-center gap-1">
+                    <AlertTriangle className="w-2.5 h-2.5 text-rose-500 shrink-0" /> Ingestion Error
+                  </div>
+                )}
                 {getPhoto(selectedPlayer.name) ? (
                   <img
                     src={getPhoto(selectedPlayer.name)!}
                     alt={selectedPlayer.name}
-                    className="w-14 h-14 rounded-full object-cover border-2 border-white shadow-md"
+                    className="w-14 h-14 rounded-full object-cover border-2 border-white shadow-md animate-in fade-in zoom-in-75"
                     referrerPolicy="no-referrer"
                   />
                 ) : (
@@ -149,10 +154,17 @@ export default function MovementToReceiveVisualizer({
                       {selectedPlayer.team}
                     </span>
                   </div>
-                  <h4 className="text-sm font-black text-slate-900 mt-1">{selectedPlayer.name}</h4>
+                  <h4 className="text-sm font-black text-slate-900 mt-1 flex items-center gap-1.5">
+                    {selectedPlayer.name}
+                  </h4>
                   <p className="text-[9.5px] text-emerald-600 font-bold font-mono mt-0.5">
-                    Strategic movements executed: {selectedPlayer.total} runs
+                    Strategic movements: {selectedPlayer.total} runs
                   </p>
+                  {selectedPlayer.validationMismatch && (
+                    <p className="text-[8.5px] text-rose-600 font-medium font-sans leading-none mt-1 flex items-center gap-1">
+                      ⚠️ Sum of individual runs ({selectedPlayer.inFront + selectedPlayer.inBetween + selectedPlayer.outToIn + selectedPlayer.inToOut + selectedPlayer.inBehind}) does not equal Total ({selectedPlayer.total}).
+                    </p>
+                  )}
                 </div>
               </div>
 

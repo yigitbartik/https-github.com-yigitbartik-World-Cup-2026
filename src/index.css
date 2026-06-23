@@ -6,9 +6,141 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
-body {
-  font-family: var(--font-sans);
-  background-color: #f8fafc;
-  color: #0f172a;
+:root {
+  --dynamic-bg: #0f172a;
+  --dynamic-card: #1e293b;
+  --dynamic-border: #334155;
+  --dynamic-text: #f1f5f9;
+  --dynamic-accent: #6366f1;
 }
 
+/* Studio Dark Theme variables */
+.theme-studio-dark {
+  --dynamic-bg: #0d111d;
+  --dynamic-card: #161b26;
+  --dynamic-border: #212936;
+  --dynamic-text: #f3f4f6;
+  --dynamic-accent: #4f46e5;
+}
+
+/* Pitch Green Theme variables */
+.theme-pitch-green {
+  --dynamic-bg: #04251a;
+  --dynamic-card: #0b3829;
+  --dynamic-border: #14533d;
+  --dynamic-text: #ecfdf5;
+  --dynamic-accent: #10b981;
+}
+
+/* Polar Light Theme variables */
+.theme-light {
+  --dynamic-bg: #f8fafc;
+  --dynamic-card: #ffffff;
+  --dynamic-border: #e2e8f0;
+  --dynamic-text: #0f172a;
+  --dynamic-accent: #4f46e5;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--dynamic-bg) !important;
+  color: var(--dynamic-text) !important;
+  transition: background-color 0.4s ease, border-color 0.4s ease, color 0.4s ease;
+}
+
+/* Micro theme overrides to make UI integration perfect */
+.theme-studio-dark nav,
+.theme-pitch-green nav {
+  background-color: var(--dynamic-card) !important;
+  border-color: var(--dynamic-border) !important;
+}
+
+.theme-light nav {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+.theme-studio-dark .bg-white,
+.theme-pitch-green .bg-white {
+  background-color: var(--dynamic-card) !important;
+  color: var(--dynamic-text) !important;
+  border-color: var(--dynamic-border) !important;
+}
+
+.theme-light .bg-white {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #e2e8f0 !important;
+}
+
+.theme-studio-dark .text-slate-900,
+.theme-pitch-green .text-slate-900 {
+  color: var(--dynamic-text) !important;
+}
+
+.theme-light .text-slate-900 {
+  color: #0f172a !important;
+}
+
+.theme-studio-dark .border-slate-100,
+.theme-pitch-green .border-slate-100,
+.theme-studio-dark .border-slate-200,
+.theme-pitch-green .border-slate-200 {
+  border-color: var(--dynamic-border) !important;
+}
+
+.theme-light .border-slate-100,
+.theme-light .border-slate-200 {
+  border-color: #e2e8f0 !important;
+}
+
+.theme-studio-dark .text-slate-805,
+.theme-studio-dark .text-slate-800,
+.theme-pitch-green .text-slate-800 {
+  color: var(--dynamic-text) !important;
+  opacity: 0.9;
+}
+
+.theme-light .text-slate-800,
+.theme-light .text-slate-805 {
+  color: #1e293b !important;
+  opacity: 1;
+}
+
+.theme-studio-dark .text-slate-500,
+.theme-pitch-green .text-slate-500 {
+  color: var(--dynamic-text) !important;
+  opacity: 0.6;
+}
+
+.theme-light .text-slate-500 {
+  color: #64748b !important;
+  opacity: 1;
+}
+
+.theme-studio-dark .bg-slate-50,
+.theme-pitch-green .bg-slate-50 {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+.theme-light .bg-slate-50 {
+  background-color: #f1f5f9 !important;
+}
+
+.theme-studio-dark .hover\:bg-slate-50:hover,
+.theme-pitch-green .hover\:bg-slate-50:hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.theme-light .hover\:bg-slate-50:hover {
+  background-color: #e2e8f0 !important;
+}
+
+.theme-studio-dark .divide-slate-100 > *,
+.theme-pitch-green .divide-slate-100 > * {
+  border-color: var(--dynamic-border) !important;
+}
+
+.theme-light .divide-slate-100 > * {
+  border-color: #e2e8f0 !important;
+}
