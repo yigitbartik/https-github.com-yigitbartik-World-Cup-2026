@@ -418,8 +418,60 @@ function normalizeMatchReport(data: any): MatchReport {
       away: Array.isArray(data.playersOutOfPossession?.away) ? data.playersOutOfPossession.away : [],
     },
     playersPhysical: {
-      home: Array.isArray(data.playersPhysical?.home) ? data.playersPhysical.home : [],
-      away: Array.isArray(data.playersPhysical?.away) ? data.playersPhysical.away : [],
+      home: Array.isArray(data.playersPhysical?.home)
+        ? data.playersPhysical.home.map((p: any) => {
+            const getVal = (obj: any, keys: string[]): number => {
+              for (const k of keys) {
+                if (obj[k] !== undefined && obj[k] !== null) {
+                  const parsed = parseFloat(String(obj[k]).replace(/[^0-9.]/g, ""));
+                  if (!isNaN(parsed)) return parsed;
+                }
+              }
+              return 0;
+            };
+            return {
+              ...p,
+              number: Number(p.number) || 0,
+              name: String(p.name || ""),
+              totalDistance: getVal(p, ["totalDistance", "total_distance", "TotalDistance", "distance", "Distance", "toplamMesafe", "toplam_mesafe"]),
+              zone1: getVal(p, ["zone1", "zone1Distance", "zone_1", "Zone1", "Zone 1", "zone1_distance"]),
+              zone2: getVal(p, ["zone2", "zone2Distance", "zone_2", "Zone2", "Zone 2", "zone2_distance"]),
+              zone3: getVal(p, ["zone3", "zone3Distance", "zone_3", "Zone3", "Zone 3", "zone3_distance"]),
+              zone4: getVal(p, ["zone4", "zone4Distance", "zone_4", "Zone4", "Zone 4", "zone4_distance"]),
+              zone5: getVal(p, ["zone5", "zone5Distance", "zone_5", "Zone5", "Zone 5", "zone5_distance"]),
+              highSpeedRuns: getVal(p, ["highSpeedRuns", "high_speed_runs", "HighSpeedRuns", "hsr", "highSpeed", "high_speed", "yuksek_hizli_kosu", "yuksekHizliKosu", "yüksekHızlıKoşu", "yuksekSiddetliKosu", "yüksekŞiddetliKoşu", "yuksek_siddetli_kosu", "yuksekSiddetli", "yüksekŞiddetli", "highIntensity", "hir"]),
+              sprints: getVal(p, ["sprints", "Sprints", "sprint", "Sprint", "sprint_count", "sprintCount", "sprint_sayisi", "sprintSayısı"]),
+              topSpeed: getVal(p, ["topSpeed", "top_speed", "TopSpeed", "maxSpeed", "max_speed", "maksimumHiz", "maksimum_hiz", "enYuksekHiz", "en_yuksek_hiz", "max_hiz", "maxHiz"]),
+            };
+          })
+        : [],
+      away: Array.isArray(data.playersPhysical?.away)
+        ? data.playersPhysical.away.map((p: any) => {
+            const getVal = (obj: any, keys: string[]): number => {
+              for (const k of keys) {
+                if (obj[k] !== undefined && obj[k] !== null) {
+                  const parsed = parseFloat(String(obj[k]).replace(/[^0-9.]/g, ""));
+                  if (!isNaN(parsed)) return parsed;
+                }
+              }
+              return 0;
+            };
+            return {
+              ...p,
+              number: Number(p.number) || 0,
+              name: String(p.name || ""),
+              totalDistance: getVal(p, ["totalDistance", "total_distance", "TotalDistance", "distance", "Distance", "toplamMesafe", "toplam_mesafe"]),
+              zone1: getVal(p, ["zone1", "zone1Distance", "zone_1", "Zone1", "Zone 1", "zone1_distance"]),
+              zone2: getVal(p, ["zone2", "zone2Distance", "zone_2", "Zone2", "Zone 2", "zone2_distance"]),
+              zone3: getVal(p, ["zone3", "zone3Distance", "zone_3", "Zone3", "Zone 3", "zone3_distance"]),
+              zone4: getVal(p, ["zone4", "zone4Distance", "zone_4", "Zone4", "Zone 4", "zone4_distance"]),
+              zone5: getVal(p, ["zone5", "zone5Distance", "zone_5", "Zone5", "Zone 5", "zone5_distance"]),
+              highSpeedRuns: getVal(p, ["highSpeedRuns", "high_speed_runs", "HighSpeedRuns", "hsr", "highSpeed", "high_speed", "yuksek_hizli_kosu", "yuksekHizliKosu", "yüksekHızlıKoşu", "yuksekSiddetliKosu", "yüksekŞiddetliKoşu", "yuksek_siddetli_kosu", "yuksekSiddetli", "yüksekŞiddetli", "highIntensity", "hir"]),
+              sprints: getVal(p, ["sprints", "Sprints", "sprint", "Sprint", "sprint_count", "sprintCount", "sprint_sayisi", "sprintSayısı"]),
+              topSpeed: getVal(p, ["topSpeed", "top_speed", "TopSpeed", "maxSpeed", "max_speed", "maksimumHiz", "maksimum_hiz", "enYuksekHiz", "en_yuksek_hiz", "max_hiz", "maxHiz"]),
+            };
+          })
+        : [],
     },
     shotsTimeline: Array.isArray(data.shotsTimeline) ? data.shotsTimeline : [],
     lineHeightLength: {
@@ -533,6 +585,8 @@ export default function App() {
   }, [theme]);
 
   // Application Data States
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [activeSettingsTab, setActiveSettingsTab] = useState<"upload" | "squad" | "sync" | "system">("upload");
   const [uploadedMatches, setUploadedMatches] = useState<MatchReport[]>([]);
   const [activeMatchIndex, setActiveMatchIndex] = useState<number>(() => {
     try {
@@ -2085,9 +2139,7 @@ export default function App() {
       const base64Content = await base64Promise;
 
       let existingMatchData = null;
-      if (activeMatchIndex !== null && uploadedMatches[activeMatchIndex]) {
-        existingMatchData = uploadedMatches[activeMatchIndex];
-      } else if (uploadedMatches.length > 0) {
+      if (uploadedMatches.length > 0) {
         const normalize = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
         const fileBaseClean = normalize(file.name.split(".")[0] || "");
         const matched = uploadedMatches.find(m => {
@@ -2095,11 +2147,14 @@ export default function App() {
           const homeClean = normalize(m.matchInfo?.homeTeam || "");
           const awayClean = normalize(m.matchInfo?.awayTeam || "");
           
-          return (
-            (titleClean && (titleClean.includes(fileBaseClean) || fileBaseClean.includes(titleClean))) ||
-            (homeClean && fileBaseClean.includes(homeClean)) ||
-            (awayClean && fileBaseClean.includes(awayClean))
-          );
+          if (!homeClean || !awayClean) return false;
+          
+          // Must match BOTH team names inside the filename to be considered the same match
+          const hasHome = fileBaseClean.includes(homeClean);
+          const hasAway = fileBaseClean.includes(awayClean);
+          const hasTitle = titleClean && (titleClean.includes(fileBaseClean) || fileBaseClean.includes(titleClean));
+          
+          return hasTitle || (hasHome && hasAway);
         });
         if (matched) {
           existingMatchData = matched;
@@ -3153,7 +3208,7 @@ export default function App() {
       
       {/* Top Banner Navigation */}
       <nav className="sticky top-0 z-40 bg-white border-b border-slate-100 shadow-xs transition-all h-20">
-        <div className="max-w-7xl mx-auto h-full px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
+        <div className="max-w-[1580px] w-full mx-auto h-full px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
           
           <div 
             className="flex items-center gap-3 cursor-pointer select-none" 
@@ -3182,7 +3237,7 @@ export default function App() {
 
           <div className="flex items-center gap-3 w-full md:w-auto justify-end">
             {/* Global Search Bar */}
-            <div className="relative flex items-center bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl px-3 py-2 focus-within:ring-2 focus-within:ring-indigo-500 w-56 transition-all">
+            <div className="relative flex items-center bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl px-3 py-2.5 focus-within:ring-2 focus-within:ring-indigo-500 w-56 transition-all">
               <Search className="w-3.5 h-3.5 text-slate-500 mr-2 shrink-0" />
               <input
                 type="text"
@@ -3198,89 +3253,22 @@ export default function App() {
               )}
             </div>
 
-            {/* Global Theme Switcher Toggler */}
+            {/* Consolidated Settings Hub Toggler */}
             <button
               onClick={() => {
-                if (theme === "studio-dark") setTheme("pitch-green");
-                else if (theme === "pitch-green") setTheme("light");
-                else setTheme("studio-dark");
+                setIsSettingsOpen(true);
+                setActiveSettingsTab("upload");
               }}
-              className={`border text-[11px] font-bold px-3 py-2.5 rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer select-none ${
-                theme === "pitch-green"
-                  ? "bg-emerald-100 border-emerald-300 text-emerald-800 hover:bg-emerald-200"
-                  : theme === "light"
-                  ? "bg-stone-100 border-stone-300 text-stone-800 hover:bg-stone-200"
-                  : "bg-indigo-100 border-indigo-300 text-indigo-800 hover:bg-indigo-200"
-              }`}
-              title="Temayı Değiştir"
+              className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-4.5 py-3 rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-600/15 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer select-none"
+              title="Sistem Ayarları, Fotoğraf ve Bayrak Özelleştirme, Excel/SQL Çıktıları"
             >
-              <Sparkles className="w-3.5 h-3.5 animate-pulse text-indigo-650" />
-              <span>
-                {theme === "studio-dark" ? "Studio Dark" : theme === "pitch-green" ? "Pitch Green" : "Polar Light"}
-              </span>
-            </button>
-            <button
-              onClick={handleExitApp}
-              className="bg-amber-100/70 hover:bg-amber-100 border border-amber-200 text-amber-800 hover:text-amber-900 font-semibold text-xs px-3.5 py-2.5 rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer select-none"
-              title="Giriş ekranına geri dönüp logonuzu değiştirebilirsiniz"
-            >
-              <Trophy className="w-3.5 h-3.5 text-amber-500" />
-              <span>Giriş / Logo Ayarları</span>
-            </button>
-            <button
-              onClick={() => setIsSquadModalOpen(true)}
-              className="bg-indigo-50 border border-indigo-150 text-indigo-700 hover:bg-indigo-100 font-semibold text-xs px-3.5 py-2.5 rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer select-none"
-              title="Manage Squad Photos"
-            >
-              <User className="w-3.5 h-3.5" />
-              <span>Squad Photos</span>
+              <SlidersHorizontal className="w-4 h-4 text-indigo-200 animate-pulse" />
+              <span>⚙️ Ayarlar & Dosya Yönetimi</span>
               {Object.keys(squadPhotos).length > 0 && (
-                <span className="bg-indigo-600 text-white text-[9px] px-1.5 py-0.5 rounded-full font-mono font-bold leading-none">
+                <span className="bg-indigo-400 text-white text-[9px] px-1.5 py-0.5 rounded-full font-mono font-bold leading-none">
                   {Object.keys(squadPhotos).length}
                 </span>
               )}
-            </button>
-            
-            {/* Cloud Sync Button */}
-            <button
-              onClick={() => startFirestoreSync(false)}
-              disabled={isSyncing}
-              className={`border text-[11px] font-semibold px-3.5 py-2.5 rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer select-none ${
-                isSyncing
-                  ? "bg-amber-50 border-amber-200 text-amber-700 animate-pulse"
-                  : "bg-emerald-50 hover:bg-emerald-100 border border-emerald-150 text-emerald-700"
-              }`}
-              title="Firebase Firestore bulut veritabanı ile tüm verilerinizi yedekleyin, eşitleyin."
-            >
-              <Activity className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin text-amber-600" : "text-emerald-600"}`} />
-              <span>{isSyncing ? (syncStatus || "Eşitleniyor...") : "Bulut Veri Tabanını Eşitle"}</span>
-            </button>
-
-            <button
-              onClick={triggerReset}
-              className="bg-red-50 hover:bg-red-100 border border-red-200 text-red-650 font-bold text-xs px-3.5 py-2.5 rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer select-none"
-              title="Yüklenen maç analiz arşivini temizle ve başlangıç durumuna döndür"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              Arşivi Sıfırla
-            </button>
-
-            <button
-              onClick={handleExportToExcel}
-              className="bg-slate-900 hover:bg-slate-800 text-white font-medium text-xs px-4.5 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-xs whitespace-nowrap transition-all cursor-pointer select-none"
-              title="Tüm verilerinizi çoklu sekmeli canlı Excel kitaplığı olarak indirin."
-            >
-              <Download className="w-4 h-4 text-slate-300" />
-              Download Excel (.xlsx)
-            </button>
-
-            <button
-              onClick={handleExportToSQL}
-              className="bg-indigo-950/80 hover:bg-indigo-900/90 border border-indigo-800 text-indigo-100 font-semibold text-xs px-4.5 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-xs whitespace-nowrap transition-all cursor-pointer select-none"
-              title="Tüm maç analizlerinizi ilişkili SQL dökümü (.sql) olarak indirip SQLite, PostgreSQL veya MySQL veritabanlarına kolayca aktarın."
-            >
-              <Database className="w-4 h-4 text-indigo-400" />
-              SQL SQL Dökümü (.sql) Dışa Aktar
             </button>
           </div>
 
@@ -3288,7 +3276,7 @@ export default function App() {
       </nav>
 
       {/* Tournament Match Hub & Multi-Match Switcher */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+      <section className="max-w-[1580px] w-full mx-auto px-4 sm:px-6 lg:px-8 mt-6">
         <div className="bg-slate-900 rounded-3xl p-6 text-white shadow-xl border border-slate-800 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 relative overflow-hidden">
           {/* Subtle gradient light flare in background */}
           <div className="absolute right-0 top-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
@@ -3363,8 +3351,104 @@ export default function App() {
         </div>
       </section>
 
+      {/* Platform Akış ve Yönlendirme Kılavuzu */}
+      <section className="max-w-[1580px] w-full mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+        <div className="bg-white border border-slate-150 rounded-3xl p-6 shadow-xs">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-5">
+            <div>
+              <h3 className="font-sans font-extrabold text-sm text-slate-900 flex items-center gap-2">
+                <Compass className="w-4.5 h-4.5 text-indigo-600" />
+                <span>Platform Adım Adım Taktiksel Gezinme Rehberi</span>
+              </h3>
+              <p className="text-[11px] text-slate-400 mt-0.5">Uygulamanın tüm özelliklerinden tam verim almak için aşağıdaki işlem akışını takip edebilirsiniz.</p>
+            </div>
+            <span className="text-[10px] font-mono font-bold bg-indigo-50 text-indigo-650 px-2.5 py-1 rounded-full border border-indigo-100 uppercase tracking-wider">
+              Yönlendirmeli Akış Sistemi
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {/* Step 1 */}
+            <div className={`p-4 rounded-2xl border transition-all ${
+              uploadedMatches.length > 0 
+                ? "bg-emerald-50/40 border-emerald-100 text-emerald-950" 
+                : "bg-slate-50/50 border-slate-150 text-slate-700"
+            }`}>
+              <div className="flex items-center justify-between mb-2">
+                <span className={`text-[10px] font-mono font-bold uppercase ${uploadedMatches.length > 0 ? "text-emerald-600" : "text-slate-400"}`}>ADIM 01</span>
+                {uploadedMatches.length > 0 ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                ) : (
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+                )}
+              </div>
+              <h4 className="text-xs font-bold leading-tight mb-1">Maç Raporu Yükleme</h4>
+              <p className="text-[11px] text-slate-450 leading-relaxed">
+                {uploadedMatches.length > 0 
+                  ? `Sistemde ${uploadedMatches.length} adet maç analizi kayıtlı.` 
+                  : "Sağ üstteki ⚙️ Ayarlar menüsünden yeni bir maç raporu (PDF) yükleyin."}
+              </p>
+            </div>
+
+            {/* Step 2 */}
+            <div className={`p-4 rounded-2xl border transition-all ${
+              Object.keys(squadPhotos).length > 0 
+                ? "bg-emerald-50/40 border-emerald-100 text-emerald-950" 
+                : "bg-slate-50/50 border-slate-150 text-slate-700"
+            }`}>
+              <div className="flex items-center justify-between mb-2">
+                <span className={`text-[10px] font-mono font-bold uppercase ${Object.keys(squadPhotos).length > 0 ? "text-emerald-600" : "text-slate-400"}`}>ADIM 02</span>
+                {Object.keys(squadPhotos).length > 0 ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                ) : (
+                  <button 
+                    onClick={() => {
+                      setIsSettingsOpen(true);
+                      setActiveSettingsTab("squad");
+                    }}
+                    className="text-[10px] text-indigo-600 hover:underline font-bold cursor-pointer"
+                  >
+                    Özelleştir
+                  </button>
+                )}
+              </div>
+              <h4 className="text-xs font-bold leading-tight mb-1">Görsel Özelleştirme</h4>
+              <p className="text-[11px] text-slate-450 leading-relaxed">
+                {Object.keys(squadPhotos).length > 0 
+                  ? `Kadroda ${Object.keys(squadPhotos).length} oyuncu fotoğrafı aktif.` 
+                  : "⚙️ Ayarlar > Kadro & Fotoğraflar sekmesinden oyuncu görselleri ekleyin."}
+              </p>
+            </div>
+
+            {/* Step 3 */}
+            <div className="p-4 rounded-2xl border bg-slate-50/50 border-slate-150 text-slate-700 hover:bg-indigo-50/10 hover:border-indigo-100 transition-all">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-mono font-bold uppercase text-slate-400">ADIM 03</span>
+                <SlidersHorizontal className="w-4 h-4 text-indigo-500 shrink-0" />
+              </div>
+              <h4 className="text-xs font-bold leading-tight mb-1">Taktik Detayları Keşfet</h4>
+              <p className="text-[11px] text-slate-450 leading-relaxed">
+                Pas ağları, taktik diziliş maliyetleri, anomali pencereleri ve oyuncu radar profillerini sekmelerden inceleyin.
+              </p>
+            </div>
+
+            {/* Step 4 */}
+            <div className="p-4 rounded-2xl border bg-slate-50/50 border-slate-150 text-slate-700 hover:bg-indigo-50/10 hover:border-indigo-100 transition-all">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-mono font-bold uppercase text-slate-400">ADIM 04</span>
+                <Download className="w-4 h-4 text-indigo-500 shrink-0" />
+              </div>
+              <h4 className="text-xs font-bold leading-tight mb-1">Döküm & Rapor Alma</h4>
+              <p className="text-[11px] text-slate-450 leading-relaxed">
+                ⚙️ Ayarlar menüsünden tüm analizlerinizi çok sayfalı Excel veya ilişkisel veri tabanları için SQL dökümü (.sql) indirin.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {uploadedMatches.length === 0 && (
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+        <section className="max-w-[1580px] w-full mx-auto px-4 sm:px-6 lg:px-8 mt-4">
           <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-4 flex items-start gap-3.5 text-amber-900 shadow-sm animate-in fade-in slide-in-from-top-2 duration-200">
             <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
             <div className="flex-1">
@@ -3687,8 +3771,8 @@ export default function App() {
                   <Info className="w-4 h-4" />
                 </div>
                 <div className="text-xs leading-relaxed text-slate-500 font-sans">
-                  <span className="text-slate-900 font-semibold block mb-0.5">Need another match parsed?</span>
-                  Drag and drop FIFA's PDF summary report anywhere in the section below to extract all stats using Gemini's native vision!
+                  <span className="text-slate-900 font-semibold block mb-0.5">FIFA Rapor Analizi</span>
+                  Yeni bir maç PDF'i yüklemek veya ayarları değiştirmek için sağ üstteki <strong>⚙️ Ayarlar & Dosya Yönetimi</strong> düğmesini kullanabilirsiniz.
                 </div>
               </div>
             </div>
@@ -3697,8 +3781,8 @@ export default function App() {
         </div>
       </header>
 
-      {/* Interactive Drag & Drop Area / Uploader */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+      {/* Error and Success Status Center */}
+      <div className="max-w-[1580px] w-full mx-auto px-4 sm:px-6 lg:px-8 mt-4">
         <AnimatePresence mode="wait">
           {errorMessage && (
             <motion.div
@@ -3734,77 +3818,10 @@ export default function App() {
             </motion.div>
           )}
         </AnimatePresence>
-
-        {isParsing ? (
-          <div className="bg-white border-2 border-dashed border-indigo-200 rounded-3xl p-10 text-center flex flex-col items-center justify-center min-h-[220px] shadow-sm relative overflow-hidden">
-            <div className="absolute inset-x-0 bottom-0 top-0 bg-linear-to-t from-indigo-500/5 to-transparent"></div>
-            
-            <div className="relative z-10 max-w-md mx-auto">
-              {/* Spinner */}
-              <div className="w-12 h-12 rounded-full border-4 border-solid border-slate-100 border-t-indigo-600 animate-spin mx-auto mb-4"></div>
-              
-              <h4 className="font-sans font-semibold text-lg text-slate-800">Gemini Vision AI Engine Parsing Report...</h4>
-              <p className="text-xs text-slate-400 font-mono mt-1 bg-slate-50 py-1.5 px-3 rounded-lg border border-slate-200 inline-block">
-                {uploadedFileName}
-              </p>
-              
-              {/* Cycling Status Logs */}
-              <div className="mt-6 flex items-center gap-2 justify-center text-xs font-mono text-indigo-600">
-                <Zap className="w-3.5 h-3.5 animate-pulse text-indigo-500" />
-                <span>{parsingStep}</span>
-              </div>
-
-              {/* Progress bar simulation */}
-              <div className="w-full bg-slate-100 rounded-full h-1 mt-4 relative overflow-hidden">
-                <div className="bg-indigo-600 h-full w-2/3 rounded-full animate-pulse absolute left-0 top-0"></div>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div
-            onDragOver={onDragOver}
-            onDragLeave={onDragLeave}
-            onDrop={onDrop}
-            onClick={() => fileInputRef.current?.click()}
-            className={`bg-white border-2 border-dashed rounded-3xl p-12 text-center cursor-pointer flex flex-col items-center justify-center min-h-[200px] shadow-xs hover:border-indigo-300 hover:bg-slate-50 transition-all duration-300 group ${
-              isDragging ? "border-indigo-500 bg-indigo-50/20" : "border-slate-200"
-            }`}
-          >
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={e => e.target.files && handlePdfUpload(e.target.files[0])}
-              accept="application/pdf"
-              className="hidden"
-            />
-            
-            <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mb-5 group-hover:scale-110 transition-transform duration-300 text-indigo-600 shadow-inner">
-              <Upload className="w-6 h-6" />
-            </div>
-
-            <div>
-              <p className="text-slate-900 font-semibold text-lg">
-                Upload New FIFA Post-Match PDF Report
-              </p>
-              <p className="text-xs text-slate-400 mt-1">
-                Drag and drop your document here, or <span className="text-indigo-600 font-semibold underline">browse local files</span>
-              </p>
-              <p className="text-[11px] text-slate-400 mt-2 font-mono gray">
-                Supported formats: .pdf (Max. 50MB)
-              </p>
-            </div>
-            
-            {uploadedFileName && (
-              <div className="mt-4 inline-flex items-center gap-1.5 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-full text-[11px] font-medium text-indigo-800 font-mono">
-                Active Report: {uploadedFileName}
-              </div>
-            )}
-          </div>
-        )}
-      </section>
+      </div>
 
       {/* Main Stats Viewer Dashboard */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-10 animate-fade-in text-slate-800">
+      <main className="max-w-[1580px] w-full mx-auto px-4 sm:px-6 lg:px-8 mt-10 animate-fade-in text-slate-800">
         
         {/* Interactive Guided Onboarding Map & Instructions Center */}
         <AnimatePresence>
@@ -6468,6 +6485,420 @@ export default function App() {
         )}
 
       </main>
+
+      {/* Centralized Settings & File Management Modal */}
+      <AnimatePresence>
+        {isSettingsOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 overflow-y-auto"
+            onClick={() => setIsSettingsOpen(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              className="bg-white rounded-3xl max-w-4xl w-full border border-slate-100 shadow-2xl overflow-hidden my-8"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="bg-slate-900 text-white p-6 relative overflow-hidden flex items-center justify-between">
+                <div className="absolute inset-0 opacity-[0.03] bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px]"></div>
+                <div className="relative z-10">
+                  <div className="flex items-center gap-2">
+                    <SlidersHorizontal className="w-5 h-5 text-indigo-400" />
+                    <h3 className="font-sans font-extrabold text-lg text-slate-50 tracking-tight">⚙️ Kontrol Paneli & Ayarlar</h3>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">FIFA Match PDF & Xcel uygulamasının veritabanı, yükleme ve görsel ayarlarını bu panelden yönetebilirsiniz.</p>
+                </div>
+                <button
+                  onClick={() => setIsSettingsOpen(false)}
+                  className="relative z-10 p-2 hover:bg-white/10 rounded-xl transition text-slate-300 hover:text-white cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex flex-col md:flex-row min-h-[480px]">
+                {/* Sidebar Navigation */}
+                <div className="w-full md:w-64 bg-slate-50 border-r border-slate-100 p-4 flex flex-col gap-1.5">
+                  <button
+                    onClick={() => setActiveSettingsTab("upload")}
+                    className={`w-full px-4 py-3 rounded-xl font-sans font-semibold text-xs flex items-center gap-2.5 transition-all text-left ${
+                      activeSettingsTab === "upload"
+                        ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/10"
+                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                    }`}
+                  >
+                    <Upload className="w-4 h-4 shrink-0" />
+                    <span>📂 Yeni Maç Yükle (PDF)</span>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveSettingsTab("squad")}
+                    className={`w-full px-4 py-3 rounded-xl font-sans font-semibold text-xs flex items-center gap-2.5 transition-all text-left ${
+                      activeSettingsTab === "squad"
+                        ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/10"
+                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                    }`}
+                  >
+                    <User className="w-4 h-4 shrink-0" />
+                    <span>👥 Kadro & Bayrak Editörü</span>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveSettingsTab("sync")}
+                    className={`w-full px-4 py-3 rounded-xl font-sans font-semibold text-xs flex items-center gap-2.5 transition-all text-left ${
+                      activeSettingsTab === "sync"
+                        ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/10"
+                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                    }`}
+                  >
+                    <Activity className="w-4 h-4 shrink-0" />
+                    <span>☁️ Bulut Senkronizasyonu</span>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveSettingsTab("system")}
+                    className={`w-full px-4 py-3 rounded-xl font-sans font-semibold text-xs flex items-center gap-2.5 transition-all text-left ${
+                      activeSettingsTab === "system"
+                        ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/10"
+                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                    }`}
+                  >
+                    <Database className="w-4 h-4 shrink-0" />
+                    <span>⚙️ Yedekleme & Sistem</span>
+                  </button>
+
+                  {/* App Logo segment in Settings Footer */}
+                  <div className="mt-auto border-t border-slate-150 pt-4 px-2">
+                    <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-slate-400 block mb-2">Kurumsal Logo</span>
+                    <div className="flex items-center gap-2.5">
+                      {appLogo ? (
+                        <img src={appLogo} alt="Custom app logo" className="w-8 h-8 rounded-lg object-contain bg-white border border-slate-200" />
+                      ) : (
+                        <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 text-xs font-bold">FIFA</div>
+                      )}
+                      <div>
+                        <span className="text-[11px] font-bold text-slate-800 block">Kurum Logosu</span>
+                        <button
+                          onClick={handleExitApp}
+                          className="text-[10px] text-indigo-650 hover:underline font-semibold"
+                        >
+                          Değiştir
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Content Panel */}
+                <div className="flex-1 p-6 relative">
+                  {/* TAB 1: UPLOAD (Yeni Maç Yükle) */}
+                  {activeSettingsTab === "upload" && (
+                    <div className="h-full flex flex-col justify-between">
+                      <div>
+                        <h4 className="font-sans font-extrabold text-slate-900 text-sm mb-1">📂 Yeni Post-Match Raporu Yükleme</h4>
+                        <p className="text-[11px] text-slate-400 leading-relaxed mb-6">
+                          FIFA tarafından üretilen resmi maç özet PDF raporlarını buraya sürükleyip bırakarak Gemini Vision AI motorunun verileri otomatik parse etmesini ve veritabanınıza eklemesini sağlayabilirsiniz.
+                        </p>
+
+                        {isParsing ? (
+                          <div className="bg-slate-50 border-2 border-dashed border-indigo-200 rounded-2xl p-10 text-center flex flex-col items-center justify-center min-h-[220px] relative overflow-hidden">
+                            <div className="absolute inset-x-0 bottom-0 top-0 bg-gradient-to-t from-indigo-500/5 to-transparent"></div>
+                            <div className="relative z-10 max-w-md mx-auto">
+                              <div className="w-10 h-10 rounded-full border-4 border-solid border-slate-200 border-t-indigo-600 animate-spin mx-auto mb-4"></div>
+                              <h4 className="font-sans font-semibold text-sm text-slate-800">Gemini Vision AI Verileri Çözümlüyor...</h4>
+                              <p className="text-[10px] text-slate-400 font-mono mt-1 bg-white py-1 px-2.5 rounded-lg border border-slate-200 inline-block">
+                                {uploadedFileName}
+                              </p>
+                              <div className="mt-4 flex items-center gap-1.5 justify-center text-xs font-mono text-indigo-600">
+                                <Zap className="w-3.5 h-3.5 animate-pulse text-indigo-500" />
+                                <span>{parsingStep}</span>
+                              </div>
+                              <div className="w-full bg-slate-200 rounded-full h-1 mt-4 relative overflow-hidden">
+                                <div className="bg-indigo-600 h-full w-2/3 rounded-full animate-pulse absolute left-0 top-0"></div>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div
+                            onDragOver={onDragOver}
+                            onDragLeave={onDragLeave}
+                            onDrop={onDrop}
+                            onClick={() => fileInputRef.current?.click()}
+                            className={`bg-slate-50 hover:bg-slate-150 border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer flex flex-col items-center justify-center min-h-[200px] transition-all duration-300 group ${
+                              isDragging ? "border-indigo-500 bg-indigo-50/20" : "border-slate-200"
+                            }`}
+                          >
+                            <input
+                              type="file"
+                              ref={fileInputRef}
+                              onChange={e => e.target.files && handlePdfUpload(e.target.files[0])}
+                              accept="application/pdf"
+                              className="hidden"
+                            />
+                            <div className="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center mb-4 text-indigo-650 group-hover:scale-110 transition-transform duration-300 shadow-inner">
+                              <Upload className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <p className="text-slate-800 font-bold text-sm">FIFA Post-Match PDF Dosyasını Sürükleyin</p>
+                              <p className="text-xs text-slate-400 mt-1">Sürükleyip bırakın veya <span className="text-indigo-600 font-semibold underline">cihazınızdan göz atın</span></p>
+                              <p className="text-[10px] text-slate-400 mt-1.5 font-mono">Desteklenen formatlar: .pdf (Max. 50MB)</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="border-t border-slate-100 pt-4 mt-6 flex justify-between items-center text-[11px] text-slate-400">
+                        <span>Yüklenen maç verileri anında yerel IndexedDB depolamanıza kaydedilir.</span>
+                        <button
+                          onClick={() => setIsSettingsOpen(false)}
+                          className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold transition"
+                        >
+                          Paneli Kapat
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB 2: SQUAD (Kadro Fotoğrafları & Ülke Bayrakları) */}
+                  {activeSettingsTab === "squad" && (
+                    <div className="h-full flex flex-col justify-between">
+                      <div>
+                        <h4 className="font-sans font-extrabold text-slate-900 text-sm mb-1">👥 Oyuncu Kadro Fotoğrafları & Ülke Bayrakları</h4>
+                        <p className="text-[11px] text-slate-400 leading-relaxed mb-6">
+                          Sanal turnuvada oyuncuların radar grafiklerinde ve listelerde kendi orijinal fotoğraflarının çıkması için yerel/bulut eşleme yapabilir, milli takım bayraklarını dilediğiniz özel ülke logolarıyla değiştirebilirsiniz.
+                        </p>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          {/* Squad Photo Card */}
+                          <div className="border border-slate-100 rounded-2xl p-4 bg-slate-50/50 flex flex-col justify-between min-h-[140px]">
+                            <div>
+                              <div className="flex items-center gap-2 mb-2">
+                                <User className="w-4 h-4 text-indigo-600" />
+                                <span className="font-bold text-xs text-slate-800">Oyuncu Fotoğraf Yönetimi</span>
+                              </div>
+                              <p className="text-[10px] text-slate-450 leading-relaxed">
+                                Her bir oyuncu için özel PNG/JPEG profil fotoğrafları atayın. Şu an yüklü fotoğraf sayısı: <strong>{Object.keys(squadPhotos).length}</strong>
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => setIsSquadModalOpen(true)}
+                              className="mt-3 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px] rounded-lg shadow-sm transition w-full cursor-pointer"
+                            >
+                              Fotoğraf Listesini Düzenle ({Object.keys(squadPhotos).length})
+                            </button>
+                          </div>
+
+                          {/* Country Flag Card */}
+                          <div className="border border-slate-100 rounded-2xl p-4 bg-slate-50/50 flex flex-col justify-between min-h-[140px]">
+                            <div>
+                              <div className="flex items-center gap-2 mb-2">
+                                <Sparkles className="w-4 h-4 text-emerald-600" />
+                                <span className="font-bold text-xs text-slate-800">Milli Takım Bayrakları</span>
+                              </div>
+                              <p className="text-[10px] text-slate-450 leading-relaxed">
+                                Turnuvadaki ülkelerin bayrak simgelerini özel SVG veya PNG dosyalarıyla özelleştirin.
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => {
+                                setIsSettingsOpen(false);
+                                triggerToast("Milli takım bayrak simgelerini değiştirmek için takım kartlarının sağ üstündeki bayrak düzenleyicisine tıklayabilirsiniz.");
+                              }}
+                              className="mt-3 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] rounded-lg shadow-sm transition w-full cursor-pointer"
+                            >
+                              Bayrak Kılavuzunu Gör
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-100 pt-4 mt-6 flex justify-end">
+                        <button
+                          onClick={() => setIsSettingsOpen(false)}
+                          className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold transition text-xs cursor-pointer"
+                        >
+                          Değişiklikleri Koru ve Kapat
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB 3: SYNC (Bulut Eşitlemesi) */}
+                  {activeSettingsTab === "sync" && (
+                    <div className="h-full flex flex-col justify-between">
+                      <div>
+                        <h4 className="font-sans font-extrabold text-slate-900 text-sm mb-1">☁️ Firebase Firestore Bulut Senkronizasyonu</h4>
+                        <p className="text-[11px] text-slate-400 leading-relaxed mb-6">
+                          IndexedDB'deki tüm maç analiz verilerinizi, özelleştirilmiş oyuncu kadro fotoğraflarını ve ülke bayraklarını Firebase Firestore bulut sunucularıyla anında senkronize edebilir, cihazlar arası yedekleyebilirsiniz.
+                        </p>
+
+                        <div className="border border-slate-100 bg-slate-50/50 rounded-2xl p-5 mb-5">
+                          <div className="flex items-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+                            <div>
+                              <span className="text-[10px] font-mono font-bold uppercase text-slate-400">Bulut Veritabanı Durumu</span>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className={`w-2.5 h-2.5 rounded-full ${isSyncing ? "bg-amber-500 animate-pulse" : "bg-emerald-500"}`}></span>
+                                <span className="font-bold text-xs text-slate-800">
+                                  {isSyncing ? "Aktif Senkronizasyon Yapılıyor..." : "Bağlantı Hazır ve Çevrimiçi"}
+                                </span>
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={() => startFirestoreSync(false)}
+                              disabled={isSyncing}
+                              className={`px-4 py-2 rounded-xl text-xs font-bold transition shadow-md cursor-pointer ${
+                                isSyncing
+                                  ? "bg-amber-100 text-amber-800 cursor-not-allowed"
+                                  : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/10"
+                              }`}
+                            >
+                              {isSyncing ? "Eşitleniyor..." : "Bulut Eşitlemesini Başlat"}
+                            </button>
+                          </div>
+
+                          {syncStatus && (
+                            <div className="bg-slate-900 rounded-xl p-3 text-emerald-400 font-mono text-[10px] leading-relaxed max-h-[120px] overflow-y-auto border border-slate-800">
+                              🚀 {syncStatus}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex items-start gap-2.5 text-amber-950">
+                          <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                          <p className="text-[10px] leading-relaxed">
+                            <strong>Hatırlatma:</strong> Bulut senkronizasyonu internet bağlantınızın hızı ve yüklediğiniz özel yüksek boyutlu resim dosyalarına bağlı olarak birkaç saniye sürebilir. Lütfen işlem tamamlanana kadar sekmeyi kapatmayınız.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-100 pt-4 mt-6 flex justify-end">
+                        <button
+                          onClick={() => setIsSettingsOpen(false)}
+                          className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold transition text-xs cursor-pointer"
+                        >
+                          Tamam
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB 4: SYSTEM (Yedekleme & Sistem Ayarları) */}
+                  {activeSettingsTab === "system" && (
+                    <div className="h-full flex flex-col justify-between">
+                      <div>
+                        <h4 className="font-sans font-extrabold text-slate-900 text-sm mb-1">⚙️ Yedekleme, Dışa Aktarma & Sistem Yönetimi</h4>
+                        <p className="text-[11px] text-slate-400 leading-relaxed mb-6">
+                          Uygulamadaki tüm maçları, puan durumlarını, koordine diziliş metriklerini ilişkisel veri tabanlarına uygun SQL şeması şeklinde veya her hücresi formüllü Excel dosyası olarak anında döküm alabilirsiniz.
+                        </p>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+                          {/* Export Excel */}
+                          <div className="border border-slate-100 bg-slate-50 p-4 rounded-xl flex flex-col justify-between text-center">
+                            <div>
+                              <Download className="w-5 h-5 text-indigo-600 mx-auto mb-2" />
+                              <span className="font-bold text-xs text-slate-850 block mb-1">Excel İndir (.xlsx)</span>
+                              <p className="text-[9px] text-slate-450 leading-normal">
+                                Tüm maç analizlerini, istatistikleri ve takımları sekmeli formüllü Excel kitabı şeklinde dışa aktar.
+                              </p>
+                            </div>
+                            <button
+                              onClick={handleExportToExcel}
+                              className="mt-3 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold text-[10px] transition cursor-pointer"
+                            >
+                              İndirmeyi Başlat
+                            </button>
+                          </div>
+
+                          {/* Export SQL */}
+                          <div className="border border-slate-100 bg-slate-50 p-4 rounded-xl flex flex-col justify-between text-center">
+                            <div>
+                              <Database className="w-5 h-5 text-indigo-600 mx-auto mb-2" />
+                              <span className="font-bold text-xs text-slate-850 block mb-1">SQL Dökümü Al (.sql)</span>
+                              <p className="text-[9px] text-slate-450 leading-normal">
+                                Tüm maç kayıtlarını ilişkisel PostgreSQL, SQLite veya MySQL tablolarına aktarabileceğiniz şema SQL'i.
+                              </p>
+                            </div>
+                            <button
+                              onClick={handleExportToSQL}
+                              className="mt-3 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold text-[10px] transition cursor-pointer"
+                            >
+                              SQL Dosyasını İndir
+                            </button>
+                          </div>
+
+                          {/* Reset Database */}
+                          <div className="border border-red-50 bg-red-50/20 p-4 rounded-xl flex flex-col justify-between text-center">
+                            <div>
+                              <RotateCcw className="w-5 h-5 text-red-600 mx-auto mb-2" />
+                              <span className="font-bold text-xs text-red-950 block mb-1">Veritabanını Sıfırla</span>
+                              <p className="text-[9px] text-red-750 leading-normal">
+                                Yüklenmiş olan tüm analiz raporlarını IndexedDB'den temizler ve başlangıç önizleme moduna geri döner.
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => {
+                                triggerReset();
+                              }}
+                              className="mt-3 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg font-bold text-[10px] transition cursor-pointer"
+                            >
+                              Arşivi Temizle
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="bg-slate-900 rounded-xl p-4 text-white">
+                          <span className="text-[10px] font-mono font-bold text-indigo-400 block mb-1">AKTİF TEMA YÖNETİCİSİ</span>
+                          <div className="flex gap-2 mt-2">
+                            <button
+                              onClick={() => setTheme("studio-dark")}
+                              className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
+                                theme === "studio-dark" ? "bg-indigo-600 border-indigo-500 text-white" : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750"
+                              }`}
+                            >
+                              Studio Dark
+                            </button>
+                            <button
+                              onClick={() => setTheme("pitch-green")}
+                              className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
+                                theme === "pitch-green" ? "bg-emerald-600 border-emerald-500 text-white" : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750"
+                              }`}
+                            >
+                              Pitch Green
+                            </button>
+                            <button
+                              onClick={() => setTheme("light")}
+                              className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
+                                theme === "light" ? "bg-slate-200 border-slate-300 text-slate-900" : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750"
+                              }`}
+                            >
+                              Polar Light
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-100 pt-4 mt-6 flex justify-end">
+                        <button
+                          onClick={() => setIsSettingsOpen(false)}
+                          className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold transition text-xs cursor-pointer"
+                        >
+                          Tamam
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <ManageSquadPhotosModal
         isOpen={isSquadModalOpen}

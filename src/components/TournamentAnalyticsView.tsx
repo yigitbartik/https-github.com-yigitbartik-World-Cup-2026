@@ -49,6 +49,7 @@ import TacticalPhysicalMatrix from "./TacticalPhysicalMatrix";
 import CustomGroupBuilder from "./CustomGroupBuilder";
 import VaryansImpactRanker from "./VaryansImpactRanker";
 import GuidedChatbotView from "./GuidedChatbotView";
+import FootballDataScienceWorkspace from "./FootballDataScienceWorkspace";
 
 export const cleanGroupName = (name: string): string => {
   if (!name) return "Grup Belirtilmedi";
@@ -435,7 +436,7 @@ export default function TournamentAnalyticsView({
   initialTeamKey,
   clearInitialTeamKey
 }: TournamentAnalyticsViewProps) {
-  const [subTab, setSubTab] = useState<"tournament" | "group" | "team" | "player" | "macroTrends" | "customGroup" | "vesRanker" | "tournamentSummary" | "guidedChatbot">("tournament");
+  const [subTab, setSubTab] = useState<"tournament" | "group" | "team" | "player" | "macroTrends" | "customGroup" | "vesRanker" | "tournamentSummary" | "guidedChatbot" | "tacticalInnovation">("tacticalInnovation");
   const [selectedPlayerKey, setSelectedPlayerKey] = useState<string>("");
   const defaultTeam = uploadedMatches[0]?.matchInfo.homeTeam || "Mexico";
   const [selectedTeam, setSelectedTeam] = useState<string>(defaultTeam);
@@ -477,6 +478,88 @@ export default function TournamentAnalyticsView({
   const [tacticalFormationFilter, setTacticalFormationFilter] = useState<string>("All");
   const [matrixSuccessMetric, setMatrixSuccessMetric] = useState<string>("ballRegains");
   const [matrixPhysicalMetric, setMatrixPhysicalMetric] = useState<string>("zone4");
+
+  // DYNAMIC TOURNAMENT ANOMALIES (Z-SCORE) CALCULATION
+  const tournamentAnomalies = React.useMemo(() => {
+    const teams = Array.from(
+      new Set(uploadedMatches.flatMap(m => [m.matchInfo?.homeTeam, m.matchInfo?.awayTeam]).filter(Boolean))
+    );
+
+    const teamMetrics = teams.map(teamName => {
+      let count = 0;
+      let pressingSum = 0;
+      let sprintsSum = 0;
+
+      uploadedMatches.forEach(m => {
+        const homeTeam = m.matchInfo?.homeTeam;
+        const awayTeam = m.matchInfo?.awayTeam;
+        const isHome = homeTeam === teamName;
+        const isAway = awayTeam === teamName;
+        if (isHome || isAway) {
+          const outPoss = m.phasesOfPlay?.outOfPossession || [];
+          const hp = outPoss.find((p: any) => p.metric === "High Press");
+          const cp = outPoss.find((p: any) => p.metric === "Counter-press");
+          const hpPct = hp ? (isHome ? hp.home : hp.away) : 15;
+          const cpPct = cp ? (isHome ? cp.home : cp.away) : 12;
+          
+          pressingSum += hpPct + cpPct;
+
+          const phys = isHome ? (m.playersPhysical?.home || []) : (m.playersPhysical?.away || []);
+          const sprints = phys.reduce((s: number, player: any) => s + (player.sprints || 0), 0);
+          sprintsSum += sprints > 0 ? sprints : 35;
+          count++;
+        }
+      });
+
+      const avgPressing = pressingSum / (count || 1);
+      const avgSprints = sprintsSum / (count || 1);
+      const ratio = avgSprints > 0 ? avgPressing / avgSprints : 0;
+
+      return {
+        team: teamName,
+        avgPressing: Math.round(avgPressing * 10) / 10,
+        avgSprints: Math.round(avgSprints),
+        ratio
+      };
+    });
+
+    if (teamMetrics.length === 0) return [];
+
+    const ratios = teamMetrics.map(t => t.ratio);
+    const mean = ratios.reduce((a, b) => a + b, 0) / ratios.length;
+    const variance = ratios.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / ratios.length;
+    const stdDev = Math.sqrt(variance) || 0.01;
+
+    return teamMetrics.map(item => {
+      const zScore = (item.ratio - mean) / stdDev;
+      
+      let badge = "DENGELİ SİSTEM";
+      let description = "Taktiksel pres yoğunluğu ve fiziksel koşu dengesi optimal düzeyde.";
+      let badgeClass = "bg-slate-100 text-slate-750 border border-slate-200";
+      let iconColor = "text-slate-400";
+
+      if (zScore > 0.4) {
+        badge = "HİPER PRES / DÜŞÜK ATLETİK YÜK (VERİMLİ SİSTEM)";
+        description = "Mükemmel taktiksel kompaktlık sayesinde, rakipten daha az mutlak sprint mesafesi kat ederek son derece agresif bir ön alan ve karşı pres kuruyorlar.";
+        badgeClass = "bg-emerald-50 text-emerald-850 border border-emerald-200 font-bold";
+        iconColor = "text-emerald-500 animate-pulse";
+      } else if (zScore < -0.4) {
+        badge = "YÜKSEK ATLETİZM / PASİF ALAN BASKISI (ATLETİK ZAFIYET)";
+        description = "Turnuvanın en çok depar atan ekiplerinden olmalarına karşın, alan genişletmeleri ve bloklar arası kopukluklar yüzünden bu koşular kolektif bir prese dönüşmüyor.";
+        badgeClass = "bg-rose-50 text-rose-850 border border-rose-200 font-bold";
+        iconColor = "text-rose-500";
+      }
+
+      return {
+        ...item,
+        zScore: Math.round(zScore * 100) / 100,
+        badge,
+        description,
+        badgeClass,
+        iconColor
+      };
+    });
+  }, [uploadedMatches]);
 
   const navigateToPlayerProfile = useCallback((playerName: string, teamName: string) => {
     setSelectedPlayerKey(`${playerName}_(${teamName})`);
@@ -1881,6 +1964,18 @@ export default function TournamentAnalyticsView({
         </button>
         <div className="text-slate-300 text-xs select-none">/</div>
         <button
+          onClick={() => setSubTab("tacticalInnovation")}
+          className={`pb-2 px-3 font-sans text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border-b-2 cursor-pointer transition-all ${
+            subTab === "tacticalInnovation"
+              ? "border-indigo-600 text-indigo-750 font-extrabold"
+              : "border-transparent text-slate-400 hover:text-slate-700"
+          }`}
+        >
+          <Award className="w-4 h-4 text-indigo-600 animate-bounce" />
+          <span>🔬 Veri Bilimi & Taktiksel İnovasyon</span>
+        </button>
+        <div className="text-slate-300 text-xs select-none">/</div>
+        <button
           onClick={() => setSubTab("guidedChatbot")}
           className={`pb-2 px-3 font-sans text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border-b-2 cursor-pointer transition-all ${
             subTab === "guidedChatbot"
@@ -2968,6 +3063,121 @@ export default function TournamentAnalyticsView({
             </div>
           </div>
 
+        </div>
+      </div>
+
+      {/* TURNUVA ANOMALİLERİ: TACTICAL VS PHYSICAL Z-SCORE OVERLAY */}
+      <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs flex flex-col gap-6">
+        <div className="border-b border-slate-100 pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 bg-rose-50 text-rose-600 rounded-xl">
+              <Zap className="w-5 h-5 text-rose-650 animate-bounce" />
+            </div>
+            <div>
+              <h3 className="font-sans font-black text-sm text-slate-900 uppercase">Turnuva Anomalileri: Taktik & Fizik Sapmaları</h3>
+              <p className="text-[10.5px] text-slate-400 font-sans mt-0.5">
+                Taktiksel pres yoğunluğunun, takımın Zone 5 sprint hacmine oranı üzerinden hesaplanan Z-Skor dağılımı. Normun dışına taşan anomaliler belirlenmiştir.
+              </p>
+            </div>
+          </div>
+          <span className="text-[10px] bg-rose-100 text-rose-700 px-2.5 py-1 rounded-full font-mono font-bold uppercase tracking-wider animate-pulse">
+            Anomali Dedektörü: AKTİF
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {tournamentAnomalies.map((teamAnomaly) => {
+            const isAnomaly = Math.abs(teamAnomaly.zScore) > 0.4;
+            return (
+              <div 
+                key={teamAnomaly.team} 
+                className={`p-5 rounded-2xl border transition-all ${
+                  teamAnomaly.zScore > 0.4 
+                    ? "bg-emerald-50/30 border-emerald-150 shadow-2xs hover:bg-emerald-50/50" 
+                    : teamAnomaly.zScore < -0.4 
+                    ? "bg-rose-50/30 border-rose-150 shadow-2xs hover:bg-rose-50/50" 
+                    : "bg-slate-50/50 border-slate-150 hover:bg-slate-50"
+                }`}
+              >
+                <div className="flex justify-between items-start">
+                  <div className="flex items-center gap-2.5">
+                    <TeamFlag team={teamAnomaly.team} getTeamFlag={getTeamFlag} className="w-6 h-4.5 object-cover rounded-xs border border-slate-200" />
+                    <span className="text-sm font-black text-slate-900">{teamAnomaly.team}</span>
+                  </div>
+
+                  <span className={`text-[9px] font-mono font-bold px-2.5 py-0.5 rounded-full ${teamAnomaly.badgeClass}`}>
+                    Z-SKOR: {teamAnomaly.zScore > 0 ? "+" : ""}{teamAnomaly.zScore}
+                  </span>
+                </div>
+
+                {/* Badge for Anomaly Type */}
+                <div className="mt-3">
+                  <span className={`text-[10px] uppercase font-black tracking-wide block ${
+                    teamAnomaly.zScore > 0.4 
+                      ? "text-emerald-700" 
+                      : teamAnomaly.zScore < -0.4 
+                      ? "text-rose-700" 
+                      : "text-slate-500"
+                  }`}>
+                    {teamAnomaly.badge}
+                  </span>
+                  <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
+                    {teamAnomaly.description}
+                  </p>
+                </div>
+
+                {/* Z-Score visual chart slider */}
+                <div className="mt-4 pt-4 border-t border-slate-150/60">
+                  <div className="flex justify-between text-[9px] text-slate-400 font-mono">
+                    <span>Hantal (-2.0)</span>
+                    <span className="font-bold text-slate-500">Ortalama (0)</span>
+                    <span>Hiper Verimli (+2.0)</span>
+                  </div>
+                  
+                  {/* Slider Line */}
+                  <div className="h-1.5 w-full bg-slate-200 rounded-full mt-1.5 relative overflow-visible">
+                    {/* Tick mark at zero */}
+                    <div className="absolute left-1/2 -translate-x-1/2 w-0.5 h-2.5 bg-slate-400 -top-0.5" />
+                    
+                    {/* Highlighted anomaly region */}
+                    {teamAnomaly.zScore > 0.4 ? (
+                      <div className="absolute left-1/2 right-[10%] h-full bg-emerald-350/50" />
+                    ) : teamAnomaly.zScore < -0.4 ? (
+                      <div className="absolute right-1/2 left-[10%] h-full bg-rose-350/50" />
+                    ) : null}
+
+                    {/* Team indicator dot */}
+                    <div 
+                      className={`absolute w-3.5 h-3.5 rounded-full border-2 border-white -top-1 shadow-sm -translate-x-1/2 transition-all ${
+                        teamAnomaly.zScore > 0.4 
+                          ? "bg-emerald-500" 
+                          : teamAnomaly.zScore < -0.4 
+                          ? "bg-rose-500" 
+                          : "bg-slate-500"
+                      }`}
+                      style={{ 
+                        left: `${Math.max(10, Math.min(90, 50 + (teamAnomaly.zScore * 20)))}%` 
+                      }}
+                    >
+                      <span className="absolute -bottom-4 left-1/2 -translate-x-1/2 text-[8px] font-bold font-mono text-slate-700">
+                        {teamAnomaly.team.slice(0,3).toUpperCase()}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Team performance micro counters */}
+                <div className="grid grid-cols-2 gap-2 mt-6 bg-white/70 p-2.5 rounded-xl border border-slate-150/40 text-[10px] font-mono text-slate-500">
+                  <div>
+                    Ort. Pres Katsayısı: <strong className="text-slate-800">%{teamAnomaly.avgPressing}</strong>
+                  </div>
+                  <div>
+                    Maç Başı Sprint: <strong className="text-slate-800">{teamAnomaly.avgSprints} m</strong>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -5240,6 +5450,13 @@ export default function TournamentAnalyticsView({
       )}
 
     </div>
+  )}
+
+  {subTab === "tacticalInnovation" && (
+    <FootballDataScienceWorkspace
+      uploadedMatches={uploadedMatches}
+      getTeamFlag={getTeamFlag}
+    />
   )}
 
   {subTab === "guidedChatbot" && (

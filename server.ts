@@ -44,6 +44,9 @@ function getGeminiClient(): GoogleGenAI {
   return aiClient;
 }
 
+// Set to track models that have returned RESOURCE_EXHAUSTED or Daily Quota errors in this server instance
+const exhaustedModels = new Set<string>();
+
 /**
  * Highly robust helper to call Gemini generateContent with retries and fallback models.
  * This prevents transient errors like 503 (service unavailable/high demand) and 429 (rate limits) from breaking the app.
@@ -56,7 +59,15 @@ async function generateContentWithRetry(
     fallbackModels?: string[];
   }
 ) {
-  const modelsToTry = params.fallbackModels || ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
+  const requestedModels = params.fallbackModels || ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
+  
+  // Filter out any models that are known to be exhausted in this server session.
+  // If all models in the list have been marked as exhausted, revert to trying all of them to be safe.
+  let modelsToTry = requestedModels.filter(m => !exhaustedModels.has(m));
+  if (modelsToTry.length === 0) {
+    modelsToTry = requestedModels;
+  }
+
   const maxRetriesPerModel = 3;
   const initialDelayMs = 2000; // slightly increased to be safer on rate limits
   let lastError: any = null;
@@ -79,6 +90,7 @@ async function generateContentWithRetry(
         throw new Error("Empty response returned from the Gemini API.");
       } catch (err: any) {
         lastError = err;
+        console.error(`[Gemini API ERROR] Failed on model: ${model}, attempt: ${attempt}. Error message: "${err?.message || err}". Error Details:`, err);
 
         let isQuotaLimit = false;
         let isPermanentError = false;
@@ -109,6 +121,17 @@ async function generateContentWithRetry(
             errString.includes("resource_exhausted")
           ) {
             isQuotaLimit = true;
+            // If it is a daily quota exhaustion rather than a short-term rate limit, mark model as exhausted
+            if (
+              errString.includes("quota exceeded") ||
+              errString.includes("exceeded your current quota") ||
+              errString.includes("limit: 20") ||
+              errString.includes("resource_exhausted") ||
+              errString.includes("daily limit")
+            ) {
+              console.warn(`[Gemini API] Marking model ${model} as EXHAUSTED for this server session.`);
+              exhaustedModels.add(model);
+            }
           } else if (
             errString.includes("permission") ||
             errString.includes("denied") ||
@@ -149,7 +172,17 @@ async function generateContentWithRetry(
     }
   }
 
-  throw lastError || new Error("Failed to generate content with all fallback models and retry limits.");
+  let errorMessage = "Failed to generate content with all fallback models. The Gemini API is currently unavailable or busy.";
+  if (lastError) {
+    const lastErrorStr = String(lastError.message || lastError).toLowerCase();
+    if (lastErrorStr.includes("quota") || lastErrorStr.includes("limit") || lastErrorStr.includes("exhausted") || lastErrorStr.includes("429")) {
+      errorMessage = "Gemini Yapay Zeka Günlük Limitine Ulaşıldı (RESOURCE_EXHAUSTED). Ücretsiz kullanım kotanız (günlük 20 istek limiti) dolmuştur. Lütfen yarın tekrar deneyin veya Ayarlar menüsünden kendi API anahtarınızı tanımlayın.";
+    } else {
+      errorMessage = `Gemini API Hatası: ${lastError.message || lastError}`;
+    }
+  }
+  
+  throw new Error(errorMessage);
 }
 
 // Health check
@@ -559,16 +592,33 @@ Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as fo
 }
 `;
 
-    // PASS 2: Player Possession (Players in Possession)
-    const promptPass2_InPoss = `
+
+    // Functions to dynamically generate Pass 2 & 3 prompts using lineup checklists for complete extraction
+    const getPromptPass2_PlayerCore = (homeLineupStr: string, awayLineupStr: string) => `
 You are an expert sports data analyst and OCR table extractor specializing in official FIFA Post Match Summary Reports.
-Extract high-density Individual Player Possession performance stats from this PDF report.
-Return the extracted stats EXACTLY matching the requested JSON structure.
+Extract core individual player metrics for the players in this match.
+You MUST look for the player statistics tables in the PDF and extract stats for the following players:
+Home Team Players checklist: ${homeLineupStr}
+Away Team Players checklist: ${awayLineupStr}
 
-Analyze all pages, specifically:
-- "In Possession - Players" tables. Extract stats for EVERY player inside "playersInPossession" for both teams.
+Specifically, find and extract:
+- "In Possession - Players" tables: extract stats for EVERY player inside "playersInPossession".
+- "Out of Possession - Players" tables: extract stats for EVERY player inside "playersOutOfPossession".
+- "Physical Data" tables: extract stats for EVERY player inside "playersPhysical".
+  Mapping rules for "Physical Data" table columns:
+  * totalDistance (Toplam Mesafe) -> totalDistance
+  * Zone 1 -> zone1 (0-7 km/h Walk)
+  * Zone 2 -> zone2 (7-15 km/h Jog)
+  * Zone 3 -> zone3 (15-20 km/h Run)
+  * Zone 4 -> zone4 (20-25 km/h Sprint Low)
+  * Zone 5 -> zone5 (>25 km/h Sprint High)
+  * High Speed Runs / Yüksek Hızlı Koşular (the count of runs, DO NOT leave empty or hyphened) -> highSpeedRuns
+  * Sprints / Sprintler / Sürat Koşuları (the count of sprints) -> sprints
+  * Top Speed / En Yüksek Sürat / Maksimum Hız -> topSpeed
+- "Goalkeeping Performance" (playerDetails only): extract individual goalie details for both starting and sub goalkeepers inside "goalkeeping.playerDetails".
+- "Defensive Actions" and "Defensive Pressure" tables: extract details for all players inside "defensiveActions" and "defensivePressure".
 
-CRITICAL INSTRUCTION for OCR: You MUST extract every single player that appears in these tables. DO NOT summarize, limit or truncate to 2 or 3 players. There are usually around 11 to 14 players per team (starting lineup + substitutes). Extract all of them.
+CRITICAL INSTRUCTION for OCR: You MUST extract every single player that appears in these tables. DO NOT summarize, limit or truncate to 2 or 3 players. Extract all starting & substitute players who appear.
 
 Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as following template:
 {
@@ -609,101 +659,7 @@ Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as fo
       "attemptsAtGoal": 0,
       "goals": 0
     }]
-  }
-}
-`;
-
-    // PASS 3: Passing Networks Charts & Tables
-    const promptPass3_PassNet = `
-You are an expert sports data analyst and OCR table extractor specializing in official FIFA Post Match Summary Reports.
-Extract Passing Network statistics from this PDF report.
-Return the extracted information EXACTLY matching the requested JSON structure.
-
-Analyze all pages, specifically:
-- Passing Networks charts/tables: extract average coordinates, positions, total passes, and top pass connection arrays for both home and away teams.
-
-Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as following template:
-{
-  "passingNetworks": {
-    "home": {
-      "totalPasses": 0,
-      "playerPositions": [
-        { "number": 1, "name": "string", "x": 0.0, "y": 0.0 }
-      ],
-      "topConnections": [
-        { "fromPlayer": "string", "toPlayer": "string", "count": 0 }
-      ]
-    },
-    "away": {
-      "totalPasses": 0,
-      "playerPositions": [
-        { "number": 1, "name": "string", "x": 0.0, "y": 0.0 }
-      ],
-      "topConnections": [
-        { "fromPlayer": "string", "toPlayer": "string", "count": 0 }
-      ]
-    }
-  }
-}
-`;
-
-    // PASS 4: Player Physical & Distance Metrics
-    const promptPass4_Phys = `
-You are an expert sports data analyst and OCR table extractor specializing in official FIFA Post Match Summary Reports.
-Extract high-density Player Physical and Distance Performance statistics from this PDF report.
-Return the extracted information EXACTLY matching the requested JSON structure.
-
-Analyze all pages, specifically:
-- "Physical Data" tables. Extract stats for EVERY player inside "playersPhysical" for both teams, including total distance and running zones 1 to 5, sprints, and top speed.
-
-CRITICAL INSTRUCTION for OCR: You MUST extract every single player that appears in these tables. DO NOT summarize, limit or truncate to 2 or 3 players. There are usually around 11 to 14 players per team (starting lineup + substitutes). Extract all of them.
-
-Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as following template:
-{
-  "playersPhysical": {
-    "home": [{
-      "number": 0,
-      "name": "string",
-      "totalDistance": 0.0,
-      "zone1": 0.0,
-      "zone2": 0.0,
-      "zone3": 0.0,
-      "zone4": 0.0,
-      "zone5": 0.0,
-      "highSpeedRuns": 0.0,
-      "sprints": 0.0,
-      "topSpeed": 0.0
-    }],
-    "away": [{
-      "number": 0,
-      "name": "string",
-      "totalDistance": 0.0,
-      "zone1": 0.0,
-      "zone2": 0.0,
-      "zone3": 0.0,
-      "zone4": 0.0,
-      "zone5": 0.0,
-      "highSpeedRuns": 0.0,
-      "sprints": 0.0,
-      "topSpeed": 0.0
-    }]
-  }
-}
-`;
-
-    // PASS 5: Out of Possession Player Stats
-    const promptPass5_OutPoss = `
-You are an expert sports data analyst and OCR table extractor specializing in official FIFA Post Match Summary Reports.
-Extract Out of Possession individual player statistics.
-Return the extracted information EXACTLY matching the requested JSON structure.
-
-Analyze all pages, specifically:
-- "Out of Possession" player tables. Extract stats for EVERY player inside "playersOutOfPossession" for both teams.
-
-CRITICAL INSTRUCTION for OCR: You MUST extract every single player that appears in these tables. DO NOT summarize, limit or truncate to 2 or 3 players. There are usually around 11 to 14 players per team (starting lineup + substitutes). Extract all of them.
-
-Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as following template:
-{
+  },
   "playersOutOfPossession": {
     "home": [{
       "number": 0,
@@ -741,24 +697,51 @@ Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as fo
       "possessionRegains": 0,
       "possessionInterrupted": 0
     }]
-  }
-}
-`;
-
-    // PASS 6: Defensive Actions & Defensive Pressure details
-    const promptPass6_DefSys = `
-You are an expert sports data analyst and OCR table extractor specializing in official FIFA Post Match Summary Reports.
-Extract Defensive Actions and Pressures charts/tables.
-Return the extracted information EXACTLY matching the requested JSON structure.
-
-Analyze all pages, specifically:
-- "Defensive Actions" tables: extract team summary, plus playerDetails for EVERY player, and playerRegains.
-- "Defensive Pressure" tables: extract team summary, playerDetails for EVERY player, and mostDirect pressures.
-
-CRITICAL INSTRUCTION for OCR: You MUST extract every single player that appears in these tables. DO NOT summarize, limit or truncate to 2 or 3 players. Extract all home and away players.
-
-Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as following template:
-{
+  },
+  "playersPhysical": {
+    "home": [{
+      "number": 0,
+      "name": "string",
+      "totalDistance": 0.0,
+      "zone1": 0.0,
+      "zone2": 0.0,
+      "zone3": 0.0,
+      "zone4": 0.0,
+      "zone5": 0.0,
+      "highSpeedRuns": 0.0,
+      "sprints": 0.0,
+      "topSpeed": 0.0
+    }],
+    "away": [{
+      "number": 0,
+      "name": "string",
+      "totalDistance": 0.0,
+      "zone1": 0.0,
+      "zone2": 0.0,
+      "zone3": 0.0,
+      "zone4": 0.0,
+      "zone5": 0.0,
+      "highSpeedRuns": 0.0,
+      "sprints": 0.0,
+      "topSpeed": 0.0
+    }]
+  },
+  "goalkeeping": {
+    "playerDetails": [
+      {
+        "team": "string",
+        "number": 1,
+        "name": "string",
+        "saves": 0,
+        "goalsConceded": 0,
+        "punchesComplete": 0,
+        "claimsComplete": 0,
+        "involvements": 0,
+        "totalDistributions": 0,
+        "distributionAccuracy": "string"
+      }
+    ]
+  },
   "defensiveActions": {
     "teamSummary": [
       { "metric": "string", "home": 0, "away": 0 }
@@ -803,85 +786,44 @@ Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as fo
 }
 `;
 
-    // PASS 7: Goalkeeping performance
-    const promptPass7_GK = `
+    const getPromptPass3_PlayerTactical = (homeLineupStr: string, awayLineupStr: string) => `
 You are an expert sports data analyst and OCR table extractor specializing in official FIFA Post Match Summary Reports.
-Extract Goalkeeping performance stats.
-Return the extracted information EXACTLY matching the requested JSON structure.
+Extract tactical team and player metrics for the players in this match.
+You MUST look for the tactical tables in the PDF and extract stats for the following players:
+Home Team Players checklist: ${homeLineupStr}
+Away Team Players checklist: ${awayLineupStr}
 
-Analyze all pages, specifically:
-- Goalkeeping performance: extract goalie involvement, distributions from feet/hands, goal prevention saves, aerial controls, and complete individual goalkeeper stats.
+Specifically, find and extract:
+- "Passing Networks": average coordinates, positions, total passes, and top connections for both teams inside "passingNetworks".
+- "Line Breaks": team summaries and attempted/active breaks through/around/over defensive blocs inside "lineBreaks.teamSummary" and "lineBreaks.playerSummary".
+- "In Possession - Crosses" tables: team summary and player-by-player crossing style, direction, and total cross entries inside "crosses.teamSummary" and "crosses.playerSummary".
+- "Offering to Receive" tables: team summary and offer positions, counts, and percentages for all individual players inside "offeringToReceive.teamSummary" and "offeringToReceive.playerSummary".
+- "Movement to Receive" tables: team summary, plus all player-by-player details and top rankings inside "movementToReceive.teamSummary", "movementToReceive.playerDetails", and "movementToReceive.topRanked".
+
+CRITICAL INSTRUCTION for OCR: You MUST extract every single player that appears in these tables. DO NOT summarize, limit or truncate to 2 or 3 players. List every starting and substitute player.
 
 Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as following template:
 {
-  "goalkeeping": {
-    "playerDetails": [
-      {
-        "team": "string",
-        "number": 1,
-        "name": "string",
-        "saves": 0,
-        "goalsConceded": 0,
-        "punchesComplete": 0,
-        "claimsComplete": 0,
-        "involvements": 0,
-        "totalDistributions": 0,
-        "distributionAccuracy": "string"
-      }
-    ],
-    "involvement": [
-      { "team": "string", "involvements": 0 }
-    ],
-    "distribution": [
-      {
-        "team": "string",
-        "kickFromFeet": 0,
-        "kickFromHands": 0,
-        "distributionToOpp": 0,
-        "gkLineBreaks": 0
-      }
-    ],
-    "goalPrevention": [
-      {
-        "team": "string",
-        "attemptsOnGoalFaced": 0,
-        "savePct": 0.0,
-        "saveRetain": 0,
-        "deflectRetain": 0,
-        "saveDeflect": 0,
-        "saveAttempt": 0,
-        "noSaveAttempt": 0
-      }
-    ],
-    "aerialControl": [
-      {
-        "team": "string",
-        "totalInterventions": 0,
-        "punchesComplete": 0,
-        "claimsComplete": 0,
-        "punchesIncomplete": 0,
-        "claimsIncomplete": 0,
-        "noIntervention": 0
-      }
-    ]
-  }
-}
-`;
-
-    // PASS 8: Line Breaks & Crosses
-    const promptPass8_BreaksCrosses = `
-You are an expert sports data analyst and OCR table extractor specializing in official FIFA Post Match Summary Reports.
-Extract Line Breaks and Crosses tables.
-Return the extracted information EXACTLY matching the requested JSON structure.
-
-Analyze all pages, specifically:
-- "Line Breaks" tables: extract attempted / active breaks through/around/over defensive blocs. Include EVERY player in playerSummary for both teams.
-- "In Possession - Crosses" tables: extract player-by-player crossing style, direction, and total cross entries. Include EVERY crossing player inside playerSummary.
-
-CRITICAL INSTRUCTION for OCR: You MUST extract every single player that appears in these tables. DO NOT summarize, limit or truncate to 2 or 3 players. Extract all starting & substitute players for both home and away.
-
-Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as following template:
-{
+  "passingNetworks": {
+    "home": {
+      "totalPasses": 0,
+      "playerPositions": [
+        { "number": 1, "name": "string", "x": 0.0, "y": 0.0 }
+      ],
+      "topConnections": [
+        { "fromPlayer": "string", "toPlayer": "string", "count": 0 }
+      ]
+    },
+    "away": {
+      "totalPasses": 0,
+      "playerPositions": [
+        { "number": 1, "name": "string", "x": 0.0, "y": 0.0 }
+      ],
+      "topConnections": [
+        { "fromPlayer": "string", "toPlayer": "string", "count": 0 }
+      ]
+    }
+  },
   "lineBreaks": {
     "teamSummary": [
       {
@@ -908,7 +850,6 @@ Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as fo
         "completionPct": 0,
         "u4_attLine": 0,
         "u4_attMidLine": 0,
-        "u4_midLine": 0,
         "u4_defLine": 0,
         "u3_attLine": 0,
         "u3_midLine": 0,
@@ -943,24 +884,7 @@ Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as fo
         "totalAttempted": 0
       }
     ]
-  }
-}
-`;
-
-    // PASS 9: Offering and Movement to Receive
-    const promptPass9_OffersMovements = `
-You are an expert sports data analyst and OCR table extractor specializing in official FIFA Post Match Summary Reports.
-Extract Offering to Receive and Movement to Receive tables.
-Return the extracted information EXACTLY matching the requested JSON structure.
-
-Analyze all pages, specifically:
-- "Offering to Receive" tables: extract offer positions, counts, and percentages info for both teams and ALL individual players in playerSummary.
-- "Movement to Receive" tables: extract team summary, plus all player-by-player details in playerDetails and top rankings in topRanked.
-
-CRITICAL INSTRUCTION for OCR: You MUST extract every single player that appears in these tables. DO NOT summarize, limit or truncate to 2 or 3 players. List every player inside playerSummary and playerDetails.
-
-Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as following template:
-{
+  },
   "offeringToReceive": {
     "teamSummary": [
       {
@@ -1026,8 +950,6 @@ Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as fo
 }
 `;
 
-    console.log("[Gemini API] Launching dynamic selective extraction pipeline to prevent rate limits and support backfilling...");
-
     // Helper to generate a single content pass with retry
     const runPass = async (promptText: string, description: string) => {
       return generateContentWithRetry(ai, {
@@ -1044,17 +966,11 @@ Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as fo
     const existing = req.body.existingMatchData;
     let isSameMatchExisting = false;
 
-    if (existing) {
-      isSameMatchExisting = true;
-      console.log(`[Gemini API] Re-upload detected for match: "${existing.matchInfo?.title || 'Unknown match'}". Activating selective backfill/merging algorithm to complete empty or missing datasets while saving API quota.`);
-    }
-
     // A helper to determine if a specific dataset in existing data is populated and has actual content
     const isDatasetPopulated = (arr: any[], minLength = 3) => {
       if (!Array.isArray(arr) || arr.length < minLength) return false;
       return arr.some(item => {
         if (!item) return false;
-        // Make sure it contains useful (non-zero, non-empty) properties
         return Object.values(item).some(val => val !== "" && val !== 0 && val !== "0" && val !== "0.0" && val !== 0.0 && val !== null && val !== undefined);
       });
     };
@@ -1109,71 +1025,95 @@ Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as fo
       return merged;
     };
 
-    const hasCoreData = existing && 
-      existing.matchInfo?.title && 
-      isDatasetPopulated(existing.homeTeamLineup?.starting, 5) &&
-      isDatasetPopulated(existing.awayTeamLineup?.starting, 5);
+    console.log("[Gemini API] Running Pass 1 - Lineups and Core Metadata...");
+    const responsePass1 = await runPass(promptPass1, "Pass 1 - Lineups and Core Metadata");
+    const dataPass1 = parseAndRepairJSON(responsePass1.text || "{}");
 
-    let dataPass1 = null;
-    if (hasCoreData) {
-      console.log("[Gemini API] Core match metadata and lineups (Pass 1) are already populated in existing storage. Skipping Pass 1 to save API requests.");
-      dataPass1 = JSON.parse(JSON.stringify(existing));
-    } else {
-      console.log("[Gemini API] Running Pass 1 - Lineups and Core Metadata...");
-      const responsePass1 = await runPass(promptPass1, "Pass 1 - Lineups and Core Metadata");
-      dataPass1 = parseAndRepairJSON(responsePass1.text || "{}");
+    // Strictly verify if the newly parsed PDF is indeed the same match as existingMatchData
+    if (existing && existing.matchInfo) {
+      const cleanStr = (str: any) => String(str || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
+      const newHomeTeam = cleanStr(dataPass1.matchInfo?.homeTeam);
+      const newAwayTeam = cleanStr(dataPass1.matchInfo?.awayTeam);
+      const extHome = cleanStr(existing.matchInfo.homeTeam);
+      const extAway = cleanStr(existing.matchInfo.awayTeam);
 
-      if (isSameMatchExisting) {
-        if (!dataPass1.homeTeamLineup?.starting || dataPass1.homeTeamLineup.starting.length < 5) {
-          console.log("[Gemini API] Reusing existing homeTeamLineup (no lineups parsed in this run).");
-          dataPass1.homeTeamLineup = existing.homeTeamLineup;
-        }
-        if (!dataPass1.awayTeamLineup?.starting || dataPass1.awayTeamLineup.starting.length < 5) {
-          console.log("[Gemini API] Reusing existing awayTeamLineup.");
-          dataPass1.awayTeamLineup = existing.awayTeamLineup;
-        }
-        if (!dataPass1.matchInfo?.homeTeam) {
-          console.log("[Gemini API] Reusing existing matchInfo.");
-          dataPass1.matchInfo = existing.matchInfo;
-        }
-        if (!dataPass1.keyStats?.home || Object.keys(dataPass1.keyStats.home).length < 5) {
-          console.log("[Gemini API] Reusing existing keyStats.");
-          dataPass1.keyStats = existing.keyStats;
-        }
-        if (!dataPass1.phasesOfPlay?.inPossession || dataPass1.phasesOfPlay.inPossession.length === 0) {
-          console.log("[Gemini API] Reusing existing phasesOfPlay.");
-          dataPass1.phasesOfPlay = existing.phasesOfPlay;
-        }
-        if (!dataPass1.shotsTimeline || dataPass1.shotsTimeline.length === 0) {
-          console.log("[Gemini API] Reusing existing shotsTimeline.");
-          dataPass1.shotsTimeline = existing.shotsTimeline || existing.attemptsTimeline;
-        }
-        if (!dataPass1.setPlays?.summary || dataPass1.setPlays.summary.length === 0) {
-          console.log("[Gemini API] Reusing existing setPlays.");
-          dataPass1.setPlays = existing.setPlays;
-        }
+      const directMatch = (newHomeTeam && extHome && newHomeTeam === extHome) && (newAwayTeam && extAway && newAwayTeam === extAway);
+      const reverseMatch = (newHomeTeam && extAway && newHomeTeam === extAway) && (newAwayTeam && extHome && newAwayTeam === extHome);
+      
+      const homeSub = (newHomeTeam && extHome && (extHome.includes(newHomeTeam) || newHomeTeam.includes(extHome)));
+      const awaySub = (newAwayTeam && extAway && (extAway.includes(newAwayTeam) || newAwayTeam.includes(extAway)));
+
+      if (directMatch || reverseMatch || (homeSub && awaySub)) {
+        isSameMatchExisting = true;
+        console.log(`[Gemini API] Re-upload detected for the same match: "${existing.matchInfo.homeTeam} vs ${existing.matchInfo.awayTeam}". Activating selective backfill/merging algorithm.`);
+      } else {
+        console.log(`[Gemini API] Newly uploaded match ("${dataPass1.matchInfo?.homeTeam || 'Unknown'} vs ${dataPass1.matchInfo?.awayTeam || 'Unknown'}") does not match the existing active match ("${existing.matchInfo.homeTeam || 'Unknown'} vs ${existing.matchInfo.awayTeam || 'Unknown'}"). Treating as a brand new match study!`);
       }
     }
+
+    if (isSameMatchExisting) {
+      if (!dataPass1.homeTeamLineup?.starting || dataPass1.homeTeamLineup.starting.length < 5) {
+        console.log("[Gemini API] Reusing existing homeTeamLineup (no lineups parsed in this run).");
+        dataPass1.homeTeamLineup = existing.homeTeamLineup;
+      }
+      if (!dataPass1.awayTeamLineup?.starting || dataPass1.awayTeamLineup.starting.length < 5) {
+        console.log("[Gemini API] Reusing existing awayTeamLineup.");
+        dataPass1.awayTeamLineup = existing.awayTeamLineup;
+      }
+      if (!dataPass1.matchInfo?.homeTeam) {
+        console.log("[Gemini API] Reusing existing matchInfo.");
+        dataPass1.matchInfo = existing.matchInfo;
+      }
+      if (!dataPass1.keyStats?.home || Object.keys(dataPass1.keyStats.home).length < 5) {
+        console.log("[Gemini API] Reusing existing keyStats.");
+        dataPass1.keyStats = existing.keyStats;
+      }
+      if (!dataPass1.phasesOfPlay?.inPossession || dataPass1.phasesOfPlay.inPossession.length === 0) {
+        console.log("[Gemini API] Reusing existing phasesOfPlay.");
+        dataPass1.phasesOfPlay = existing.phasesOfPlay;
+      }
+      if (!dataPass1.shotsTimeline || dataPass1.shotsTimeline.length === 0) {
+        console.log("[Gemini API] Reusing existing shotsTimeline.");
+        dataPass1.shotsTimeline = existing.shotsTimeline || existing.attemptsTimeline;
+      }
+      if (!dataPass1.setPlays?.summary || dataPass1.setPlays.summary.length === 0) {
+        console.log("[Gemini API] Reusing existing setPlays.");
+        dataPass1.setPlays = existing.setPlays;
+      }
+    }
+
+    // PASS 3 to 6 consolidated pipeline starts here
+    // Build the checklists of players for targeted extraction
+    const hStarting = dataPass1.homeTeamLineup?.starting || existing?.homeTeamLineup?.starting || [];
+    const hSubs = dataPass1.homeTeamLineup?.substitutes || existing?.homeTeamLineup?.substitutes || [];
+    const aStarting = dataPass1.awayTeamLineup?.starting || existing?.awayTeamLineup?.starting || [];
+    const aSubs = dataPass1.awayTeamLineup?.substitutes || existing?.awayTeamLineup?.substitutes || [];
+
+    const homeLineupList = [...hStarting, ...hSubs].filter(p => p && p.name);
+    const awayLineupList = [...aStarting, ...aSubs].filter(p => p && p.name);
+
+    const homeLineupStr = homeLineupList.map(p => `#${p.number} ${p.name}`).join(", ") || "Extract all home team players";
+    const awayLineupStr = awayLineupList.map(p => `#${p.number} ${p.name}`).join(", ") || "Extract all away team players";
 
     let dataPassGK = null;
     const extGKDetails = existing?.goalkeeping?.playerDetails || [];
     const hasGKData = existing && isDatasetPopulated(extGKDetails, 1);
 
     let dataPassInPoss = null;
-    const extInPoss = existing?.playersInPossession || [];
+    const extInPoss = existing?.playersInPossession?.home || [];
     const hasInPossData = existing && isDatasetPopulated(extInPoss, 5);
 
     let dataPassPassNet = null;
-    const extPassNetHome = existing?.passingNetworks?.home || [];
-    const extPassNetAway = existing?.passingNetworks?.away || [];
+    const extPassNetHome = existing?.passingNetworks?.home?.playerPositions || [];
+    const extPassNetAway = existing?.passingNetworks?.away?.playerPositions || [];
     const hasPassNetData = existing && (isDatasetPopulated(extPassNetHome, 3) || isDatasetPopulated(extPassNetAway, 3));
 
     let dataPassPhys = null;
-    const extPhys = existing?.playersPhysical || [];
+    const extPhys = existing?.playersPhysical?.home || [];
     const hasPhysData = existing && isDatasetPopulated(extPhys, 5);
 
     let dataPassOutPoss = null;
-    const extOutPoss = existing?.playersOutOfPossession || [];
+    const extOutPoss = existing?.playersOutOfPossession?.home || [];
     const hasOutPossData = existing && isDatasetPopulated(extOutPoss, 5);
 
     let dataPassDefSys = null;
@@ -1192,183 +1132,133 @@ Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as fo
 
     const pipelineList = [];
 
-    // Check GK Pass
-    if (isSameMatchExisting && hasGKData) {
-      console.log("[Gemini API] Reusing existing Goalkeeping data to save quota.");
-      dataPassGK = { goalkeeping: existing.goalkeeping };
-    } else {
-      pipelineList.push({
-        name: "Goalkeeping",
-        fn: async () => {
-          const res = await runPass(promptPass7_GK, "Pass 2 - Goalkeeping Performance");
-          let extracted = parseAndRepairJSON(res.text || "{}");
-          if (isSameMatchExisting && existing?.goalkeeping) {
-            extracted.goalkeeping = extracted.goalkeeping || {};
-            extracted.goalkeeping.playerDetails = mergePlayerLists(extGKDetails, extracted.goalkeeping.playerDetails || []);
-            extracted.goalkeeping.involvement = extracted.goalkeeping.involvement || existing.goalkeeping.involvement;
-            extracted.goalkeeping.distribution = extracted.goalkeeping.distribution || existing.goalkeeping.distribution;
-          }
-          dataPassGK = extracted;
-        }
-      });
-    }
+    // Selective determination of Pass 2 and Pass 3 execution to prevent redundant API usage
+    const needPlayerCore = !isSameMatchExisting || !hasInPossData || !hasOutPossData || !hasPhysData || !hasGKData || !hasDefSysData;
+    const needPlayerTactical = !isSameMatchExisting || !hasPassNetData || !hasBreaksCrossesData || !hasOffersMovementsData;
 
-    // Check InPoss Pass
-    if (isSameMatchExisting && hasInPossData) {
-      console.log("[Gemini API] Reusing existing Players In Possession data to save quota.");
-      dataPassInPoss = { playersInPossession: existing.playersInPossession };
-    } else {
+    if (needPlayerCore) {
       pipelineList.push({
-        name: "Players In Possession",
+        name: "Player Core Stats",
         fn: async () => {
-          const res = await runPass(promptPass2_InPoss, "Pass 3 - Players In Possession");
-          let extracted = parseAndRepairJSON(res.text || "{}");
-          if (isSameMatchExisting && existing?.playersInPossession) {
-            extracted.playersInPossession = mergePlayerLists(extInPoss, extracted.playersInPossession || []);
-          }
-          dataPassInPoss = extracted;
-        }
-      });
-    }
+          const promptPass2_PlayerCore = getPromptPass2_PlayerCore(homeLineupStr, awayLineupStr);
+          const res = await runPass(promptPass2_PlayerCore, "Pass 2 - Player Core Stats");
+          const extracted = parseAndRepairJSON(res.text || "{}");
 
-    // Check Passing Networks Pass
-    if (isSameMatchExisting && hasPassNetData) {
-      console.log("[Gemini API] Reusing existing Passing Networks data to save quota.");
-      dataPassPassNet = { passingNetworks: existing.passingNetworks };
-    } else {
-      pipelineList.push({
-        name: "Passing Networks",
-        fn: async () => {
-          const res = await runPass(promptPass3_PassNet, "Pass 4 - Passing Networks");
-          dataPassPassNet = parseAndRepairJSON(res.text || "{}");
-        }
-      });
-    }
-
-    // Check Physical Pass
-    if (isSameMatchExisting && hasPhysData) {
-      console.log("[Gemini API] Reusing existing Players Physical data to save quota.");
-      dataPassPhys = { playersPhysical: existing.playersPhysical };
-    } else {
-      pipelineList.push({
-        name: "Physical Metrics",
-        fn: async () => {
-          const res = await runPass(promptPass4_Phys, "Pass 5 - Physical Metrics");
-          let extracted = parseAndRepairJSON(res.text || "{}");
-          if (isSameMatchExisting && existing?.playersPhysical) {
-            extracted.playersPhysical = mergePlayerLists(extPhys, extracted.playersPhysical || []);
-          }
-          dataPassPhys = extracted;
-        }
-      });
-    }
-
-    // Check OutPoss Pass
-    if (isSameMatchExisting && hasOutPossData) {
-      console.log("[Gemini API] Reusing existing Out of Possession data to save quota.");
-      dataPassOutPoss = { playersOutOfPossession: existing.playersOutOfPossession };
-    } else {
-      pipelineList.push({
-        name: "Out of Possession",
-        fn: async () => {
-          const res = await runPass(promptPass5_OutPoss, "Pass 6 - Out Of Possession");
-          let extracted = parseAndRepairJSON(res.text || "{}");
-          if (isSameMatchExisting && existing?.playersOutOfPossession) {
-            extracted.playersOutOfPossession = mergePlayerLists(extOutPoss, extracted.playersOutOfPossession || []);
-          }
-          dataPassOutPoss = extracted;
-        }
-      });
-    }
-
-    // Check Defensive Actions Pass
-    if (isSameMatchExisting && hasDefSysData) {
-      console.log("[Gemini API] Reusing existing Defensive Actions / Pressures data.");
-      dataPassDefSys = { defensiveActions: existing.defensiveActions };
-    } else {
-      pipelineList.push({
-        name: "Defensive Actions / Pressures",
-        fn: async () => {
-          const res = await runPass(promptPass6_DefSys, "Pass 7 - Defensive Actions");
-          let extracted = parseAndRepairJSON(res.text || "{}");
-          if (isSameMatchExisting && existing?.defensiveActions) {
-            extracted.defensiveActions = extracted.defensiveActions || {};
-            extracted.defensiveActions.playerDetails = mergePlayerLists(extDefSys, extracted.defensiveActions.playerDetails || []);
-            extracted.defensiveActions.teamSummary = extracted.defensiveActions.teamSummary || existing.defensiveActions.teamSummary;
-          }
-          dataPassDefSys = extracted;
-        }
-      });
-    }
-
-    // Check Line Breaks & Crosses Pass
-    if (isSameMatchExisting && hasBreaksCrossesData) {
-      console.log("[Gemini API] Reusing existing Line Breaks & Crosses data.");
-      dataPassBreaksCrosses = {
-        lineBreaks: existing.lineBreaks,
-        crosses: existing.crosses
-      };
-    } else {
-      pipelineList.push({
-        name: "Line Breaks & Crosses",
-        fn: async () => {
-          const res = await runPass(promptPass8_BreaksCrosses, "Pass 8 - Breaks & Crosses");
-          let extracted = parseAndRepairJSON(res.text || "{}");
           if (isSameMatchExisting) {
-            if (existing?.lineBreaks) {
-              extracted.lineBreaks = extracted.lineBreaks || {};
+            if (existing.playersInPossession && extracted.playersInPossession) {
+              extracted.playersInPossession.home = mergePlayerLists(existing.playersInPossession.home || [], extracted.playersInPossession.home || []);
+              extracted.playersInPossession.away = mergePlayerLists(existing.playersInPossession.away || [], extracted.playersInPossession.away || []);
+            }
+            if (existing.playersOutOfPossession && extracted.playersOutOfPossession) {
+              extracted.playersOutOfPossession.home = mergePlayerLists(existing.playersOutOfPossession.home || [], extracted.playersOutOfPossession.home || []);
+              extracted.playersOutOfPossession.away = mergePlayerLists(existing.playersOutOfPossession.away || [], extracted.playersOutOfPossession.away || []);
+            }
+            if (existing.playersPhysical && extracted.playersPhysical) {
+              extracted.playersPhysical.home = mergePlayerLists(existing.playersPhysical.home || [], extracted.playersPhysical.home || []);
+              extracted.playersPhysical.away = mergePlayerLists(existing.playersPhysical.away || [], extracted.playersPhysical.away || []);
+            }
+            if (existing.goalkeeping && extracted.goalkeeping) {
+              extracted.goalkeeping.playerDetails = mergePlayerLists(extGKDetails, extracted.goalkeeping.playerDetails || []);
+              extracted.goalkeeping.involvement = extracted.goalkeeping.involvement || existing.goalkeeping.involvement;
+              extracted.goalkeeping.distribution = extracted.goalkeeping.distribution || existing.goalkeeping.distribution;
+              extracted.goalkeeping.goalPrevention = extracted.goalkeeping.goalPrevention || existing.goalkeeping.goalPrevention;
+              extracted.goalkeeping.aerialControl = extracted.goalkeeping.aerialControl || existing.goalkeeping.aerialControl;
+            }
+            if (existing.defensiveActions && extracted.defensiveActions) {
+              extracted.defensiveActions.playerDetails = mergePlayerLists(extDefSys, extracted.defensiveActions.playerDetails || []);
+              extracted.defensiveActions.teamSummary = extracted.defensiveActions.teamSummary || existing.defensiveActions.teamSummary;
+              extracted.defensiveActions.playerRegains = extracted.defensiveActions.playerRegains || existing.defensiveActions.playerRegains;
+            }
+            if (existing.defensivePressure && extracted.defensivePressure) {
+              extracted.defensivePressure.playerDetails = mergePlayerLists(existing.defensivePressure.playerDetails || [], extracted.defensivePressure.playerDetails || []);
+              extracted.defensivePressure.teamSummary = extracted.defensivePressure.teamSummary || existing.defensivePressure.teamSummary;
+              extracted.defensivePressure.mostDirect = extracted.defensivePressure.mostDirect || existing.defensivePressure.mostDirect;
+            }
+          }
+
+          dataPassInPoss = { playersInPossession: extracted.playersInPossession || existing?.playersInPossession };
+          dataPassOutPoss = { playersOutOfPossession: extracted.playersOutOfPossession || existing?.playersOutOfPossession };
+          dataPassPhys = { playersPhysical: extracted.playersPhysical || existing?.playersPhysical };
+          
+          // Merge individual goalkeepers stats with team GK metrics parsed in Pass 1
+          const mergedGK = {
+            ...(dataPass1.goalkeeping || existing?.goalkeeping || {}),
+            playerDetails: extracted.goalkeeping?.playerDetails || dataPass1.goalkeeping?.playerDetails || existing?.goalkeeping?.playerDetails || []
+          };
+          dataPassGK = { goalkeeping: mergedGK };
+
+          dataPassDefSys = {
+            defensiveActions: extracted.defensiveActions || existing?.defensiveActions,
+            defensivePressure: extracted.defensivePressure || existing?.defensivePressure
+          };
+        }
+      });
+    } else {
+      console.log("[Gemini API] Reusing existing Player Core Stats.");
+      dataPassInPoss = { playersInPossession: existing.playersInPossession };
+      dataPassOutPoss = { playersOutOfPossession: existing.playersOutOfPossession };
+      dataPassPhys = { playersPhysical: existing.playersPhysical };
+      dataPassGK = { goalkeeping: existing.goalkeeping };
+      dataPassDefSys = { defensiveActions: existing.defensiveActions, defensivePressure: existing.defensivePressure };
+    }
+
+    if (needPlayerTactical) {
+      pipelineList.push({
+        name: "Player Tactical Stats",
+        fn: async () => {
+          const promptPass3_PlayerTactical = getPromptPass3_PlayerTactical(homeLineupStr, awayLineupStr);
+          const res = await runPass(promptPass3_PlayerTactical, "Pass 3 - Player Tactical Stats");
+          const extracted = parseAndRepairJSON(res.text || "{}");
+
+          if (isSameMatchExisting) {
+            if (existing.passingNetworks && extracted.passingNetworks) {
+              extracted.passingNetworks.home = extracted.passingNetworks.home || existing.passingNetworks.home;
+              extracted.passingNetworks.away = extracted.passingNetworks.away || existing.passingNetworks.away;
+            }
+            if (existing.lineBreaks && extracted.lineBreaks) {
               extracted.lineBreaks.playerSummary = mergePlayerLists(extLineBreaks, extracted.lineBreaks.playerSummary || []);
               extracted.lineBreaks.teamSummary = extracted.lineBreaks.teamSummary || existing.lineBreaks.teamSummary;
             }
-            if (existing?.crosses) {
-              extracted.crosses = extracted.crosses || {};
+            if (existing.crosses && extracted.crosses) {
               extracted.crosses.playerSummary = mergePlayerLists(extCrosses, extracted.crosses.playerSummary || []);
               extracted.crosses.teamSummary = extracted.crosses.teamSummary || existing.crosses.teamSummary;
             }
-          }
-          dataPassBreaksCrosses = extracted;
-        }
-      });
-    }
-
-    // Check Offers & Movements Pass
-    if (isSameMatchExisting && hasOffersMovementsData) {
-      console.log("[Gemini API] Reusing existing Offers & Movements data.");
-      dataPassOffersMovements = {
-        offeringToReceive: existing.offeringToReceive,
-        movementToReceive: existing.movementToReceive
-      };
-    } else {
-      pipelineList.push({
-        name: "Offers & Movements",
-        fn: async () => {
-          const res = await runPass(promptPass9_OffersMovements, "Pass 9 - Offers & Movements");
-          let extracted = parseAndRepairJSON(res.text || "{}");
-          if (isSameMatchExisting) {
-            if (existing?.offeringToReceive) {
-              extracted.offeringToReceive = extracted.offeringToReceive || {};
+            if (existing.offeringToReceive && extracted.offeringToReceive) {
               extracted.offeringToReceive.playerSummary = mergePlayerLists(extOffers, extracted.offeringToReceive.playerSummary || []);
               extracted.offeringToReceive.teamSummary = extracted.offeringToReceive.teamSummary || existing.offeringToReceive.teamSummary;
             }
-            if (existing?.movementToReceive) {
-              extracted.movementToReceive = extracted.movementToReceive || {};
+            if (existing.movementToReceive && extracted.movementToReceive) {
               extracted.movementToReceive.playerDetails = mergePlayerLists(extMovements, extracted.movementToReceive.playerDetails || []);
               extracted.movementToReceive.teamSummary = extracted.movementToReceive.teamSummary || existing.movementToReceive.teamSummary;
+              extracted.movementToReceive.topRanked = extracted.movementToReceive.topRanked || existing.movementToReceive.topRanked;
             }
           }
-          dataPassOffersMovements = extracted;
+
+          dataPassPassNet = { passingNetworks: extracted.passingNetworks || existing?.passingNetworks };
+          dataPassBreaksCrosses = {
+            lineBreaks: extracted.lineBreaks || existing?.lineBreaks,
+            crosses: extracted.crosses || existing?.crosses
+          };
+          dataPassOffersMovements = {
+            offeringToReceive: extracted.offeringToReceive || existing?.offeringToReceive,
+            movementToReceive: extracted.movementToReceive || existing?.movementToReceive
+          };
         }
       });
+    } else {
+      console.log("[Gemini API] Reusing existing Player Tactical Stats.");
+      dataPassPassNet = { passingNetworks: existing.passingNetworks };
+      dataPassBreaksCrosses = { lineBreaks: existing.lineBreaks, crosses: existing.crosses };
+      dataPassOffersMovements = { offeringToReceive: existing.offeringToReceive, movementToReceive: existing.movementToReceive };
     }
 
-    console.log(`[Gemini API] Out of 8 remaining passes, ${pipelineList.length} passes actually need execution.`);
+    console.log(`[Gemini API] Dynamic selective pipeline: ${pipelineList.length} passes actually need execution.`);
 
-    // Execute needed passes in chunks of 2 with spacing to avoid rate limits
-    for (let idx = 0; idx < pipelineList.length; idx += 2) {
-      const activeChunk = pipelineList.slice(idx, idx + 2);
-      console.log(`[Gemini API] Processing chunk: ${activeChunk.map(g => g.name).join(", ")}...`);
-      await Promise.all(activeChunk.map(item => item.fn()));
-      if (idx + 2 < pipelineList.length) {
+    for (let idx = 0; idx < pipelineList.length; idx++) {
+      const item = pipelineList[idx];
+      console.log(`[Gemini API] Processing combined pass: ${item.name}...`);
+      await item.fn();
+      if (idx + 1 < pipelineList.length) {
         await new Promise(resolve => setTimeout(resolve, 1500));
       }
     }
@@ -1496,12 +1386,46 @@ Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as fo
       });
     }
 
+    // Helper to split a flat array of player stats into home and away arrays
+    function splitPlayerArrayByTeam(arr: any[]): { home: any[], away: any[] } {
+      const homeList: any[] = [];
+      const awayList: any[] = [];
+      if (!Array.isArray(arr)) return { home: homeList, away: awayList };
+      
+      const cleanH = String(rawHomeTeam).toLowerCase().trim();
+      const cleanA = String(rawAwayTeam).toLowerCase().trim();
+
+      arr.forEach((player: any) => {
+        if (!player) return;
+        const pTeam = String(player.team || "").toLowerCase().trim();
+        if (pTeam === "home" || pTeam.includes("home") || (cleanH && (cleanH.includes(pTeam) || pTeam.includes(cleanH)))) {
+          homeList.push(player);
+        } else if (pTeam === "away" || pTeam.includes("away") || (cleanA && (cleanA.includes(pTeam) || pTeam.includes(cleanA)))) {
+          awayList.push(player);
+        } else {
+          const inHome = findMatchesInLineup(player.name || "", player.number || 0, homeLineup);
+          const inAway = findMatchesInLineup(player.name || "", player.number || 0, awayLineup);
+          if (inHome && !inAway) {
+            homeList.push(player);
+          } else if (inAway && !inHome) {
+            awayList.push(player);
+          } else {
+            homeList.push(player);
+          }
+        }
+      });
+      return { home: homeList, away: awayList };
+    }
+
     // 3. Automated Self-Healing triggers for tables that may have been skipped or truncated
     const lineupMinRequired = 11;
     const statsMinRequired = 5;
 
     // Healing for playersInPossession
-    if (homeLineup.length >= lineupMinRequired && (!Array.isArray(parsedData.playersInPossession) || parsedData.playersInPossession.length < statsMinRequired)) {
+    const hasInPossTable = parsedData.playersInPossession && 
+                           (Array.isArray(parsedData.playersInPossession.home) && parsedData.playersInPossession.home.length >= statsMinRequired);
+    
+    if (homeLineup.length >= lineupMinRequired && !hasInPossTable) {
       console.log("[Gemini API] Double-check triggered: playersInPossession table is incomplete. Launching targeted self-healing pass...");
       try {
         await new Promise(resolve => setTimeout(resolve, 1500));
@@ -1545,7 +1469,7 @@ Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as fo
         const repairData = parseAndRepairJSON(repairRes.text || "{}");
         if (repairData && Array.isArray(repairData.playersInPossession) && repairData.playersInPossession.length >= statsMinRequired) {
           console.log(`[Gemini API] Self-healing successful! Recovered ${repairData.playersInPossession.length} players for playersInPossession.`);
-          parsedData.playersInPossession = repairData.playersInPossession;
+          parsedData.playersInPossession = splitPlayerArrayByTeam(repairData.playersInPossession);
         }
       } catch (err) {
         console.error("[Gemini API] Self-healing failed for playersInPossession:", err);
@@ -1553,7 +1477,10 @@ Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as fo
     }
 
     // Healing for playersPhysical
-    if (homeLineup.length >= lineupMinRequired && (!Array.isArray(parsedData.playersPhysical) || parsedData.playersPhysical.length < statsMinRequired)) {
+    const hasPhysicalTable = parsedData.playersPhysical && 
+                             (Array.isArray(parsedData.playersPhysical.home) && parsedData.playersPhysical.home.length >= statsMinRequired);
+
+    if (homeLineup.length >= lineupMinRequired && !hasPhysicalTable) {
       console.log("[Gemini API] Double-check triggered: playersPhysical table is incomplete. Launching targeted self-healing pass...");
       try {
         await new Promise(resolve => setTimeout(resolve, 1500));
@@ -1563,6 +1490,17 @@ In a previous PDF extraction, the "Physical Data" metrics table was truncated or
 Extract details for EVERY SINGLE player inside the "Physical Data" tables for both teams.
 You MUST extract stats for all starting and substituting players who appear in these tables. DO NOT summarize, limit or truncate to 2 or 3 players.
 Look for "Physical Data" tables in the document.
+Mapping rules for "Physical Data" table columns:
+* totalDistance (Toplam Mesafe) -> totalDistance
+* Zone 1 -> zone1 (0-7 km/h Walk)
+* Zone 2 -> zone2 (7-15 km/h Jog)
+* Zone 3 -> zone3 (15-20 km/h Run)
+* Zone 4 -> zone4 (20-25 km/h Sprint Low)
+* Zone 5 -> zone5 (>25 km/h Sprint High)
+* High Speed Runs / Yüksek Hızlı Koşular (the count of runs, DO NOT leave empty or hyphened) -> highSpeedRuns
+* Sprints / Sprintler / Sürat Koşuları (the count of sprints) -> sprints
+* Top Speed / En Yüksek Sürat / Maksimum Hız -> topSpeed
+
 Expected lineup names:
 Home: ${homeLineup.map(p => `#${p.number} ${p.name}`).join(", ")}
 Away: ${awayLineup.map(p => `#${p.number} ${p.name}`).join(", ")}
@@ -1575,11 +1513,12 @@ Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as fo
       "number": 0,
       "name": "string",
       "totalDistance": 0.0,
-      "zone1Distance": 0.0,
-      "zone2Distance": 0.0,
-      "zone3Distance": 0.0,
-      "zone4Distance": 0.0,
-      "zone5Distance": 0.0,
+      "zone1": 0.0,
+      "zone2": 0.0,
+      "zone3": 0.0,
+      "zone4": 0.0,
+      "zone5": 0.0,
+      "highSpeedRuns": 0.0,
       "sprints": 0,
       "topSpeed": 0.0
     }
@@ -1599,7 +1538,7 @@ Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as fo
         const repairData = parseAndRepairJSON(repairRes.text || "{}");
         if (repairData && Array.isArray(repairData.playersPhysical) && repairData.playersPhysical.length >= statsMinRequired) {
           console.log(`[Gemini API] Self-healing successful! Recovered ${repairData.playersPhysical.length} players for playersPhysical.`);
-          parsedData.playersPhysical = repairData.playersPhysical;
+          parsedData.playersPhysical = splitPlayerArrayByTeam(repairData.playersPhysical);
         }
       } catch (err) {
         console.error("[Gemini API] Self-healing failed for playersPhysical:", err);
@@ -1607,7 +1546,10 @@ Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as fo
     }
 
     // Healing for playersOutOfPossession
-    if (homeLineup.length >= lineupMinRequired && (!Array.isArray(parsedData.playersOutOfPossession) || parsedData.playersOutOfPossession.length < statsMinRequired)) {
+    const hasOutOfPossTable = parsedData.playersOutOfPossession && 
+                               (Array.isArray(parsedData.playersOutOfPossession.home) && parsedData.playersOutOfPossession.home.length >= statsMinRequired);
+
+    if (homeLineup.length >= lineupMinRequired && !hasOutOfPossTable) {
       console.log("[Gemini API] Double-check triggered: playersOutOfPossession table is incomplete. Launching targeted self-healing pass...");
       try {
         await new Promise(resolve => setTimeout(resolve, 1500));
@@ -1651,17 +1593,274 @@ Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as fo
         const repairData = parseAndRepairJSON(repairRes.text || "{}");
         if (repairData && Array.isArray(repairData.playersOutOfPossession) && repairData.playersOutOfPossession.length >= statsMinRequired) {
           console.log(`[Gemini API] Self-healing successful! Recovered ${repairData.playersOutOfPossession.length} players for playersOutOfPossession.`);
-          parsedData.playersOutOfPossession = repairData.playersOutOfPossession;
+          parsedData.playersOutOfPossession = splitPlayerArrayByTeam(repairData.playersOutOfPossession);
         }
       } catch (err) {
         console.error("[Gemini API] Self-healing failed for playersOutOfPossession:", err);
       }
     }
 
+    // Healing for lineBreaks
+    const hasLineBreaksTable = parsedData.lineBreaks && 
+                               (Array.isArray(parsedData.lineBreaks.playerSummary) && parsedData.lineBreaks.playerSummary.length >= statsMinRequired);
+    
+    if (homeLineup.length >= lineupMinRequired && !hasLineBreaksTable) {
+      console.log("[Gemini API] Double-check triggered: lineBreaks table is incomplete. Launching targeted self-healing pass...");
+      try {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        const repairPrompt = `
+You are an expert sports data analyst and OCR table extractor specializing in official FIFA Post Match Summary Reports.
+In a previous PDF extraction, the "Line Breaks" individual player statistics table was truncated or incomplete.
+Extract details for EVERY SINGLE player inside the "Line Breaks" playerSummary tables for both teams.
+You MUST extract stats for all starting and substituting players who appear in these tables. DO NOT summarize, limit or truncate to 2 or 3 players.
+Look for "Line Breaks" tables in the document.
+Expected lineup names:
+Home: ${homeLineup.map(p => `#${p.number} ${p.name}`).join(", ")}
+Away: ${awayLineup.map(p => `#${p.number} ${p.name}`).join(", ")}
+
+Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as following template:
+{
+  "lineBreaks": {
+    "playerSummary": [
+      {
+        "team": "string",
+        "number": 0,
+        "name": "string",
+        "attempted": 0,
+        "completed": 0,
+        "completionPct": 0,
+        "u4_attLine": 0,
+        "u4_attMidLine": 0,
+        "u4_midLine": 0,
+        "u4_defLine": 0,
+        "u3_attLine": 0,
+        "u3_midLine": 0,
+        "u3_defLine": 0,
+        "u2_midLine": 0,
+        "u2_defLine": 0,
+        "through": 0,
+        "around": 0,
+        "over": 0,
+        "pass": 0,
+        "cross": 0,
+        "ballProgression": 0
+      }
+    ]
+  }
+}
+`;
+        const repairRes = await generateContentWithRetry(ai, {
+          contents: [pdfPart, { text: repairPrompt }],
+          config: {
+            responseMimeType: "application/json",
+            systemInstruction: "You are an expert FIFA match operations PDF content extractor (Self-Healing Recovery Pass). Return results in extremely compact minified JSON.",
+            temperature: 0.1,
+            maxOutputTokens: 8192
+          },
+          fallbackModels: ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-3.1-pro-preview"]
+        });
+        const repairData = parseAndRepairJSON(repairRes.text || "{}");
+        if (repairData && repairData.lineBreaks && Array.isArray(repairData.lineBreaks.playerSummary) && repairData.lineBreaks.playerSummary.length >= statsMinRequired) {
+          console.log(`[Gemini API] Self-healing successful! Recovered ${repairData.lineBreaks.playerSummary.length} players for lineBreaks.`);
+          if (!parsedData.lineBreaks) parsedData.lineBreaks = {};
+          parsedData.lineBreaks.playerSummary = repairData.lineBreaks.playerSummary;
+        }
+      } catch (err) {
+        console.error("[Gemini API] Self-healing failed for lineBreaks:", err);
+      }
+    }
+
+    // Healing for crosses
+    const hasCrossesTable = parsedData.crosses && 
+                            (Array.isArray(parsedData.crosses.playerSummary) && parsedData.crosses.playerSummary.length >= statsMinRequired);
+    
+    if (homeLineup.length >= lineupMinRequired && !hasCrossesTable) {
+      console.log("[Gemini API] Double-check triggered: crosses table is incomplete. Launching targeted self-healing pass...");
+      try {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        const repairPrompt = `
+You are an expert sports data analyst and OCR table extractor specializing in official FIFA Post Match Summary Reports.
+In a previous PDF extraction, the "In Possession - Crosses" individual statistics table was truncated or incomplete.
+Extract details for EVERY SINGLE player inside the "In Possession - Crosses" playerSummary tables for both teams.
+You MUST extract stats for all starting and substituting players who appear in these tables. DO NOT summarize, limit or truncate to 2 or 3 players.
+Look for "In Possession - Crosses" tables in the document.
+Expected lineup names:
+Home: ${homeLineup.map(p => `#${p.number} ${p.name}`).join(", ")}
+Away: ${awayLineup.map(p => `#${p.number} ${p.name}`).join(", ")}
+
+Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as following template:
+{
+  "crosses": {
+    "playerSummary": [
+      {
+        "team": "string",
+        "number": 0,
+        "name": "string",
+        "inswing": 0,
+        "outswing": 0,
+        "driven": 0,
+        "lofted": 0,
+        "cutback": 0,
+        "push": 0,
+        "crossCompleted": 0,
+        "totalAttempted": 0
+      }
+    ]
+  }
+}
+`;
+        const repairRes = await generateContentWithRetry(ai, {
+          contents: [pdfPart, { text: repairPrompt }],
+          config: {
+            responseMimeType: "application/json",
+            systemInstruction: "You are an expert FIFA match operations PDF content extractor (Self-Healing Recovery Pass). Return results in extremely compact minified JSON.",
+            temperature: 0.1,
+            maxOutputTokens: 8192
+          },
+          fallbackModels: ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-3.1-pro-preview"]
+        });
+        const repairData = parseAndRepairJSON(repairRes.text || "{}");
+        if (repairData && repairData.crosses && Array.isArray(repairData.crosses.playerSummary) && repairData.crosses.playerSummary.length >= statsMinRequired) {
+          console.log(`[Gemini API] Self-healing successful! Recovered ${repairData.crosses.playerSummary.length} players for crosses.`);
+          if (!parsedData.crosses) parsedData.crosses = {};
+          parsedData.crosses.playerSummary = repairData.crosses.playerSummary;
+        }
+      } catch (err) {
+        console.error("[Gemini API] Self-healing failed for crosses:", err);
+      }
+    }
+
+    // Healing for offeringToReceive
+    const hasOfferingTable = parsedData.offeringToReceive && 
+                             (Array.isArray(parsedData.offeringToReceive.playerSummary) && parsedData.offeringToReceive.playerSummary.length >= statsMinRequired);
+    
+    if (homeLineup.length >= lineupMinRequired && !hasOfferingTable) {
+      console.log("[Gemini API] Double-check triggered: offeringToReceive table is incomplete. Launching targeted self-healing pass...");
+      try {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        const repairPrompt = `
+You are an expert sports data analyst and OCR table extractor specializing in official FIFA Post Match Summary Reports.
+In a previous PDF extraction, the "Offering to Receive" individual statistics table was truncated or incomplete.
+Extract details for EVERY SINGLE player inside the "Offering to Receive" playerSummary tables for both teams.
+You MUST extract stats for all starting and substituting players who appear in these tables. DO NOT summarize, limit or truncate to 2 or 3 players.
+Look for "Offering to Receive" tables in the document.
+Expected lineup names:
+Home: ${homeLineup.map(p => `#${p.number} ${p.name}`).join(", ")}
+Away: ${awayLineup.map(p => `#${p.number} ${p.name}`).join(", ")}
+
+Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as following template:
+{
+  "offeringToReceive": {
+    "playerSummary": [
+      {
+        "team": "string",
+        "number": 0,
+        "name": "string",
+        "offersMade": 0,
+        "offersReceived": 0,
+        "offersReceivedPct": "string (e.g. '35%')",
+        "offersInBehind": 0,
+        "offersInBetween": 0,
+        "offersInFront": 0,
+        "offersWide": 0,
+        "offersFinalThird": 0
+      }
+    ]
+  }
+}
+`;
+        const repairRes = await generateContentWithRetry(ai, {
+          contents: [pdfPart, { text: repairPrompt }],
+          config: {
+            responseMimeType: "application/json",
+            systemInstruction: "You are an expert FIFA match operations PDF content extractor (Self-Healing Recovery Pass). Return results in extremely compact minified JSON.",
+            temperature: 0.1,
+            maxOutputTokens: 8192
+          },
+          fallbackModels: ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-3.1-pro-preview"]
+        });
+        const repairData = parseAndRepairJSON(repairRes.text || "{}");
+        if (repairData && repairData.offeringToReceive && Array.isArray(repairData.offeringToReceive.playerSummary) && repairData.offeringToReceive.playerSummary.length >= statsMinRequired) {
+          console.log(`[Gemini API] Self-healing successful! Recovered ${repairData.offeringToReceive.playerSummary.length} players for offeringToReceive.`);
+          if (!parsedData.offeringToReceive) parsedData.offeringToReceive = {};
+          parsedData.offeringToReceive.playerSummary = repairData.offeringToReceive.playerSummary;
+        }
+      } catch (err) {
+        console.error("[Gemini API] Self-healing failed for offeringToReceive:", err);
+      }
+    }
+
+    // Healing for movementToReceive
+    const hasMovementTable = parsedData.movementToReceive && 
+                             (Array.isArray(parsedData.movementToReceive.playerDetails) && parsedData.movementToReceive.playerDetails.length >= statsMinRequired);
+    
+    if (homeLineup.length >= lineupMinRequired && !hasMovementTable) {
+      console.log("[Gemini API] Double-check triggered: movementToReceive table is incomplete. Launching targeted self-healing pass...");
+      try {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        const repairPrompt = `
+You are an expert sports data analyst and OCR table extractor specializing in official FIFA Post Match Summary Reports.
+In a previous PDF extraction, the "Movement to Receive" individual statistics table was truncated or incomplete.
+Extract details for EVERY SINGLE player inside the "Movement to Receive" playerDetails tables for both teams.
+You MUST extract stats for all starting and substituting players who appear in these tables. DO NOT summarize, limit or truncate to 2 or 3 players.
+Look for "Movement to Receive" tables in the document.
+Expected lineup names:
+Home: ${homeLineup.map(p => `#${p.number} ${p.name}`).join(", ")}
+Away: ${awayLineup.map(p => `#${p.number} ${p.name}`).join(", ")}
+
+Generate ONLY a clean, valid and well-formed JSON object formatted EXACTLY as following template:
+{
+  "movementToReceive": {
+    "playerDetails": [
+      {
+        "team": "string",
+        "number": 0,
+        "name": "string",
+        "inFront": 0,
+        "inBetween": 0,
+        "outToIn": 0,
+        "inToOut": 0,
+        "inBehind": 0,
+        "total": 0
+      }
+    ]
+  }
+}
+`;
+        const repairRes = await generateContentWithRetry(ai, {
+          contents: [pdfPart, { text: repairPrompt }],
+          config: {
+            responseMimeType: "application/json",
+            systemInstruction: "You are an expert FIFA match operations PDF content extractor (Self-Healing Recovery Pass). Return results in extremely compact minified JSON.",
+            temperature: 0.1,
+            maxOutputTokens: 8192
+          },
+          fallbackModels: ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-3.1-pro-preview"]
+        });
+        const repairData = parseAndRepairJSON(repairRes.text || "{}");
+        if (repairData && repairData.movementToReceive && Array.isArray(repairData.movementToReceive.playerDetails) && repairData.movementToReceive.playerDetails.length >= statsMinRequired) {
+          console.log(`[Gemini API] Self-healing successful! Recovered ${repairData.movementToReceive.playerDetails.length} players for movementToReceive.`);
+          if (!parsedData.movementToReceive) parsedData.movementToReceive = {};
+          parsedData.movementToReceive.playerDetails = repairData.movementToReceive.playerDetails;
+        }
+      } catch (err) {
+        console.error("[Gemini API] Self-healing failed for movementToReceive:", err);
+      }
+    }
+
     // 4. Run Harmonizations on all player data lists
-    harmonizePlayerArray(parsedData.playersInPossession);
-    harmonizePlayerArray(parsedData.playersPhysical);
-    harmonizePlayerArray(parsedData.playersOutOfPossession);
+    if (parsedData.playersInPossession) {
+      harmonizePlayerArray(parsedData.playersInPossession.home);
+      harmonizePlayerArray(parsedData.playersInPossession.away);
+    }
+    if (parsedData.playersPhysical) {
+      harmonizePlayerArray(parsedData.playersPhysical.home);
+      harmonizePlayerArray(parsedData.playersPhysical.away);
+    }
+    if (parsedData.playersOutOfPossession) {
+      harmonizePlayerArray(parsedData.playersOutOfPossession.home);
+      harmonizePlayerArray(parsedData.playersOutOfPossession.away);
+    }
 
     if (parsedData.defensiveActions) {
       harmonizePlayerArray(parsedData.defensiveActions.playerDetails);
