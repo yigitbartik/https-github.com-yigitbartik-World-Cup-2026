@@ -134,10 +134,12 @@ export async function rawSaveTeamFlagToLocal(teamName: string, base64: string, f
 // --- High-Level Sync Engine ---
 export async function syncWithFirestore(
   onStatusChange?: (msg: string) => void
-): Promise<{ matchesAdded: number; photosAdded: number; flagsAdded: number }> {
+): Promise<{ matchesAdded: number; photosAdded: number; flagsAdded: number; quotaExceeded?: boolean; quotaErrorMsg?: string }> {
   let matchesAdded = 0;
   let photosAdded = 0;
   let flagsAdded = 0;
+  let quotaExceeded = false;
+  let quotaErrorMsg = "";
 
   try {
     onStatusChange?.("Bulut veri tabanına bağlanılıyor...");
@@ -280,11 +282,20 @@ export async function syncWithFirestore(
 
     onStatusChange?.("Senkronizasyon başarıyla tamamlandı!");
   } catch (err) {
-    console.error("Firestore sync unsuccessful:", err);
-    onStatusChange?.(`Hata oluştu: ${String(err)}`);
+    const errStr = String(err);
+    const isQuota = errStr.includes("Quota exceeded") || errStr.includes("Quota limit exceeded");
+    if (isQuota) {
+      quotaExceeded = true;
+      quotaErrorMsg = errStr;
+      console.warn("Firestore sync suspended due to Quota limit:", err);
+      onStatusChange?.("Bulut veri tabanı kotası doldu. Çevrimdışı moda geçiliyor.");
+    } else {
+      console.error("Firestore sync unsuccessful:", err);
+      onStatusChange?.(`Hata oluştu: ${errStr}`);
+    }
   }
 
-  return { matchesAdded, photosAdded, flagsAdded };
+  return { matchesAdded, photosAdded, flagsAdded, quotaExceeded, quotaErrorMsg };
 }
 
 // Matches DB interactions

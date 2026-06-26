@@ -35,8 +35,11 @@ export interface FirestoreErrorInfo {
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): never {
+  const errMsg = error instanceof Error ? error.message : String(error);
+  const isQuota = errMsg.includes("Quota exceeded") || errMsg.includes("Quota limit exceeded");
+
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errMsg,
     authInfo: {
       userId: null,
       email: null,
@@ -48,6 +51,11 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  
+  if (isQuota) {
+    console.warn('Firestore Quota Exceeded Warn: ', JSON.stringify(errInfo));
+  } else {
+    console.error('Firestore Error: ', JSON.stringify(errInfo));
+  }
   throw new Error(JSON.stringify(errInfo));
 }

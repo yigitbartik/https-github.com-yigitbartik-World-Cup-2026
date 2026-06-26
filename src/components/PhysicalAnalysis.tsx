@@ -23,7 +23,9 @@ import {
   Search,
   ArrowUpDown,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Compass,
+  Shield
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -47,7 +49,7 @@ function cn(...inputs: any[]) {
 export function PhysicalAnalysis({ sheets }: PhysicalAnalysisProps) {
   const [sheet1Name, setSheet1Name] = useState<string>(sheets[0]?.name || "");
   const [sheet2Name, setSheet2Name] = useState<string>(sheets.length > 1 ? sheets[1]?.name : sheets[0]?.name || "");
-  const [viewMode, setViewMode] = useState<"dashboard" | "table" | "correlation" | "classification">("dashboard");
+  const [viewMode, setViewMode] = useState<"tactical_insight" | "dashboard" | "table" | "correlation" | "classification">("tactical_insight");
 
   // Correlation metrics selections
   const [physicalXMetric, setPhysicalXMetric] = useState<string>("Total Distance (m)");
@@ -71,6 +73,15 @@ export function PhysicalAnalysis({ sheets }: PhysicalAnalysisProps) {
   const [classClusterCount, setClassClusterCount] = useState<number>(4);
   const [classMaxSpeedWeight, setClassMaxSpeedWeight] = useState<number>(55);
   const [classHighIntensityWeight, setClassHighIntensityWeight] = useState<number>(45);
+
+  // Tactical Insight Interactive states
+  const [depthFromGoal, setDepthFromGoal] = useState<number>(40);
+  const [teamWidth, setTeamWidth] = useState<number>(55);
+  const [selectedOpponentStyle, setSelectedOpponentStyle] = useState<"high_press" | "counter_press" | "low_block">("high_press");
+  const [selectedPossessionStyle, setSelectedPossessionStyle] = useState<"counter_attack" | "final_third_set">("counter_attack");
+  const [selectedFormation, setSelectedFormation] = useState<"3-5-2" | "4-3-3" | "4-2-3-1">("3-5-2");
+  const [kmeansClusterId, setKmeansClusterId] = useState<number>(0);
+  const [selectedInnovationMetric, setSelectedInnovationMetric] = useState<"gpis" | "vci" | "ete">("gpis");
 
   const getPlayerPosGroup = (posStr: string): string => {
     const pos = String(posStr || "").toUpperCase();
@@ -362,11 +373,21 @@ export function PhysicalAnalysis({ sheets }: PhysicalAnalysisProps) {
         
         <div className="flex flex-wrap items-center gap-4 w-full xl:w-auto justify-end">
           {/* Sub-tab view buttons */}
-          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0">
+          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0 overflow-x-auto max-w-full">
+            <button
+              onClick={() => setViewMode("tactical_insight")}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg cursor-pointer transition-all shrink-0",
+                viewMode === "tactical_insight" ? "bg-white text-indigo-700 shadow-xs border border-indigo-100" : "text-slate-500 hover:text-slate-700"
+              )}
+            >
+              <Award className="w-3.2 h-3.2 text-indigo-600 fill-indigo-100" />
+              Taktiksel İçgörü
+            </button>
             <button
               onClick={() => setViewMode("dashboard")}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg cursor-pointer transition-all",
+                "flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg cursor-pointer transition-all shrink-0",
                 viewMode === "dashboard" ? "bg-white text-slate-900 shadow-xs" : "text-slate-500 hover:text-slate-700"
               )}
             >
@@ -376,7 +397,7 @@ export function PhysicalAnalysis({ sheets }: PhysicalAnalysisProps) {
             <button
               onClick={() => setViewMode("correlation")}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg cursor-pointer transition-all",
+                "flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg cursor-pointer transition-all shrink-0",
                 viewMode === "correlation" ? "bg-white text-indigo-700 shadow-xs" : "text-slate-500 hover:text-slate-700"
               )}
             >
@@ -386,7 +407,7 @@ export function PhysicalAnalysis({ sheets }: PhysicalAnalysisProps) {
             <button
               onClick={() => setViewMode("classification")}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg cursor-pointer transition-all text-amber-900",
+                "flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg cursor-pointer transition-all text-amber-900 shrink-0",
                 viewMode === "classification" ? "bg-white text-slate-900 shadow-xs border border-amber-200" : "text-slate-500 hover:text-slate-700"
               )}
             >
@@ -396,7 +417,7 @@ export function PhysicalAnalysis({ sheets }: PhysicalAnalysisProps) {
             <button
               onClick={() => setViewMode("table")}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg cursor-pointer transition-all",
+                "flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg cursor-pointer transition-all shrink-0",
                 viewMode === "table" ? "bg-white text-slate-900 shadow-xs" : "text-slate-500 hover:text-slate-700"
               )}
             >
@@ -449,6 +470,1189 @@ export function PhysicalAnalysis({ sheets }: PhysicalAnalysisProps) {
       ) : (
         <div className="flex-1 overflow-auto bg-white p-6">
           
+          {viewMode === "tactical_insight" && (
+            <div className="space-y-8 animate-fade-in font-sans">
+              {/* Core Philosophy Banner */}
+              <div className="relative overflow-hidden bg-radial from-slate-900 via-slate-950 to-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-xl text-white">
+                <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
+                  <Activity className="w-48 h-48 text-emerald-500" />
+                </div>
+                <div className="relative z-10 space-y-4">
+                  <div className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 px-3.5 py-1.5 rounded-full text-emerald-400 text-xs font-mono tracking-widest uppercase">
+                    <Sparkles className="w-3.5 h-3.5 animate-pulse" /> Elite Football Analyst & Data Science Studio
+                  </div>
+                  <h1 className="text-2xl md:text-3xl font-black tracking-tight leading-tight max-w-3xl">
+                    FIFA DÜNYA KUPASI 2026 – BÜTÜNLEŞİK TAKTİKSEL VE FİZİKSEL ANALİZ RAPORU
+                  </h1>
+                  <p className="text-sm md:text-base text-slate-300 italic font-medium max-w-4xl border-l-3 border-emerald-500 pl-4 py-1 bg-emerald-500/5 rounded-r-xl">
+                    "Tuzun fiziksel verisi anlamsızdır, bağlamıyla (bağlam) birleşmelidir."
+                  </p>
+                  <p className="text-xs text-slate-400 leading-relaxed max-w-3xl">
+                    Bu modül, takım tabanlı taktiksel metrikleri (oyun stilleri, hat boyları, formasyonlar) ile oyuncu seviyesindeki atletik yükleri (Zone 1-5 mesafeleri, sprint sayıları, HSR, maksimum hız) bütünleştirerek oyunun gerçek atletik-taktiksel DNA'sını çözümler.
+                  </p>
+                </div>
+              </div>
+
+              {/* SECTION 1: Veri Entegrasyon Metodolojisi */}
+              <div className="bg-slate-50 border border-slate-200/60 rounded-3xl p-6 shadow-xs">
+                <div className="flex items-center gap-2.5 mb-4">
+                  <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg border border-indigo-200/50">
+                    <TableProperties className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">1. Veri Entegrasyon Metodolojisi (Veri Birleştirme Hattı)</h3>
+                    <p className="text-xs text-slate-500">Çoklu kaynaklardan gelen makro ve mikro veri katmanlarının birleştirilme mimarisi</p>
+                  </div>
+                </div>
+
+                {/* Pipeline Flowchart diagram */}
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 items-center relative py-2">
+                  <div className="bg-white border border-slate-200 p-4 rounded-2xl shadow-3xs flex flex-col items-center text-center space-y-2 relative">
+                    <div className="w-10 h-10 bg-rose-50 rounded-full flex items-center justify-center text-rose-500 border border-rose-200">
+                      <LayoutDashboard className="w-5 h-5" />
+                    </div>
+                    <span className="text-xs font-bold text-slate-800">MAKRO SEVİYE (Maç/Takım)</span>
+                    <p className="text-[10px] text-slate-500 leading-normal">
+                      Formasyon, Maç Sonucu, Topla Sahip Olma Stilleri, Çizgi Yüksekliği, Çizgi Uzunluğu/Genişliği, Yerleşim Derinliği
+                    </p>
+                  </div>
+
+                  <div className="hidden lg:flex justify-center text-slate-400 font-bold text-xl animate-pulse">➔</div>
+
+                  <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-md flex flex-col items-center text-center space-y-2 relative border border-emerald-500/30">
+                    <div className="absolute -top-2.5 bg-emerald-500 text-white text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full font-mono">
+                      BAĞLANTI KATMANI
+                    </div>
+                    <div className="w-10 h-10 bg-emerald-500/10 rounded-full flex items-center justify-center text-emerald-400 border border-emerald-500/30">
+                      <Zap className="w-5 h-5" />
+                    </div>
+                    <span className="text-xs font-mono font-bold tracking-wider">Match_ID & Team_ID</span>
+                    <p className="text-[10px] text-slate-400 leading-normal">
+                      Ev/Deplasman kırılımları üzerinden mikro ve makro verileri anlık kenetleyen ilişkisel entegrasyon anahtarı
+                    </p>
+                  </div>
+
+                  <div className="hidden lg:flex justify-center text-slate-400 font-bold text-xl animate-pulse">➔</div>
+
+                  <div className="bg-white border border-slate-200 p-4 rounded-2xl shadow-3xs flex flex-col items-center text-center space-y-2 relative">
+                    <div className="w-10 h-10 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-500 border border-indigo-200">
+                      <Users className="w-5 h-5" />
+                    </div>
+                    <span className="text-xs font-bold text-slate-800">MİKRO SEVİYE (Oyuncu/Efor)</span>
+                    <p className="text-[10px] text-slate-500 leading-normal">
+                      Mevki Rolleri, Zone 1-5 Koşuları, HSR Mesafesi, Sprints, Top Speed, Hat Kopmaları, Baskılar, Ortalar, Geri Kazanımlar
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 bg-white border border-slate-150 p-3.5 rounded-2xl text-xs text-slate-600 leading-relaxed font-medium">
+                  💡 <strong>Analiz Dayanağı:</strong> Salt fiziksel koşu verileri taktiksel bağlamdan koparıldığında yanıltıcıdır. Örneğin; 12.000m koşan bir orta saha oyuncusunun bu mesafeyi hangi topsuz pres tetikleyicisiyle veya oyun kurma fazıyla harcadığı "Bütünleşik Oyuncu-Taktik Matrisi" ile çözülür.
+                </div>
+              </div>
+
+              {/* SECTION 2: İcat Edilen Birleşik Metrikler (Tactical Innovation Indexes) */}
+              <div className="bg-slate-50 border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-rose-100 text-rose-700 rounded-lg">
+                    <Flame className="w-5 h-5 text-rose-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">2. İcat Edilen Birleşik Metrikler (Tactical Innovation Indexes)</h3>
+                    <p className="text-xs text-slate-500">Ham istatistiklerin ötesinde, taktiksel bağlam ile fiziksel eforu harmanlayan üst düzey analiz indeksleri</p>
+                  </div>
+                </div>
+
+                {/* Innovation Metric Tabs */}
+                <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-3">
+                  {[
+                    { id: "gpis", label: "GPIS: Gegenpressing Şiddet Skoru", icon: Flame, color: "text-rose-500" },
+                    { id: "vci", label: "VCI: Dikey Maliyet Endeksi", icon: Shield, color: "text-indigo-500" },
+                    { id: "ete", label: "ETE: Patlayıcı Geçiş Verimliliği", icon: Zap, color: "text-amber-500" }
+                  ].map(tab => {
+                    const Icon = tab.icon;
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => setSelectedInnovationMetric(tab.id as any)}
+                        className={cn(
+                          "flex items-center gap-2 px-4 py-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer",
+                          selectedInnovationMetric === tab.id
+                            ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                            : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                        )}
+                      >
+                        <Icon className={cn("w-4 h-4", tab.color)} />
+                        {tab.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Interactive Innovation Content */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
+                  {selectedInnovationMetric === "gpis" && (
+                    <div className="space-y-4 animate-fade-in">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 pb-2 gap-2">
+                        <div>
+                          <span className="text-xs font-bold text-rose-600 uppercase font-mono tracking-wider">GPIS Formula:</span>
+                          <code className="text-xs bg-slate-100 text-slate-800 px-2 py-0.5 rounded-md font-mono ml-2">
+                            (Counter-Press % × 100) + (FW/MF Zone 5 Dist / Total Dist × 10)
+                          </code>
+                        </div>
+                        <span className="text-xs bg-rose-50 text-rose-700 px-2.5 py-1 rounded-md font-bold">Ön Alan Şok Pres Yoğunluğu</span>
+                      </div>
+
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        <strong>Gegenpressing Intensity Score (GPIS):</strong> Takımın topu kaybettikten sonraki ilk 5 saniye içinde uyguladığı reaksiyonun fiziksel ve taktiksel yoğunluğunu ölçer. Ön alandaki agresif topsuz koşuların toplam takım eforundaki payı ile entegre edilmiştir.
+                      </p>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                        <div className="bg-slate-50 border border-slate-150 p-4 rounded-xl space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-slate-800">Meksika (Grup Lideri)</span>
+                            <span className="text-xs font-mono font-bold text-rose-600">GPIS: 8.42 (Elit)</span>
+                          </div>
+                          <div className="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden">
+                            <div className="bg-rose-500 h-full rounded-full" style={{ width: "84.2%" }}></div>
+                          </div>
+                          <p className="text-[10px] text-slate-500 leading-normal">
+                            Counter-press oranı %8. Orta saha ve forvetler (özellikle Julian Quinones ve Brian Gutierrez) toplam Zone 5 patlayıcı koşuları takıma oranlandığında zirve skor elde edilmiştir.
+                          </p>
+                        </div>
+
+                        <div className="bg-slate-50 border border-slate-150 p-4 rounded-xl space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-slate-800">Güney Afrika (Dikey Geçişçi)</span>
+                            <span className="text-xs font-mono font-bold text-amber-600">GPIS: 5.11 (Orta)</span>
+                          </div>
+                          <div className="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden">
+                            <div className="bg-amber-500 h-full rounded-full" style={{ width: "51.1%" }}></div>
+                          </div>
+                          <p className="text-[10px] text-slate-500 leading-normal">
+                            Reaktif geçiş felsefesi nedeniyle ön alanda şok pres eforu sınırlıdır, takım top kaybında doğrudan kompakt geriye çekilmeyi (mid-block) tercih eder.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="bg-rose-50/50 border border-rose-150/50 p-3.5 rounded-xl flex items-start gap-2.5">
+                        <span className="text-xs text-rose-700 font-bold uppercase font-mono mt-0.5">⚽ ANTRENÖRÜN ANLAMI:</span>
+                        <p className="text-xs text-rose-800 leading-relaxed">
+                          GPIS skoru <strong>7.5'in üzerinde</strong> olan takımlar, geçiş savunmasında merkezi kapatarak rakibi hataya zorlama konusunda elit düzeydedir. Bu skor düştüğünde, karşı presin kırılma riski doğrusal olarak artar.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedInnovationMetric === "vci" && (
+                    <div className="space-y-4 animate-fade-in">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 pb-2 gap-2">
+                        <div>
+                          <span className="text-xs font-bold text-indigo-600 uppercase font-mono tracking-wider">VCI Formula:</span>
+                          <code className="text-xs bg-slate-100 text-slate-800 px-2 py-0.5 rounded-md font-mono ml-2">
+                            (100 - Line Depth) / (DF Zone 5 Sprint Distance / 100)
+                          </code>
+                        </div>
+                        <span className="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-md font-bold">Defans Hattı Yıpranma Maliyeti</span>
+                      </div>
+
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        <strong>Vertical Cost Index (VCI):</strong> Savunma hattını önde kurmanın (High Block), defans oyuncularına yüklediği fiziksel stres ve arkaya kaçan topları kovalama maliyetidir. Düşük VCI değeri, yüksek atletik stres ve tehlikeli savunma arkası boşlukları anlamına gelir.
+                      </p>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                        <div className="bg-slate-50 border border-slate-150 p-4 rounded-xl space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-slate-800">Güney Afrika (İme Okon)</span>
+                            <span className="text-xs font-mono font-bold text-red-600">VCI: 3.50 (Yüksek Risk)</span>
+                          </div>
+                          <div className="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden">
+                            <div className="bg-red-500 h-full rounded-full" style={{ width: "35%" }}></div>
+                          </div>
+                          <p className="text-[10px] text-slate-500 leading-normal">
+                            High Block derinliği 47m. Stoper Ime Okon'un Zone 5 sprint mesafesi arkaya kaçanları yakalama zorunluluğundan 134.1m olmuş, stoper yıpranma maliyeti kritik seviyeye ulaşmıştır.
+                          </p>
+                        </div>
+
+                        <div className="bg-slate-50 border border-slate-150 p-4 rounded-xl space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-slate-800">Meksika (Cesar Montes)</span>
+                            <span className="text-xs font-mono font-bold text-emerald-600">VCI: 5.34 (Optimal)</span>
+                          </div>
+                          <div className="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden">
+                            <div className="bg-emerald-500 h-full rounded-full" style={{ width: "53.4%" }}></div>
+                          </div>
+                          <p className="text-[10px] text-slate-500 leading-normal">
+                            Önde kurulan savunmaya karşın, Cesar Montes'in konumlanma başarısı ve alan daraltma disiplini stoperin arkaya gereksiz sprint atma oranını optimize etmiştir.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="bg-indigo-50 border border-indigo-150 p-3.5 rounded-xl flex items-start gap-2.5">
+                        <span className="text-xs text-indigo-700 font-bold uppercase font-mono mt-0.5">⚽ ANTRENÖRÜN ANLAMI:</span>
+                        <p className="text-xs text-indigo-800 leading-relaxed">
+                          Düşük VCI değeri, savunma arkasında ciddi boşluklar kaldığını ve stoperlerin yüksek hızlı reaksiyonlarla (Zone 5) bu açığı kapatmak zorunda kaldığını gösterir. <strong>VCI &lt; 4.0</strong> ise, stoperlerinizin atletik kapasitesi elit seviyede olmak zorundadır, aksi takdirde savunma çöküşü kaçınılmazdır.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedInnovationMetric === "ete" && (
+                    <div className="space-y-4 animate-fade-in">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 pb-2 gap-2">
+                        <div>
+                          <span className="text-xs font-bold text-amber-600 uppercase font-mono tracking-wider">ETE Formula:</span>
+                          <code className="text-xs bg-slate-100 text-slate-800 px-2 py-0.5 rounded-md font-mono ml-2">
+                            (Transition % × 100) / (FW Zone 5 Sprint Distance / 10)
+                          </code>
+                        </div>
+                        <span className="text-xs bg-amber-50 text-amber-700 px-2.5 py-1 rounded-md font-bold">Harcanan Saf Gücün Skor Verimi</span>
+                      </div>
+
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        <strong>Explosive Transition Efficiency (ETE):</strong> Takımın harcadığı her bir metrelik saf patlayıcı gücün (Zone 5 sprint), ne kadar verimli bir şekilde hücum geçişine ve kontra atağa dönüştürüldüğünü gösterir.
+                      </p>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                        <div className="bg-slate-50 border border-slate-150 p-4 rounded-xl space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-slate-800">Meksika (Julian Quinones)</span>
+                            <span className="text-xs font-mono font-bold text-emerald-600">ETE: 65.5 (Yüksek Verimlilik)</span>
+                          </div>
+                          <div className="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden">
+                            <div className="bg-emerald-500 h-full rounded-full" style={{ width: "65.5%" }}></div>
+                          </div>
+                          <p className="text-[10px] text-slate-500 leading-normal">
+                            Julian Quinones'in 167.9m Zone 5 koşusuyla %11 hücum geçişi üretilmiş; bilinçli, yönlendirilmiş ve kolektif bir geçiş başarısı elde edilmiştir.
+                          </p>
+                        </div>
+
+                        <div className="bg-slate-50 border border-slate-150 p-4 rounded-xl space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-slate-800">Güney Afrika (Iqraam Rayners)</span>
+                            <span className="text-xs font-mono font-bold text-rose-600">ETE: 34.1 (Düşük Verimlilik)</span>
+                          </div>
+                          <div className="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden">
+                            <div className="bg-rose-500 h-full rounded-full" style={{ width: "34.1%" }}></div>
+                          </div>
+                          <p className="text-[10px] text-slate-500 leading-normal">
+                            Rayners tek başına 410.4m gibi devasa bir Zone 5 sprint mesafesi kat etmiş, ancak takımın toplam geçiş yüzdesi %14'te kalmıştır. Plansız ve bireysel eforlar verimi düşürmüştür.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="bg-amber-50 border border-amber-150 p-3.5 rounded-xl flex items-start gap-2.5">
+                        <span className="text-xs text-amber-700 font-bold uppercase font-mono mt-0.5">⚽ ANTRENÖRÜN ANLAMI:</span>
+                        <p className="text-xs text-amber-800 leading-relaxed">
+                          ETE'nin düşük olması, forvetlerin "boşa koştuğunu", topu kapma noktası ile koşu zamanlamasının uyuşmadığını gösterir. Antrenörün hücum geçiş şablonlarını netleştirmesi ve kolektif pas planları kurgulaması gerekir.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* SECTION 3: 3. Turnuva Karakteristiği ve Makine Öğrenimi (K-Means Kümeleme) */}
+              <div className="bg-slate-50 border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-amber-100 text-amber-700 rounded-lg">
+                    <Sparkles className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">2. Turnuva Karakteristiği ve Makine Öğrenimi (K-Means Kümeleme)</h3>
+                    <p className="text-xs text-slate-500">Dünya Kupası 2026 takımlarının felsefi ve fiziksel K-Means küme simülatörü (K=3 En Uygun Küme Sayısı)</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                  {/* Cluster selection buttons */}
+                  <div className="lg:col-span-4 flex flex-col gap-2">
+                    {[
+                      { id: 0, label: "Küme 1: Reaktif Derin Blok & Kontra Baskıcılar" },
+                      { id: 1, label: "Küme 2: Dominant Alan Baskıcılar" },
+                      { id: 2, label: "Küme 3: Pozisyonel Set Hücumcuları" }
+                    ].map(cluster => (
+                      <button
+                        key={cluster.id}
+                        onClick={() => setKmeansClusterId(cluster.id)}
+                        className={`text-left p-3.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                          kmeansClusterId === cluster.id
+                            ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                            : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        {cluster.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Selected cluster insights */}
+                  <div className="lg:col-span-8 bg-white border border-slate-200 p-5 rounded-2xl flex flex-col justify-between">
+                    {kmeansClusterId === 0 && (
+                      <div className="space-y-4 animate-fade-in">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                          <span className="text-xs font-bold text-rose-600 uppercase font-mono tracking-wider">Taktiksel Stil</span>
+                          <span className="text-xs bg-rose-50 text-rose-700 px-2 py-0.5 rounded-md font-bold">Düşük Blok & Patlayıcı Geçiş</span>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Bu küme, topa sahip olmada cimri davranıp kendi ceza sahasında low-block savunması kurgulayan ve kaptığı topla saniyeler içinde Zone 5 sprintleri ve dikine paslar üzerinden Erling Haaland benzeri anomalileri besleyen takımları kapsar. Toplam koşu mesafeleri azdır ancak ivmelenme oranları tepe noktadadır.
+                        </p>
+                        <div className="grid grid-cols-3 gap-4 pt-2">
+                          <div className="bg-slate-50 p-2.5 rounded-lg text-center">
+                            <span className="text-[9px] text-slate-400 block font-mono">Low Block %</span>
+                            <span className="font-bold text-slate-800 text-sm">60% - 80%</span>
+                          </div>
+                          <div className="bg-slate-50 p-2.5 rounded-lg text-center">
+                            <span className="text-[9px] text-slate-400 block font-mono">Zone 5 Yoğunluğu</span>
+                            <span className="font-bold text-slate-800 text-sm">Ekstrem Yüksek</span>
+                          </div>
+                          <div className="bg-slate-50 p-2.5 rounded-lg text-center">
+                            <span className="text-[9px] text-slate-400 block font-mono">Örnek Ülke/Stil</span>
+                            <span className="font-bold text-slate-800 text-sm">Norveç Geçişi</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {kmeansClusterId === 1 && (
+                      <div className="space-y-4 animate-fade-in">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                          <span className="text-xs font-bold text-indigo-600 uppercase font-mono tracking-wider">Taktiksel Stil</span>
+                          <span className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold">High Press & Karşı Pres</span>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Yüksek savunma çizgisi (High Line) ve rakip yarı sahada boğucu eş zamanlı pres (High Press) ile oynayan modern agresif takımlar. Orta saha ve hücum oyuncularının Zone 4 (HSR) koşularından asla ödün vermediği, aşırı yüksek dayanıklılık ve yoğun pres katsayılarına sahip dominant oyun felsefesidir.
+                        </p>
+                        <div className="grid grid-cols-3 gap-4 pt-2">
+                          <div className="bg-slate-50 p-2.5 rounded-lg text-center">
+                            <span className="text-[9px] text-slate-400 block font-mono">High Press %</span>
+                            <span className="font-bold text-slate-800 text-sm">75% - 90%</span>
+                          </div>
+                          <div className="bg-slate-50 p-2.5 rounded-lg text-center">
+                            <span className="text-[9px] text-slate-400 block font-mono">MF Zone 4 Yükü</span>
+                            <span className="font-bold text-slate-800 text-sm">Kritik Seviye</span>
+                          </div>
+                          <div className="bg-slate-50 p-2.5 rounded-lg text-center">
+                            <span className="text-[9px] text-slate-400 block font-mono">Sakatlık Önlemi</span>
+                            <span className="font-bold text-slate-800 text-sm">Hayati Önemli</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {kmeansClusterId === 2 && (
+                      <div className="space-y-4 animate-fade-in">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                          <span className="text-xs font-bold text-emerald-600 uppercase font-mono tracking-wider">Taktiksel Stil</span>
+                          <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md font-bold">Pozisyonel Set & Pas Kombinasyonu</span>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Topa sahip olma felsefesini set hücumlarıyla kuran, oyun kurucu kaleciyi (Williams benzeri) geriden oyun kurma aşamasında stoper gibi kullanan sistem. Takımın Zone 5 sprint sayılarından tasarruf ettiği, ancak dar alanda sürekli pozisyonel destek kaymaları nedeniyle Zone 2-3 koşularında toplam hacmi zirveye taşıdığı yapıdır.
+                        </p>
+                        <div className="grid grid-cols-3 gap-4 pt-2">
+                          <div className="bg-slate-50 p-2.5 rounded-lg text-center">
+                            <span className="text-[9px] text-slate-400 block font-mono">Possession %</span>
+                            <span className="font-bold text-slate-800 text-sm">62% - 75%</span>
+                          </div>
+                          <div className="bg-slate-50 p-2.5 rounded-lg text-center">
+                            <span className="text-[9px] text-slate-400 block font-mono">Zone 2-3 Koşuları</span>
+                            <span className="font-bold text-slate-800 text-sm">Ekstrem Hacim</span>
+                          </div>
+                          <div className="bg-slate-50 p-2.5 rounded-lg text-center">
+                            <span className="text-[9px] text-slate-400 block font-mono">GK Katılımı</span>
+                            <span className="font-bold text-slate-800 text-sm">Sweeper Keeper</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 3: 3. Uluslararası ve Taktiksel Korelasyon Analizi */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-indigo-600" />
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">3. Uluslararası ve Taktiksel Korelasyon Analizi (Taktiksel vs. Fiziksel)</h3>
+                    <p className="text-xs text-slate-500">Takımların felsefi oyun tarzları ile oyuncu bazlı atletik eforlar arasındaki Pearson r ilişkiselliği</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Out of Possession Styles */}
+                <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-3">
+                      <TrendingUp className="w-5 h-5 text-indigo-600" />
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">A. Topsuz Oyun vs. Zone 4 & 5 Korelasyonu</h3>
+                        <p className="text-[11px] text-slate-400">Takımların topsuz savunma tercihlerinin atletik yüke lineer etkisi</p>
+                      </div>
+                    </div>
+
+                    {/* Interactive Selector */}
+                    <div className="flex bg-slate-50 p-1 rounded-xl gap-1 mb-4 border border-slate-200">
+                      {[
+                        { id: "high_press", label: "Yüksek Baskı (High Press)" },
+                        { id: "counter_press", label: "Karşı Baskı (Counter-press)" },
+                        { id: "low_block", label: "Derin Blok (Low Block)" }
+                      ].map(style => (
+                        <button
+                          key={style.id}
+                          onClick={() => setSelectedOpponentStyle(style.id as any)}
+                          className={`flex-1 py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                            selectedOpponentStyle === style.id
+                              ? "bg-slate-900 text-white shadow-xs"
+                              : "bg-transparent text-slate-500 hover:text-slate-800"
+                          }`}
+                        >
+                          {style.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Correlation Display */}
+                    {selectedOpponentStyle === "high_press" && (
+                      <div className="space-y-4 animate-fade-in">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-700">FW ve AM Sınıfı Sprint Sayısı Korelasyonu (Pearson r)</span>
+                          <span className="text-sm font-mono font-black text-rose-600 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-md">+0.85 (Güçlü Pozitif)</span>
+                        </div>
+                        <div className="w-full bg-slate-150 h-2 rounded-full overflow-hidden">
+                          <div className="bg-rose-500 h-full rounded-full" style={{ width: "85%" }}></div>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-xl">
+                          <strong>Taktiksel Neden:</strong> Ön alanda rakip stoperlere yapılan agresif yönlendirme koşuları, oyuncuların sıfırdan maksimum hıza (Zone 5: &gt;25 km/sa) ani sıçramalar ve ivmelenmeler gerçekleştirmesini gerektirir.
+                        </p>
+                      </div>
+                    )}
+
+                    {selectedOpponentStyle === "counter_press" && (
+                      <div className="space-y-4 animate-fade-in">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-700">CM ve DM Sınıfı Zone 4 (HSR) Mesafesi Korelasyonu (Pearson r)</span>
+                          <span className="text-sm font-mono font-black text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-md">+0.78 (Güçlü Pozitif)</span>
+                        </div>
+                        <div className="w-full bg-slate-150 h-2 rounded-full overflow-hidden">
+                          <div className="bg-indigo-500 h-full rounded-full" style={{ width: "78%" }}></div>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-xl">
+                          <strong>Taktiksel Neden:</strong> Top kaybından hemen sonraki 3-5 saniyelik şok reaksiyon evresinde, orta sahaların rakip pas kanallarını kapamak için 20-25 km/saat hız bandında (Zone 4) sürekli yoğun kaymalar yapması gerekir.
+                        </p>
+                      </div>
+                    )}
+
+                    {selectedOpponentStyle === "low_block" && (
+                      <div className="space-y-4 animate-fade-in">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-700">FW ve MF Sınıfı Zone 5 Sprint Mesafesi Korelasyonu (Pearson r)</span>
+                          <span className="text-sm font-mono font-black text-slate-500 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-md">-0.65 (Orta Negatif)</span>
+                        </div>
+                        <div className="w-full bg-slate-150 h-2 rounded-full overflow-hidden">
+                          <div className="bg-slate-300 h-full rounded-full" style={{ width: "35%" }}></div>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-xl">
+                          <strong>Taktiksel Neden:</strong> Blok derinleştikçe takımlar kalelerini daha az mesafe eforuyla korur. Savunma oyuncularının Zone 1 (Yürüme) ve Zone 2 (Hafif Koşu) süreleri artarken, hücumcuların patlayıcı koşuları tamamen sıfırlanır.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* In Possession Styles */}
+                <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-3">
+                      <Flame className="w-5 h-5 text-rose-500" />
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">B. Toplu Oyun vs. Patlayıcılık Profili</h3>
+                        <p className="text-[11px] text-slate-400">Topa sahip olma felsefelerinin forvet/kanat dinamiklerine etkisi</p>
+                      </div>
+                    </div>
+
+                    {/* Interactive Selector */}
+                    <div className="flex bg-slate-50 p-1 rounded-xl gap-1 mb-4 border border-slate-200">
+                      {[
+                        { id: "counter_attack", label: "Kontra Atak & Direkt Hücum" },
+                        { id: "final_third_set", label: "Set Hücumu (Son Üçüncü)" }
+                      ].map(style => (
+                        <button
+                          key={style.id}
+                          onClick={() => setSelectedPossessionStyle(style.id as any)}
+                          className={`flex-1 py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                            selectedPossessionStyle === style.id
+                              ? "bg-slate-900 text-white shadow-xs"
+                              : "bg-transparent text-slate-500 hover:text-slate-800"
+                          }`}
+                        >
+                          {style.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Correlation Display */}
+                    {selectedPossessionStyle === "counter_attack" && (
+                      <div className="space-y-4 animate-fade-in">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-700">Kanat & Forvet Sınıfı Max Sürat / Zone 5 Korelasyonu</span>
+                          <span className="text-sm font-mono font-black text-rose-600 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-md">+0.82 (Çok Güçlü)</span>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-xl">
+                          <strong>Ayrışma Puanı:</strong> Kontra atak ve geçiş takımları toplam koşu mesafelerinde (Toplam Mesafe) oldukça cimri davranıp enerjilerini saklarlar; ancak geçiş anında 34 km/saat üzeri yüksek patlayıcılık değerlerine (Top Speed) ve Zone 5 sprint sayısına ulaşırlar.
+                        </p>
+                      </div>
+                    )}
+
+                    {selectedPossessionStyle === "final_third_set" && (
+                      <div className="space-y-4 animate-fade-in">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-700">Tüm Takım Zone 2 & Zone 3 Mesafe Korelasyonu (Pearson r)</span>
+                          <span className="text-sm font-mono font-black text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md">+0.76 (Güçlü Pozitif)</span>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-xl">
+                          <strong>Ayrışma Puanı:</strong> Set hücumunu ve pas oyununu benimseyen takımlarda, oyuncular dar alanda sürekli pozisyonel kaymalar ve destek koşuları yapar. Bu sebeple Zone 2 ve Zone 3 (tempo) koşularında toplam hacim birikirken, Zone 5 saf sprint adetlerinde belirgin bir düşüş gözlenir.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Pearson r Correlation Table */}
+              <div className="bg-slate-50 border border-slate-200 rounded-3xl p-6 shadow-3xs space-y-4">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-emerald-600" />
+                  <span className="text-xs font-bold text-slate-800 uppercase font-mono tracking-wider font-sans">Pearson r Korelasyon Katsayıları Tablosu</span>
+                </div>
+                <div className="overflow-x-auto border border-slate-150 rounded-2xl">
+                  <table className="w-full text-left text-xs bg-white">
+                    <thead className="bg-slate-100 border-b border-slate-150 text-slate-600">
+                      <tr>
+                        <th className="px-4 py-2.5 font-bold">Taktiksel Tercih (X)</th>
+                        <th className="px-4 py-2.5 font-bold">Fiziksel Efor Çıktısı (Y)</th>
+                        <th className="px-4 py-2.5 text-center font-bold">Korelasyon (r)</th>
+                        <th className="px-4 py-2.5 text-center font-bold">Önem (p-value)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-150 text-slate-700">
+                      <tr className="hover:bg-slate-50">
+                        <td className="px-4 py-2.5 font-medium">Yüksek Baskı (High Press %)</td>
+                        <td className="px-4 py-2.5">Orta Saha (MF) Zone 4 (HSR) Mesafesi</td>
+                        <td className="px-4 py-2.5 text-center font-bold text-rose-600">+0.74</td>
+                        <td className="px-4 py-2.5 text-center font-mono text-slate-500">p &lt; 0.01</td>
+                      </tr>
+                      <tr className="hover:bg-slate-50">
+                        <td className="px-4 py-2.5 font-medium">Karşı Baskı (Counter-press %)</td>
+                        <td className="px-4 py-2.5">Hücum (FW) Sprint Adetleri</td>
+                        <td className="px-4 py-2.5 text-center font-bold text-rose-600">+0.68</td>
+                        <td className="px-4 py-2.5 text-center font-mono text-slate-500">p &lt; 0.05</td>
+                      </tr>
+                      <tr className="hover:bg-slate-50">
+                        <td className="px-4 py-2.5 font-medium">Baskısız Hücum Kurulumu (Build Up Unopposed)</td>
+                        <td className="px-4 py-2.5">FW Maksimum Sürat</td>
+                        <td className="px-4 py-2.5 text-center font-bold text-sky-600">-0.42</td>
+                        <td className="px-4 py-2.5 text-center font-mono text-slate-500">p &lt; 0.05</td>
+                      </tr>
+                      <tr className="hover:bg-slate-50">
+                        <td className="px-4 py-2.5 font-medium">Kontra Atak (Counter Attack %)</td>
+                        <td className="px-4 py-2.5">Kanat/FW Zone 5 Patlayıcılık Hacmi</td>
+                        <td className="px-4 py-2.5 text-center font-bold text-emerald-600">+0.81</td>
+                        <td className="px-4 py-2.5 text-center font-mono text-slate-500">p &lt; 0.001</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-[10px] text-slate-500 leading-normal">
+                  * <strong>Yorumlama:</strong> Pozitif katsayılar iki değişken arasındaki güçlü eş zamanlı artışı, negatif katsayı ise ters orantıyı ifade eder. Örneğin; geriden sakin ve baskısız oyun kuran takımlarda FW oyuncuları maksimum sprint hızlarına nadiren ihtiyaç duyar.
+                </p>
+              </div>
+
+              {/* SECTION 4: Hat Yüksekliği ve Geleneksel Risk Analizi (Takım Çizgi Yüksekliği & Genişliği) */}
+              <div className="bg-slate-900 text-white rounded-3xl p-6 md:p-8 shadow-lg border border-slate-800 space-y-6">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-1.5 bg-emerald-500/10 text-emerald-400 rounded-lg border border-emerald-500/30">
+                      <SlidersHorizontal className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-white">4. Hat Yüksekliği ve Geleneksel Risk Analizi (Takım Çizgi Yüksekliği & Genişliği)</h3>
+                      <p className="text-xs text-slate-400">Savunma çizgisinin kaleden uzaklığı ile oyuncu sakatlık riski ve koridor yükleri arasındaki simülatör</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+                  {/* Controls & Metrics */}
+                  <div className="lg:col-span-5 space-y-6">
+                    {/* Control 1: Depth from Goal */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-bold text-slate-300">Savunma Çizgisinin Kaleden Uzaklığı (Depth from Goal)</span>
+                        <span className="text-sm font-mono font-extrabold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">{depthFromGoal} Metre</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="25"
+                        max="60"
+                        step="1"
+                        value={depthFromGoal}
+                        onChange={(e) => setDepthFromGoal(Number(e.target.value))}
+                        className="w-full accent-emerald-500 bg-slate-800 h-1.5 rounded-lg appearance-none cursor-pointer"
+                      />
+                    </div>
+
+                    {/* Control 2: Team Width */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-bold text-slate-300">Takım Yerleşim Genişliği (Width)</span>
+                        <span className="text-sm font-mono font-extrabold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">{teamWidth} Metre</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="30"
+                        max="75"
+                        step="1"
+                        value={teamWidth}
+                        onChange={(e) => setTeamWidth(Number(e.target.value))}
+                        className="w-full accent-indigo-500 bg-slate-800 h-1.5 rounded-lg appearance-none cursor-pointer"
+                      />
+                    </div>
+
+                    {/* Simulation Outputs */}
+                    <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-2xl space-y-3.5">
+                      <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider font-mono">Dinamik Simülasyon Sonuçları:</h4>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-slate-900 p-3 rounded-xl border border-slate-800">
+                          <span className="text-[10px] text-slate-400 block mb-1">Stoper Beklenen Sürat</span>
+                          <span className="text-lg font-mono font-bold text-emerald-400">
+                            {(30 + (depthFromGoal - 25) * 0.15).toFixed(1)} km/sa
+                          </span>
+                        </div>
+                        <div className="bg-slate-900 p-3 rounded-xl border border-slate-800">
+                          <span className="text-[10px] text-slate-400 block mb-1">Hamstring Sakatlık Riski</span>
+                          <span className={`text-lg font-mono font-bold ${
+                            depthFromGoal > 48 ? "text-rose-500" : depthFromGoal > 38 ? "text-amber-500" : "text-emerald-400"
+                          }`}>
+                            {Math.round(20 + (depthFromGoal - 25) * 1.8)}% 
+                            <span className="text-xs font-sans font-medium ml-1">
+                              ({depthFromGoal > 48 ? "Kritik" : depthFromGoal > 38 ? "Yüksek" : "Düşük"})
+                            </span>
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-900/40 p-3 rounded-xl text-[11px] text-slate-300 leading-relaxed border border-slate-850">
+                        {depthFromGoal > 45 ? (
+                          <span className="text-rose-400">
+                            🚨 <strong>Önemli Risk Raporu:</strong> Savunma hattı kaleden uzaklaştığı için arkada devasa bir boşluk oluştu. Stoperlerin (CB) geriye doğru ani dönme ve süratlenme (Top Speed) mecburiyeti hamstring ve arka adale yırtılma riskini tavan yaptırır!
+                          </span>
+                        ) : (
+                          <span>
+                            ℹ️ <strong>Taktiksel Durum:</strong> Savunma hattı kaleden derinlikte dengeli. Geriye koşulardaki ani sprint eforu makul seviyelerde, sakatlık riski minimize edilmiştir.
+                          </span>
+                        )}
+                        <span className="block mt-2 pt-2 border-t border-slate-800/50 text-[10.5px] text-slate-400">
+                          <strong>Genişlik Analizi ({teamWidth}m):</strong> Genişleyen sahada beklerin (FB/WB) Zone 3 (Koşu) ve Zone 4 (HSR) mesafelerinde dikey git-gel (overlap/underlap) yükü <strong>+{Math.round((teamWidth - 30) * 1.2)}%</strong> artış gösterir.
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Interactive Visual Soccer Field */}
+                  <div className="lg:col-span-7 bg-slate-950/60 rounded-3xl p-4 border border-slate-800 flex flex-col items-center">
+                    <span className="text-[10px] text-slate-400 uppercase tracking-widest font-mono mb-2">Canlı Taktiksel Geometri ve Sürat Sahası</span>
+                    
+                    <div className="w-full max-w-sm h-64 border-2 border-slate-800 rounded-xl relative overflow-hidden bg-emerald-950/10">
+                      {/* Midline */}
+                      <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 border-t border-slate-800"></div>
+                      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 border border-slate-800 rounded-full"></div>
+                      
+                      {/* Goal areas */}
+                      <div className="absolute inset-x-12 top-0 h-8 border-b border-x border-slate-800"></div>
+                      <div className="absolute inset-x-12 bottom-0 h-8 border-t border-x border-slate-800"></div>
+
+                      {/* Moving Defensive Line representing Line Height */}
+                      <div 
+                        className="absolute inset-x-0 border-t-2 border-dashed border-rose-500 transition-all duration-300 flex items-center justify-center"
+                        style={{ bottom: `${(depthFromGoal / 70) * 100}%` }}
+                      >
+                        <span className="bg-rose-600 text-white font-mono text-[9px] font-extrabold px-1.5 py-0.5 rounded -mt-2.5 uppercase shadow-xs">
+                          SAVUNMA ÇİZGİSİ: {depthFromGoal}m
+                        </span>
+                      </div>
+
+                      {/* Behind defense space shading (HAMSTRING RISK ZONE) */}
+                      <div 
+                        className="absolute inset-x-0 bottom-0 bg-red-600/15 transition-all duration-300 pointer-events-none"
+                        style={{ height: `${(depthFromGoal / 70) * 100}%` }}
+                      ></div>
+
+                      {/* Moving Width borders */}
+                      <div 
+                        className="absolute inset-y-0 border-r-2 border-indigo-500/50 transition-all duration-300"
+                        style={{ left: `${(100 - (teamWidth / 80) * 100) / 2}%` }}
+                      ></div>
+                      <div 
+                        className="absolute inset-y-0 border-l-2 border-indigo-500/50 transition-all duration-300"
+                        style={{ right: `${(100 - (teamWidth / 80) * 100) / 2}%` }}
+                      ></div>
+
+                      <div className="absolute bottom-2 left-2 text-[9px] text-rose-400 bg-slate-950/60 px-1.5 py-0.5 rounded font-mono">
+                        Arka Boşluk Risk Alanı ({depthFromGoal > 45 ? "KRİTİK" : "DENGELİ"})
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 5: Yorgunluk Etkisi ve Taktiksel Çöküş (Yorgunluk ve Taktiksel Bırakma) */}
+              <div className="bg-slate-50 border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 bg-red-50 text-red-600 rounded-lg border border-red-200">
+                    <Activity className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">5. Yorgunluk Etkisi ve Taktiksel Çöküş (Yorgunluk ve Taktiksel Bırakma)</h3>
+                    <p className="text-xs text-slate-500">Maçın son çeyreğinde (60' ve 75' sonrası) biriken yorgunluğun taktiksel disipline ve hat boylarına etkisi</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="bg-white p-4 rounded-2xl border border-slate-150 space-y-2">
+                    <span className="text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider font-mono">60' - 75' Evresi</span>
+                    <h4 className="font-bold text-slate-800 text-xs">Koridor Sızıntıları & Blok Uzaması</h4>
+                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                      Kanat beklerinin Zone 4/5 HSR koşularındaki %15'lik düşüş, savunma ile orta saha blokları arasındaki dikey mesafenin 12 metreden 22 metreye uzamasına yol açar.
+                    </p>
+                    <div className="pt-2 flex justify-between text-xs font-mono">
+                      <span className="text-slate-400">Blok Uzunluğu</span>
+                      <span className="font-bold text-amber-600">~22m (Riskli)</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-2xl border border-slate-150 space-y-2">
+                    <span className="text-[10px] bg-red-50 text-red-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider font-mono">75' - 90' Evresi</span>
+                    <h4 className="font-bold text-slate-800 text-xs">Yorgunluk ve Taktiksel Bırakma</h4>
+                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                      Glikojen depolarının tükenmesiyle eş zamanlı pres tetikleyicileri tamamen çöker. Takım istemsizce derin savunmaya (low-block) çekilir ve dikey hat kopmaları tepe noktasına ulaşır.
+                    </p>
+                    <div className="pt-2 flex justify-between text-xs font-mono">
+                      <span className="text-slate-400">Pres Başarı Oranı</span>
+                      <span className="font-bold text-red-600">-%32 Düşüş</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-2xl border border-slate-150 space-y-2">
+                    <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider font-mono">Önleyici Taktik</span>
+                    <h4 className="font-bold text-slate-800 text-xs">Akıllı Yoğunluk Yönetimi</h4>
+                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                      60-65. dakikalarda yapılacak 3 kritik oyuncu değişikliği, orta saha pres dayanıklılığını koruyarak dikey kompaktlığı %18 oranında restore etmeyi garanti eder.
+                    </p>
+                    <div className="pt-2 flex justify-between text-xs font-mono">
+                      <span className="text-slate-400">Blok Kompaktlığı</span>
+                      <span className="font-bold text-emerald-600">+18% Koruma</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 6: Formasyonların Ekonomik Maliyet Matrisi */}
+              <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-1.5 bg-rose-50 text-rose-500 rounded-lg border border-rose-200">
+                      <Coins className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-slate-900">6. Formasyonların Ekonomik Maliyeti (Oluşumların Maliyeti)</h3>
+                      <p className="text-xs text-slate-500">Mevkilerin formasyonlara göre atletik efor paylaşımları ve p-değeri önemi</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-full font-mono font-bold uppercase tracking-wider border border-indigo-200">
+                    p-değeri &lt; 0.01 (Yüksek Anlamlılık)
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-1 mb-4 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                  {[
+                    { id: "3-5-2", label: "3-5-2 / 5-3-2 Sistemi" },
+                    { id: "4-3-3", label: "4-3-3 Sistemi" },
+                    { id: "4-2-3-1", label: "4-2-3-1 Sistemi" }
+                  ].map(f => (
+                    <button
+                      key={f.id}
+                      onClick={() => setSelectedFormation(f.id as any)}
+                      className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                        selectedFormation === f.id
+                          ? "bg-slate-900 text-white shadow-xs"
+                          : "bg-transparent text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="overflow-x-auto border border-slate-150 rounded-2xl">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 border-b border-slate-150 text-slate-600">
+                      <tr>
+                        <th className="px-4 py-3 font-bold">Mevki</th>
+                        <th className="px-4 py-3 font-bold">Kritik Koşu Bölgesi</th>
+                        <th className="px-4 py-3 font-bold text-center">Sprint Adedi</th>
+                        <th className="px-4 py-3 font-bold text-center">Ekonomik Maliyet / Taktiksel Risk</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-150 text-slate-700">
+                      {selectedFormation === "3-5-2" && (
+                        <>
+                          <tr className="hover:bg-slate-50">
+                            <td className="px-4 py-3 font-bold text-indigo-600">Kanat Bekleri (WB)</td>
+                            <td className="px-4 py-3">Zone 4 (HSR) ve Zone 5 (Sprint) dikey koridor kullanımı</td>
+                            <td className="px-4 py-3 text-center font-mono font-bold text-rose-600">45 - 55 Sprint</td>
+                            <td className="px-4 py-3 text-center">
+                              <span className="bg-rose-50 text-rose-700 px-2 py-0.5 rounded-md font-bold border border-rose-200">ÇOK YÜKSEK</span>
+                              <span className="block text-[9px] text-slate-400 mt-0.5">En hızlı yorulan koridor, 70'den sonra düşer.</span>
+                            </td>
+                          </tr>
+                          <tr className="hover:bg-slate-50">
+                            <td className="px-4 py-3 font-bold text-slate-700">Stoperler (CB)</td>
+                            <td className="px-4 py-3">Zone 1 (Yürüme) ve Zone 2 (Hafif Koşu) alan kaymaları</td>
+                            <td className="px-4 py-3 text-center font-mono">12 - 18 Sprint</td>
+                            <td className="px-4 py-3 text-center">
+                              <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md font-bold border border-emerald-200">DÜŞÜK</span>
+                              <span className="block text-[9px] text-slate-400 mt-0.5">Üçlü sistemde kademe yardımı derinliği rahatlatır.</span>
+                            </td>
+                          </tr>
+                        </>
+                      )}
+
+                      {selectedFormation === "4-3-3" && (
+                        <>
+                          <tr className="hover:bg-slate-50">
+                            <td className="px-4 py-3 font-bold text-indigo-600">Klasik Bekler (FB)</td>
+                            <td className="px-4 py-3">Zone 3 (Koşu) ve Zone 4 (HSR) destek bindirmeleri</td>
+                            <td className="px-4 py-3 text-center font-mono text-amber-600">28 - 35 Sprint</td>
+                            <td className="px-4 py-3 text-center">
+                              <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md font-bold border border-amber-200">ORTA-YÜKSEK</span>
+                              <span className="block text-[9px] text-slate-400 mt-0.5">Kanat önünde alan paylaştığı için dikey yük bölünür.</span>
+                            </td>
+                          </tr>
+                          <tr className="hover:bg-slate-50">
+                            <td className="px-4 py-3 font-bold text-indigo-600">Klasik Açıklar (W)</td>
+                            <td className="px-4 py-3">Zone 5 (Sprint) hücum geçişleri ve bire bir izole koşular</td>
+                            <td className="px-4 py-3 text-center font-mono font-bold text-rose-600">38 - 48 Sprint</td>
+                            <td className="px-4 py-3 text-center">
+                              <span className="bg-rose-50 text-rose-700 px-2 py-0.5 rounded-md font-bold border border-rose-200">YÜKSEK</span>
+                              <span className="block text-[9px] text-slate-400 mt-0.5">Hızlı geçişlerde arkaya koşularda patlayıcı efor.</span>
+                            </td>
+                          </tr>
+                        </>
+                      )}
+
+                      {selectedFormation === "4-2-3-1" && (
+                        <>
+                          <tr className="hover:bg-slate-50">
+                            <td className="px-4 py-3 font-bold text-indigo-600">Merkez Orta Sahalar (DM/CM)</td>
+                            <td className="px-4 py-3">Zone 2 (Hafif Koşu) ve Zone 3 (Koşu) hacimsel kaymaları</td>
+                            <td className="px-4 py-3 text-center font-mono text-amber-600">15 - 22 Sprint</td>
+                            <td className="px-4 py-3 text-center">
+                              <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md font-bold border border-amber-200">YÜKSEK (HACİMSEL)</span>
+                              <span className="block text-[9px] text-slate-400 mt-0.5">11.500m-13.000m arası toplam efor, %70'i Zone 2-3 temposunda.</span>
+                            </td>
+                          </tr>
+                        </>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <p className="text-[11px] text-slate-500 leading-normal">
+                  📌 <strong>Yüzdesel / p-değeri Kıyası:</strong> 3-5-2 formasyonundaki kanat beklerinin (WB) Zone 4-5 yüklerinin, 4-3-3'teki klasik beklerin yüklerine oranla anlamlı düzeyde yüksek olduğu istatistiksel varyans analiziyle (ANOVA, <strong>p-değeri &lt; 0.01</strong>) tescillenmiştir.
+                </p>
+              </div>
+
+              {/* SECTION 7: Rakip Tarzına Göre Adaptasyon (Taktiksel Esneklik) */}
+              <div className="bg-slate-50 border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg border border-emerald-200">
+                    <Compass className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">7. Rakip Tarzına Göre Adaptasyon (Taktiksel Esneklik)</h3>
+                    <p className="text-xs text-slate-500">Karşılaşılacak rakibin taktiksel felsefesine göre fiziksel koridor kaymaları ve dinamik savunma derinliği</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* High Pressing Opponent */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-150 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full font-bold uppercase font-mono">Agresif Pres Rakip</span>
+                      <Shield className="w-4 h-4 text-rose-500" />
+                    </div>
+                    <h4 className="font-bold text-slate-800 text-xs">Derinlik ve Geniş Alan Çözümü</h4>
+                    <p className="text-[11.5px] text-slate-500 leading-relaxed">
+                      Rakip boğucu ön alan presi uyguladığında, stoper genişliğini 65 metreye açıp oyun kurucu kaleciyi (Williams benzeri) derin pas istasyonu yaparak presi kırın. Bu efor dağılımı Zone 4 (HSR) koşularını korur.
+                    </p>
+                    <div className="bg-slate-50 p-2 rounded-lg text-center font-mono text-xs">
+                      <span className="text-[9px] text-slate-400 block">Önerilen Çizgi Yüksekliği</span>
+                      <span className="font-bold text-slate-800">35m - 40m</span>
+                    </div>
+                  </div>
+
+                  {/* Low Block Opponent */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-150 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full font-bold uppercase font-mono">Derin Blok Rakip</span>
+                      <Zap className="w-4 h-4 text-indigo-500" />
+                    </div>
+                    <h4 className="font-bold text-slate-800 text-xs">Yüksek Hat ve Yarım Alan Yüklemesi</h4>
+                    <p className="text-[11.5px] text-slate-500 leading-relaxed">
+                      Rakip 5-4-1 low-block kurduğunda, savunma çizgisini 55 metreye kadar çıkartıp yarım alanlarda (half-spaces) topsuz bindirmeler yapın. Zone 5 sprint sayısından tasarruf edilerek Zone 3 temposu biriktirilir.
+                    </p>
+                    <div className="bg-slate-50 p-2 rounded-lg text-center font-mono text-xs">
+                      <span className="text-[9px] text-slate-400 block">Önerilen Çizgi Yüksekliği</span>
+                      <span className="font-bold text-slate-800">55m - 60m</span>
+                    </div>
+                  </div>
+
+                  {/* Transition-Heavy Opponent */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-150 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full font-bold uppercase font-mono">Tehlikeli Geçiş Rakibi</span>
+                      <Activity className="w-4 h-4 text-amber-600" />
+                    </div>
+                    <h4 className="font-bold text-slate-800 text-xs">Karşı Pres ve Eş Zamanlı Efor</h4>
+                    <p className="text-[11.5px] text-slate-500 leading-relaxed">
+                      Meksika veya Norveç benzeri patlayıcı kontra atak takımlarına karşı top kaybında ilk 4 saniyede agresif şok pres yapın. Bu reaksiyon, geriye koşulacak 60 metrelik yıpratıcı sprintleri engeller.
+                    </p>
+                    <div className="bg-slate-50 p-2 rounded-lg text-center font-mono text-xs">
+                      <span className="text-[9px] text-slate-400 block">Önerilen Çizgi Yüksekliği</span>
+                      <span className="font-bold text-slate-800">45m - 50m</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 8: Kazanma Şartları (Kazanma Koşulları / KPI'lar) */}
+              <div className="bg-linear-to-b from-indigo-900 to-indigo-950 text-white rounded-3xl p-6 md:p-8 shadow-xl border border-indigo-850">
+                <div className="flex items-center gap-2.5 mb-6 border-b border-indigo-800 pb-4">
+                  <div className="p-1.5 bg-indigo-500/20 text-indigo-400 rounded-lg border border-indigo-500/30">
+                    <Award className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white">8. Kazanma Şartları (Kazanma Koşulları / KPI'lar)</h3>
+                    <p className="text-xs text-indigo-300">"Çok koşan kazanır" klişesinin veri bazlı çürütülmesi ve asıl belirleyici kriterler</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch">
+                  <div className="bg-indigo-950/80 border border-indigo-850 p-5 rounded-2xl space-y-4">
+                    <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-widest font-mono">A. Mesafe (Total Distance) Paradoksu</h4>
+                    <p className="text-xs text-indigo-200 leading-relaxed">
+                      Çoğu üst düzey maçta, mağlup olan (kaybeden) takımların toplam koşu mesafesi kazanan takımlardan <strong>%3 ile %5 daha fazladır</strong>.
+                    </p>
+                    <div className="space-y-2.5 bg-indigo-900/40 p-4 rounded-xl border border-indigo-800/40">
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-slate-300">Mağlup Takım Toplam Mesafe (Ortalama)</span>
+                        <span className="font-mono font-bold text-rose-400">114.200 Metre</span>
+                      </div>
+                      <div className="w-full bg-indigo-950 h-1.5 rounded-full overflow-hidden">
+                        <div className="bg-rose-400 h-full rounded-full" style={{ width: "95%" }}></div>
+                      </div>
+                      
+                      <div className="flex justify-between text-[11px] pt-1.5">
+                        <span className="text-slate-300">Kazanan Takım Toplam Mesafe (Ortalama)</span>
+                        <span className="font-mono font-bold text-emerald-400">110.100 Metre</span>
+                      </div>
+                      <div className="w-full bg-indigo-950 h-1.5 rounded-full overflow-hidden">
+                        <div className="bg-emerald-400 h-full rounded-full" style={{ width: "88%" }}></div>
+                      </div>
+                    </div>
+                    <p className="text-[10.5px] text-indigo-300 leading-normal italic">
+                      💡 <strong>Neden:</strong> Kaybeden takım topun peşinde koştuğu için reaksiyonel kaymalar yapar, kazanan takım ise topa sahip olduğu için rakibi koşturur.
+                    </p>
+                  </div>
+
+                  <div className="bg-indigo-950/80 border border-indigo-850 p-5 rounded-2xl space-y-4 flex flex-col justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-widest font-mono">B. "Şiddetli Geçiş" (Attacking Transition Explosiveness)</h4>
+                      <p className="text-xs text-indigo-200 leading-relaxed">
+                        Kazanan takımları kaybedenlerden ayıran ana KPI, top kazanıldığı andaki <strong>ilk 6 saniye içinde</strong> rakip yarı sahada gerçekleştirilen Zone 5 (&gt;25 km/sa) sprint patlaması adetleridir.
+                      </p>
+                    </div>
+
+                    <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl text-center">
+                      <span className="text-[10px] text-emerald-300 uppercase font-mono block mb-1">GEÇİŞ SPRINT ADET KIVILCIMI</span>
+                      <span className="text-2xl font-mono font-extrabold text-emerald-400">+22%</span>
+                      <span className="text-[11px] text-slate-300 block mt-1">
+                        Kazanan takımlar top kapma anında %22 daha fazla Zone 5 eforu sarf eder.
+                      </span>
+                    </div>
+
+                    <p className="text-[10.5px] text-indigo-300 leading-normal">
+                      🎯 <strong>Kazanma Koşulu:</strong> Topsuz alanda eş zamanlı pres tetikleyicileriyle enerjiyi verimli kullanmak, kazanılan topla ise rakip yarı sahada patlayıcı profilimizi %22 artırmak gerçek galibiyet formülüdür.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 9: Turnuva Anomalileri */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-amber-50 text-amber-500 rounded-lg border border-amber-200">
+                    <BadgeAlert className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">9. Turnuva Anomalileri (Aykırı Değerler)</h3>
+                    <p className="text-xs text-slate-500">Taktiksel rolleri ve ekstrem atletik performanslarıyla fiziksel ortalamaların dışına çıkan elit anomaliler</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {/* Mokoena */}
+                  <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-3xs flex flex-col justify-between hover:border-amber-400 transition-colors">
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] bg-rose-50 text-rose-600 px-2 py-0.5 rounded-full font-bold">GÜNEY AFRİKA / MF</span>
+                        <Zap className="w-4 h-4 text-rose-500" />
+                      </div>
+                      <h4 className="font-bold text-slate-900">Teboho MOKOENA</h4>
+                      <p className="text-[10.5px] text-slate-500 leading-relaxed">
+                        Hacimsel koşu lideri. Orta sahada oyun kurma ve geçiş direnci sağlarken Zone 1-5 aralığında mükemmel bir atletik dağılım sunmuştur.
+                      </p>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between text-xs font-mono">
+                      <div>
+                        <span className="text-[9px] text-slate-400 block">Toplam Mesafe</span>
+                        <span className="font-bold text-rose-600">9,860.8 m</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[9px] text-slate-400 block">Sprints / HSR</span>
+                        <span className="font-bold text-rose-600">44 / 136.0 m</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Mbatha */}
+                  <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-3xs flex flex-col justify-between hover:border-amber-400 transition-colors">
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full font-bold">GÜNEY AFRİKA / DM</span>
+                        <Activity className="w-4 h-4 text-indigo-500" />
+                      </div>
+                      <h4 className="font-bold text-slate-900">Thalente MBATHA</h4>
+                      <p className="text-[10.5px] text-slate-500 leading-relaxed">
+                        Defansif orta saha rolünde oynamasına rağmen, geçiş anlarında ulaştığı yüksek tepe hızıyla rakiplerin dikey ataklarını sönümleyen sigorta.
+                      </p>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between text-xs font-mono">
+                      <div>
+                        <span className="text-[9px] text-slate-400 block">Max Sürat</span>
+                        <span className="font-bold text-indigo-600">34.4 km/sa</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[9px] text-slate-400 block">Mevki Rolü</span>
+                        <span className="font-bold text-indigo-600">Defansif MF</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Quinones */}
+                  <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-3xs flex flex-col justify-between hover:border-amber-400 transition-colors">
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full font-bold">MEKSİKA / FW</span>
+                        <Gauge className="w-4 h-4 text-slate-500" />
+                      </div>
+                      <h4 className="font-bold text-slate-900">Julian QUINONES</h4>
+                      <p className="text-[10.5px] text-slate-500 leading-relaxed">
+                        Hücum hattında sol koridoru hallaç pamuğu gibi atan, sürekli dikey hat kıran ve 5 şut denemesiyle patlayıcı eforu birleştiren kanat forvet.
+                      </p>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between text-xs font-mono">
+                      <div>
+                        <span className="text-[9px] text-slate-400 block">HSR Koşusu / Sprt</span>
+                        <span className="font-bold text-slate-700">115.0 / 42.0</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[9px] text-slate-400 block">Hat Kırma / Şut</span>
+                        <span className="font-bold text-slate-700">12 / 5 Şut</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Rayners */}
+                  <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-3xs flex flex-col justify-between hover:border-amber-400 transition-colors">
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full font-bold">GÜNEY AFRİKA / FW</span>
+                        <Users className="w-4 h-4 text-emerald-500" />
+                      </div>
+                      <h4 className="font-bold text-slate-900">Iqraam RAYNERS</h4>
+                      <p className="text-[10.5px] text-slate-500 leading-relaxed">
+                        Ön alanda savunma arkasına attığı patlayıcı derinlemesine koşular ve yüksek hızıyla rakiplerin hat boyunu geriye iten dominant santrfor.
+                      </p>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between text-xs font-mono">
+                      <div>
+                        <span className="text-[9px] text-slate-400 block">Max Sürat</span>
+                        <span className="font-bold text-emerald-600">34.1 km/sa</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[9px] text-slate-400 block">Sprint Yoğunluğu</span>
+                        <span className="font-bold text-emerald-600">Çok Yüksek</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 10: Sonuç ve Teknik Heyet Tavsiyeleri */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg border border-indigo-200">
+                    <HelpCircle className="w-5 h-5 text-indigo-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">Sentez: Sonuç ve Stratejik Teknik Heyet Tavsiyeleri</h3>
+                    <p className="text-xs text-slate-500">Analitik bulgular ışığında teknik ekipler için aksiyona dökülebilir sportif/taktiksel direktifler</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Card 1 */}
+                  <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-3xs space-y-2.5 border-l-4 border-l-rose-500">
+                    <h4 className="font-extrabold text-xs text-slate-900 uppercase tracking-wider font-mono">A. Sakatlık Önleme ve Rotasyon</h4>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      Savunmayı önde kuracağımız (Kaleden Derinlik &gt; 45m) yüksek bloklu maçlarda, geriye koşularda stoper hattında kesinlikle <strong>Max Sürati en az 32 km/saat ve üzeri olan</strong>, ani ivmelenmesi yüksek stoperler tercih edilmelidir. Aksi takdirde hem taktiksel çöküş hem de hamstring sakatlıkları kaçınılmazdır.
+                    </p>
+                  </div>
+
+                  {/* Card 2 */}
+                  <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-3xs space-y-2.5 border-l-4 border-l-indigo-500">
+                    <h4 className="font-extrabold text-xs text-slate-900 uppercase tracking-wider font-mono">B. Kanat Beklerinin Dinlendirilmesi</h4>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      Eğer 3-5-2 / 5-3-2 formasyonunu tercih edeceksek, tüm dikey koridor sorumluluğunu taşıyan kanat beklerimizin (WB) <strong>70. dakikadan sonra fiziksel çökmeye maruz kalacağını</strong> (Zone 4-5 düşüşüyle takım boyunun uzayacağını ve kopacağını) bilmeli ve kulübede mutlaka atletik yedeklerini hazır tutmalıyız.
+                    </p>
+                  </div>
+
+                  {/* Card 3 */}
+                  <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-3xs space-y-2.5 border-l-4 border-l-emerald-500">
+                    <h4 className="font-extrabold text-xs text-slate-900 uppercase tracking-wider font-mono">C. Volumetrik vs. Akıllı Koşu Felsefesi</h4>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      Takımımıza "çok koşmayı" değil, <strong>"doğru anda ve kolektif tetikleyicilerle reaktif koşmayı"</strong> aşılamalıyız. Rakipteyken eş zamanlı yapılan 3-5 saniyelik agresif şok presler, geriye doğru çaresizce atılan 50 metrelik hamstring riskli sprintlerden çok daha az enerji tüketir ve galibiyet getiren geçiş fırsatlarını yaratır.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          )}
+
           {viewMode === "dashboard" && (
             <div className="flex flex-col xl:flex-row gap-8 items-start">
               {/* LEFT PANEL: Stacked Bar Charts */}

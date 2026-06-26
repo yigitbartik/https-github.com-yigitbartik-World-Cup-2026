@@ -51,7 +51,6 @@ import MovementToReceiveVisualizer from "./components/MovementToReceiveVisualize
 import { PhysicalAnalysis } from "./components/PhysicalAnalysis";
 import DistributionAndComparison from "./components/DistributionAndComparison";
 import ComprehensiveTacticalReport from "./components/ComprehensiveTacticalReport";
-import { DataValidationView } from "./components/DataValidationView";
 
 const defaultTeamStats = {
   possession: 0,
@@ -333,23 +332,6 @@ function enrichMatchAndLineups(match: MatchReport): MatchReport {
     }
   });
 
-  // Data validation step: Compare 'Total Movements' sum with individual categories sum
-  if (match.movementToReceive && Array.isArray(match.movementToReceive.playerDetails)) {
-    match.movementToReceive.playerDetails.forEach((player: any) => {
-      const inFront = Number(player.inFront) || 0;
-      const inBetween = Number(player.inBetween) || 0;
-      const outToIn = Number(player.outToIn) || 0;
-      const inToOut = Number(player.inToOut) || 0;
-      const inBehind = Number(player.inBehind) || 0;
-      const total = player.total !== undefined ? Number(player.total) : 0;
-
-      const sumCategories = inFront + inBetween + outToIn + inToOut + inBehind;
-      
-      // If categories sum is not equal to total, flag the row with validationMismatch
-      player.validationMismatch = (sumCategories !== total);
-    });
-  }
-
   return match;
 }
 
@@ -418,60 +400,8 @@ function normalizeMatchReport(data: any): MatchReport {
       away: Array.isArray(data.playersOutOfPossession?.away) ? data.playersOutOfPossession.away : [],
     },
     playersPhysical: {
-      home: Array.isArray(data.playersPhysical?.home)
-        ? data.playersPhysical.home.map((p: any) => {
-            const getVal = (obj: any, keys: string[]): number => {
-              for (const k of keys) {
-                if (obj[k] !== undefined && obj[k] !== null) {
-                  const parsed = parseFloat(String(obj[k]).replace(/[^0-9.]/g, ""));
-                  if (!isNaN(parsed)) return parsed;
-                }
-              }
-              return 0;
-            };
-            return {
-              ...p,
-              number: Number(p.number) || 0,
-              name: String(p.name || ""),
-              totalDistance: getVal(p, ["totalDistance", "total_distance", "TotalDistance", "distance", "Distance", "toplamMesafe", "toplam_mesafe"]),
-              zone1: getVal(p, ["zone1", "zone1Distance", "zone_1", "Zone1", "Zone 1", "zone1_distance"]),
-              zone2: getVal(p, ["zone2", "zone2Distance", "zone_2", "Zone2", "Zone 2", "zone2_distance"]),
-              zone3: getVal(p, ["zone3", "zone3Distance", "zone_3", "Zone3", "Zone 3", "zone3_distance"]),
-              zone4: getVal(p, ["zone4", "zone4Distance", "zone_4", "Zone4", "Zone 4", "zone4_distance"]),
-              zone5: getVal(p, ["zone5", "zone5Distance", "zone_5", "Zone5", "Zone 5", "zone5_distance"]),
-              highSpeedRuns: getVal(p, ["highSpeedRuns", "high_speed_runs", "HighSpeedRuns", "hsr", "highSpeed", "high_speed", "yuksek_hizli_kosu", "yuksekHizliKosu", "yüksekHızlıKoşu", "yuksekSiddetliKosu", "yüksekŞiddetliKoşu", "yuksek_siddetli_kosu", "yuksekSiddetli", "yüksekŞiddetli", "highIntensity", "hir"]),
-              sprints: getVal(p, ["sprints", "Sprints", "sprint", "Sprint", "sprint_count", "sprintCount", "sprint_sayisi", "sprintSayısı"]),
-              topSpeed: getVal(p, ["topSpeed", "top_speed", "TopSpeed", "maxSpeed", "max_speed", "maksimumHiz", "maksimum_hiz", "enYuksekHiz", "en_yuksek_hiz", "max_hiz", "maxHiz"]),
-            };
-          })
-        : [],
-      away: Array.isArray(data.playersPhysical?.away)
-        ? data.playersPhysical.away.map((p: any) => {
-            const getVal = (obj: any, keys: string[]): number => {
-              for (const k of keys) {
-                if (obj[k] !== undefined && obj[k] !== null) {
-                  const parsed = parseFloat(String(obj[k]).replace(/[^0-9.]/g, ""));
-                  if (!isNaN(parsed)) return parsed;
-                }
-              }
-              return 0;
-            };
-            return {
-              ...p,
-              number: Number(p.number) || 0,
-              name: String(p.name || ""),
-              totalDistance: getVal(p, ["totalDistance", "total_distance", "TotalDistance", "distance", "Distance", "toplamMesafe", "toplam_mesafe"]),
-              zone1: getVal(p, ["zone1", "zone1Distance", "zone_1", "Zone1", "Zone 1", "zone1_distance"]),
-              zone2: getVal(p, ["zone2", "zone2Distance", "zone_2", "Zone2", "Zone 2", "zone2_distance"]),
-              zone3: getVal(p, ["zone3", "zone3Distance", "zone_3", "Zone3", "Zone 3", "zone3_distance"]),
-              zone4: getVal(p, ["zone4", "zone4Distance", "zone_4", "Zone4", "Zone 4", "zone4_distance"]),
-              zone5: getVal(p, ["zone5", "zone5Distance", "zone_5", "Zone5", "Zone 5", "zone5_distance"]),
-              highSpeedRuns: getVal(p, ["highSpeedRuns", "high_speed_runs", "HighSpeedRuns", "hsr", "highSpeed", "high_speed", "yuksek_hizli_kosu", "yuksekHizliKosu", "yüksekHızlıKoşu", "yuksekSiddetliKosu", "yüksekŞiddetliKoşu", "yuksek_siddetli_kosu", "yuksekSiddetli", "yüksekŞiddetli", "highIntensity", "hir"]),
-              sprints: getVal(p, ["sprints", "Sprints", "sprint", "Sprint", "sprint_count", "sprintCount", "sprint_sayisi", "sprintSayısı"]),
-              topSpeed: getVal(p, ["topSpeed", "top_speed", "TopSpeed", "maxSpeed", "max_speed", "maksimumHiz", "maksimum_hiz", "enYuksekHiz", "en_yuksek_hiz", "max_hiz", "maxHiz"]),
-            };
-          })
-        : [],
+      home: Array.isArray(data.playersPhysical?.home) ? data.playersPhysical.home : [],
+      away: Array.isArray(data.playersPhysical?.away) ? data.playersPhysical.away : [],
     },
     shotsTimeline: Array.isArray(data.shotsTimeline) ? data.shotsTimeline : [],
     lineHeightLength: {
@@ -585,25 +515,10 @@ export default function App() {
   }, [theme]);
 
   // Application Data States
-  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
-  const [activeSettingsTab, setActiveSettingsTab] = useState<"upload" | "squad" | "sync" | "system">("upload");
   const [uploadedMatches, setUploadedMatches] = useState<MatchReport[]>([]);
-  const [activeMatchIndex, setActiveMatchIndex] = useState<number>(() => {
-    try {
-      const persisted = localStorage.getItem("__fifa_match_active_index");
-      if (persisted !== null) {
-        return Math.max(0, parseInt(persisted, 10));
-      }
-    } catch (e) {}
-    return 0;
-  });
-
-  React.useEffect(() => {
-    try {
-      localStorage.setItem("__fifa_match_active_index", String(activeMatchIndex));
-    } catch (e) {}
-  }, [activeMatchIndex]);
+  const [activeMatchIndex, setActiveMatchIndex] = useState<number>(0);
   const [searchQuery, setSearchQuery] = useState("");
+
   const [initialPlayerKey, setInitialPlayerKey] = useState("");
   const [initialTeamKey, setInitialTeamKey] = useState("");
 
@@ -724,12 +639,315 @@ export default function App() {
     return uploadedMatches[activeMatchIndex] || uploadedMatches[0] || mexicoSouthAfricaMatchData;
   }, [uploadedMatches, activeMatchIndex]);
 
+  const searchSuggestions = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase().trim();
+    
+    const matchedTeams = new Set<string>();
+    const matchedPlayers = new Map<string, { name: string; team: string; position?: string; number?: number }>();
+    
+    const matches = uploadedMatches.length > 0 ? uploadedMatches : [matchData];
+    matches.forEach(m => {
+      const homeTeam = m.matchInfo?.homeTeam;
+      const awayTeam = m.matchInfo?.awayTeam;
+      
+      if (homeTeam && homeTeam.toLowerCase().includes(q)) matchedTeams.add(homeTeam);
+      if (awayTeam && awayTeam.toLowerCase().includes(q)) matchedTeams.add(awayTeam);
+      
+      const processPlayerList = (list: any[], team: string) => {
+        (list || []).forEach(p => {
+          const name = p.name || p.player || "";
+          if (name.toLowerCase().includes(q)) {
+            const key = `${name.toUpperCase().trim()}||${team.toUpperCase().trim()}`;
+            matchedPlayers.set(key, {
+              name,
+              team,
+              position: p.position,
+              number: p.number
+            });
+          }
+        });
+      };
+      
+      if (m.homeTeamLineup) {
+        processPlayerList(m.homeTeamLineup.starting, homeTeam);
+        processPlayerList(m.homeTeamLineup.substitutes, homeTeam);
+      }
+      if (m.awayTeamLineup) {
+        processPlayerList(m.awayTeamLineup.starting, awayTeam);
+        processPlayerList(m.awayTeamLineup.substitutes, awayTeam);
+      }
+    });
+    
+    const items: Array<{ type: "team" | "player"; name: string; team?: string; position?: string; number?: number }> = [];
+    matchedTeams.forEach(t => {
+      items.push({ type: "team", name: t });
+    });
+    matchedPlayers.forEach(p => {
+      items.push({ type: "player", name: p.name, team: p.team, position: p.position, number: p.number });
+    });
+    
+    return items.slice(0, 8); // Limit to 8 suggestions for performance
+  }, [searchQuery, uploadedMatches, matchData]);
+
   React.useEffect(() => {
     if (matchData && matchData.matchInfo) {
       setTempHomeFormation(matchData.matchInfo.homeFormation || "");
       setTempAwayFormation(matchData.matchInfo.awayFormation || "");
     }
   }, [matchData]);
+
+  // --- Virtual SQL Query Engine and Settings Drawer States ---
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsSubTab, setSettingsSubTab] = useState<"upload" | "sync" | "photos" | "sql">("upload");
+  const [sqlQuery, setSqlQuery] = useState<string>(
+    "SELECT name, team, sprints, top_speed_kmh FROM players_physical ORDER BY sprints DESC LIMIT 5"
+  );
+  const [sqlResult, setSqlResult] = useState<any[] | null>(null);
+  const [sqlError, setSqlError] = useState<string | null>(null);
+
+  const virtualDB = useMemo(() => {
+    const matches = uploadedMatches.length > 0 ? uploadedMatches : [matchData];
+    
+    const match_info: any[] = [];
+    const players_physical: any[] = [];
+    const players_possession: any[] = [];
+    const players_defensive: any[] = [];
+    
+    matches.forEach((m) => {
+      const homeTeam = m.matchInfo?.homeTeam || "Ev Sahibi";
+      const awayTeam = m.matchInfo?.awayTeam || "Deplasman";
+      const homeScore = m.matchInfo?.homeScore || 0;
+      const awayScore = m.matchInfo?.awayScore || 0;
+      const title = m.matchInfo?.title || `${homeTeam} vs ${awayTeam}`;
+      const date = m.matchInfo?.date || "Tarih Yok";
+      const stadium = m.matchInfo?.stadium || "Stadyum Yok";
+      const homeFormation = m.matchInfo?.homeFormation || "";
+      const awayFormation = m.matchInfo?.awayFormation || "";
+      
+      const matchId = `${homeTeam}_vs_${awayTeam}`.toLowerCase().replace(/\s+/g, "_");
+      
+      match_info.push({
+        id: matchId,
+        title,
+        home_team: homeTeam,
+        away_team: awayTeam,
+        home_score: homeScore,
+        away_score: awayScore,
+        date,
+        stadium,
+        home_formation: homeFormation,
+        away_formation: awayFormation
+      });
+      
+      const gatherPhysical = (playerList: any[], team: string) => {
+        (playerList || []).forEach(p => {
+          if (!p || !p.name) return;
+          players_physical.push({
+            name: p.name,
+            team,
+            position: p.position || "MF",
+            distance_km: p.totalDistance || 0,
+            sprints: p.sprints || 0,
+            top_speed_kmh: p.topSpeed || 0,
+            zone4_m: p.zone4 || 0,
+            zone5_m: p.zone5 || 0,
+            match_id: matchId
+          });
+        });
+      };
+      gatherPhysical(m.playersPhysical?.home, homeTeam);
+      gatherPhysical(m.playersPhysical?.away, awayTeam);
+      
+      const gatherPossession = (playerList: any[], team: string) => {
+        (playerList || []).forEach(p => {
+          if (!p || !p.name) return;
+          players_possession.push({
+            name: p.name,
+            team,
+            passes_completed: p.passesCompleted || p.completedPasses || 0,
+            passes_attempted: p.passesAttempted || p.attemptedPasses || 0,
+            pass_accuracy_pct: p.passCompletionPct || (p.passesAttempted ? Math.round((p.passesCompleted / p.passesAttempted) * 100) : 0),
+            line_breaks_completed: p.lineBreaksCompleted || 0,
+            shots: p.attemptsAtGoal || 0,
+            match_id: matchId
+          });
+        });
+      };
+      gatherPossession(m.playersInPossession?.home, homeTeam);
+      gatherPossession(m.playersInPossession?.away, awayTeam);
+      
+      const gatherDefensive = (playerList: any[], team: string) => {
+        (playerList || []).forEach(p => {
+          if (!p || !p.name) return;
+          
+          let tackles = 0;
+          if (typeof p.tacklesMadeWon === "string") {
+            const match = p.tacklesMadeWon.match(/^(\d+)/);
+            if (match) tackles = parseInt(match[1], 10);
+          } else if (typeof p.tackles === "number") {
+            tackles = p.tackles;
+          }
+          
+          players_defensive.push({
+            name: p.name,
+            team,
+            tackles_won: tackles,
+            interceptions: p.interceptions || 0,
+            blocks: p.blocks || 0,
+            clearances: p.clearances || 0,
+            possession_regains: p.possessionRegains || 0,
+            match_id: matchId
+          });
+        });
+      };
+      gatherDefensive(m.playersOutOfPossession?.home, homeTeam);
+      gatherDefensive(m.playersOutOfPossession?.away, awayTeam);
+    });
+    
+    return {
+      match_info,
+      players_physical,
+      players_possession,
+      players_defensive
+    };
+  }, [matchData, uploadedMatches]);
+
+  const runVirtualSQL = (queryText: string) => {
+    setSqlError(null);
+    setSqlResult(null);
+    try {
+      const cleanSql = queryText.trim().replace(/\s+/g, " ");
+      
+      // Basic SELECT parsing
+      const selectRegex = /^SELECT\s+(.+?)\s+FROM\s+(\w+)(?:\s+WHERE\s+(.+?))?(?:\s+ORDER\s+BY\s+(\w+)(?:\s+(ASC|DESC))?)?(?:\s+LIMIT\s+(\d+))?$/i;
+      const match = cleanSql.match(selectRegex);
+      if (!match) {
+        throw new Error("Sadece basit SELECT sorguları desteklenmektedir.\nFormat: SELECT alan1, alan2 FROM tablo [WHERE koşul] [ORDER BY kolon [ASC|DESC]] [LIMIT sayi]\nÖrnek: SELECT name, sprints FROM players_physical WHERE sprints > 10 ORDER BY sprints DESC LIMIT 5");
+      }
+      
+      const fieldsStr = match[1].trim();
+      const tableName = match[2].trim().toLowerCase();
+      const whereStr = match[3] ? match[3].trim() : null;
+      const orderByStr = match[4] ? match[4].trim() : null;
+      const orderDir = match[5] ? match[5].trim().toUpperCase() : "ASC";
+      const limitStr = match[6] ? match[6].trim() : null;
+      
+      const table = (virtualDB as any)[tableName];
+      if (!table) {
+        throw new Error(`Tablo bulunamadı: '${tableName}'.\nMevcut tablolar: match_info, players_physical, players_possession, players_defensive`);
+      }
+      
+      let results = [...table];
+      
+      // Apply WHERE
+      if (whereStr) {
+        const eqMatch = whereStr.match(/^(\w+)\s*=\s*(['"])(.*?)\2$/);
+        const gtMatch = whereStr.match(/^(\w+)\s*>\s*([\d\.]+)$/);
+        const ltMatch = whereStr.match(/^(\w+)\s*<\s*([\d\.]+)$/);
+        const likeMatch = whereStr.match(/^(\w+)\s+LIKE\s+(['"])(.*?)\2$/i);
+        
+        if (eqMatch) {
+          const col = eqMatch[1];
+          const val = eqMatch[3].toLowerCase();
+          results = results.filter(r => String(r[col] || "").toLowerCase() === val);
+        } else if (gtMatch) {
+          const col = gtMatch[1];
+          const val = parseFloat(gtMatch[2]);
+          results = results.filter(r => parseFloat(r[col]) > val);
+        } else if (ltMatch) {
+          const col = ltMatch[1];
+          const val = parseFloat(ltMatch[2]);
+          results = results.filter(r => parseFloat(r[col]) < val);
+        } else if (likeMatch) {
+          const col = likeMatch[1];
+          const val = likeMatch[3].replace(/%/g, "").toLowerCase();
+          results = results.filter(r => String(r[col] || "").toLowerCase().includes(val));
+        } else {
+          throw new Error("WHERE koşulu sadece '=', '>', '<' veya 'LIKE' işlemlerini destekler. Örnek: team = 'MEXICO' veya sprints > 15");
+        }
+      }
+      
+      // Apply ORDER BY
+      if (orderByStr) {
+        results.sort((a, b) => {
+          let valA = a[orderByStr];
+          let valB = b[orderByStr];
+          
+          const numA = parseFloat(valA);
+          const numB = parseFloat(valB);
+          if (!isNaN(numA) && !isNaN(numB)) {
+            valA = numA;
+            valB = numB;
+          } else {
+            valA = String(valA || "").toLowerCase();
+            valB = String(valB || "").toLowerCase();
+          }
+          
+          if (valA < valB) return orderDir === "DESC" ? 1 : -1;
+          if (valA > valB) return orderDir === "DESC" ? -1 : 1;
+          return 0;
+        });
+      }
+      
+      // Apply LIMIT
+      if (limitStr) {
+        const limit = parseInt(limitStr, 10);
+        results = results.slice(0, limit);
+      }
+      
+      // Project fields
+      if (fieldsStr !== "*") {
+        const fields = fieldsStr.split(",").map(f => f.trim());
+        results = results.map(r => {
+          const obj: any = {};
+          fields.forEach(f => {
+            if (f in r) {
+              obj[f] = r[f];
+            } else {
+              obj[f] = null;
+            }
+          });
+          return obj;
+        });
+      }
+      
+      setSqlResult(results);
+      triggerToast("Sorgu başarıyla çalıştırıldı!");
+    } catch (err: any) {
+      setSqlError(err.message || String(err));
+    }
+  };
+
+  const MATCH_LAB_TABS = useMemo(() => [
+    { id: "overview", label: "Overview & Key Stats" },
+    { id: "shots", label: "Shot Timeline" },
+    { id: "lineups", label: "Lineups" },
+    { id: "passing_networks", label: "Passing Networks" },
+    { id: "phases", label: "Phases of Play" },
+    { id: "line_height", label: "Line Heights" },
+    { id: "line_breaks", label: "Line Breaks" },
+    { id: "crosses", label: "Crosses Open Play" },
+    { id: "offering", label: "Offering to Receive" },
+    { id: "movement", label: "Movement to Receive" },
+    { id: "goalkeeping", label: "Goalkeeping" },
+    { id: "set_plays", label: "Set Plays" }
+  ], []);
+
+  const SCOUT_ENGINE_TABS = useMemo(() => [
+    { id: "in_possession", label: "Player In Possession" },
+    { id: "out_possession", label: "Player Out of Possession" },
+    { id: "defensive_actions", label: "Defensive Actions" },
+    { id: "defensive_pressure", label: "Defensive Pressure" },
+    { id: "physical", label: "Physical Performance" }
+  ], []);
+
+  const TOURNAMENT_INSIGHTS_TABS = useMemo(() => [
+    { id: "tournament_analytics", label: "🏆 Tournament & Group Analytics" },
+    { id: "tactical_report", label: "🧠 Gelişmiş Taktik Rapor & PDF" }
+  ], []);
+
+  const [highLevelTab, setHighLevelTab] = useState<"match_lab" | "scout_engine" | "tournament_insights">("tournament_insights");
 
   const [activeTab, setActiveTab] = useState<
     | "overview"
@@ -750,8 +968,18 @@ export default function App() {
     | "lineups"
     | "passing_networks"
     | "tournament_analytics"
-    | "data_validation"
   >("tournament_analytics"); // Default to Tournament & Group stage tab so they can see this new capability instantly!
+
+  // Synchronize highLevelTab when activeTab changes (e.g. from global search or nav)
+  React.useEffect(() => {
+    if (MATCH_LAB_TABS.some(t => t.id === activeTab)) {
+      setHighLevelTab("match_lab");
+    } else if (SCOUT_ENGINE_TABS.some(t => t.id === activeTab)) {
+      setHighLevelTab("scout_engine");
+    } else if (TOURNAMENT_INSIGHTS_TABS.some(t => t.id === activeTab)) {
+      setHighLevelTab("tournament_insights");
+    }
+  }, [activeTab, MATCH_LAB_TABS, SCOUT_ENGINE_TABS, TOURNAMENT_INSIGHTS_TABS]);
 
   // Tab container ref for horizontal scrolling
   const tabsScrollContainerRef = useRef<HTMLDivElement>(null);
@@ -894,6 +1122,8 @@ export default function App() {
 
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [syncStatus, setSyncStatus] = useState<string>("");
+  const [quotaError, setQuotaError] = useState<string | null>(null);
+  const [isQuotaDismissed, setIsQuotaDismissed] = useState<boolean>(false);
   const [confirmState, setConfirmState] = useState<{
     isOpen: boolean;
     title: string;
@@ -908,12 +1138,6 @@ export default function App() {
     onConfirm: () => {}
   });
 
-  const [healthCheckWarning, setHealthCheckWarning] = useState<{
-    show: boolean;
-    matchTitle: string;
-    reason: string;
-  } | null>(null);
-
   const startFirestoreSync = async (silent = false) => {
     if (isSyncing) return;
     setIsSyncing(true);
@@ -922,6 +1146,15 @@ export default function App() {
       const results = await syncWithFirestore((msg) => {
         setSyncStatus(msg);
       });
+      
+      if (results?.quotaExceeded) {
+        setQuotaError(results.quotaErrorMsg || "Quota exceeded");
+        if (!silent) {
+          triggerToast("Bulut senkronizasyon kotası doldu. Çevrimdışı moda geçildi.");
+        }
+      } else {
+        setQuotaError(null);
+      }
       
       // Reload local data to reflect newly synced records instantly
       const matches = await getAllMatchesFromDB();
@@ -936,7 +1169,7 @@ export default function App() {
       setSquadPhotos(photos);
       setCustomTeamFlags(flags);
 
-      if (!silent) {
+      if (!silent && !results?.quotaExceeded) {
         if (results.matchesAdded > 0 || results.photosAdded > 0 || results.flagsAdded > 0) {
           triggerToast(`Bulut eşitlemesi tamamlandı! İndirilen: ${results.matchesAdded} maç, ${results.photosAdded} oyuncu resmi, ${results.flagsAdded} logo.`);
         } else {
@@ -945,7 +1178,10 @@ export default function App() {
       }
     } catch (err) {
       console.error("Firestore sync error:", err);
-      if (!silent) {
+      const isQuota = String(err).includes("Quota exceeded") || String(err).includes("Quota limit exceeded");
+      if (isQuota) {
+        setQuotaError(String(err));
+      } else if (!silent) {
         triggerToast("Bulut senkronizasyonu sırasında bir hata oluştu.");
       }
     } finally {
@@ -2138,29 +2374,6 @@ export default function App() {
       reader.readAsDataURL(file);
       const base64Content = await base64Promise;
 
-      let existingMatchData = null;
-      if (uploadedMatches.length > 0) {
-        const normalize = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
-        const fileBaseClean = normalize(file.name.split(".")[0] || "");
-        const matched = uploadedMatches.find(m => {
-          const titleClean = normalize(m.matchInfo?.title || "");
-          const homeClean = normalize(m.matchInfo?.homeTeam || "");
-          const awayClean = normalize(m.matchInfo?.awayTeam || "");
-          
-          if (!homeClean || !awayClean) return false;
-          
-          // Must match BOTH team names inside the filename to be considered the same match
-          const hasHome = fileBaseClean.includes(homeClean);
-          const hasAway = fileBaseClean.includes(awayClean);
-          const hasTitle = titleClean && (titleClean.includes(fileBaseClean) || fileBaseClean.includes(titleClean));
-          
-          return hasTitle || (hasHome && hasAway);
-        });
-        if (matched) {
-          existingMatchData = matched;
-        }
-      }
-
       let res: Response | null = null;
       let resText = "";
       let contentType = "";
@@ -2176,8 +2389,7 @@ export default function App() {
             },
             body: JSON.stringify({
               pdfBase64: base64Content,
-              originalFileName: file.name,
-              existingMatchData: existingMatchData
+              originalFileName: file.name
             })
           });
 
@@ -2236,27 +2448,6 @@ export default function App() {
         // Save the newly uploaded match permanently in IndexedDB!
         const matchId = getMatchId(newMatch);
         saveMatchToDB(matchId, newMatch).catch(e => console.error("IndexedDB Save failure:", e));
-
-        // Automated Health Check: Check if physical stats are missing (all 0s)
-        const homePhys = newMatch.playersPhysical?.home || [];
-        const awayPhys = newMatch.playersPhysical?.away || [];
-        const allPhys = [...homePhys, ...awayPhys];
-        let totalDistSum = 0;
-        let totalZoneSum = 0;
-        allPhys.forEach((p: any) => {
-          totalDistSum += Number(p.totalDistance) || Number(p.distance) || 0;
-          totalZoneSum += (Number(p.zone1) || 0) + (Number(p.zone2) || 0) + (Number(p.zone3) || 0) + (Number(p.zone4) || 0) + (Number(p.zone5) || 0);
-        });
-
-        const isMissingPhysical = allPhys.length === 0 || (totalDistSum === 0 && totalZoneSum === 0);
-        
-        if (isMissingPhysical) {
-          setHealthCheckWarning({
-            show: true,
-            matchTitle: newMatch.matchInfo?.title || file.name,
-            reason: "Fiziksel performans istatistikleri (Mesafe, Zone 1-5 ve Sprint Koşuları) bu maç raporunda tamamen boş veya sıfır olarak taranmıştır. Bu durum genelde çok sayfalı PDF'lerin taranması sırasında modelin çıktı sınırına veya sayfa atlamalarına takılmasından kaynaklanır."
-          });
-        }
 
         setUploadedMatches(prev => {
           const matchKey = (m: MatchReport) => getMatchId(m);
@@ -2334,641 +2525,6 @@ export default function App() {
         setErrorMessage(null);
       }
     });
-  };
-
-  const handleExportToSQL = () => {
-    try {
-      const matchesToExport = uploadedMatches.length > 0 ? uploadedMatches : [mexicoSouthAfricaMatchData];
-      let sql = `-- FIFA Match Excel Database Export SQL Script\n` +
-                `-- Exported on: ${new Date().toLocaleString()}\n` +
-                `-- Target Database Compatibility: SQLite, PostgreSQL, MySQL\n` +
-                `-- Total Matches Exported: ${matchesToExport.length}\n\n` +
-                `BEGIN TRANSACTION;\n\n` +
-                `-- ------------------------------------------------------------\n` +
-                `-- DROP SCHEMAS FOR CLEAN OVERWRITE\n` +
-                `-- ------------------------------------------------------------\n` +
-                `DROP TABLE IF EXISTS passing_networks_player_positions;\n` +
-                `DROP TABLE IF EXISTS passing_networks_connections;\n` +
-                `DROP TABLE IF EXISTS goalkeeping_player;\n` +
-                `DROP TABLE IF EXISTS defensive_pressure_player;\n` +
-                `DROP TABLE IF EXISTS defensive_actions_player;\n` +
-                `DROP TABLE IF EXISTS movement_to_receive_player;\n` +
-                `DROP TABLE IF EXISTS movement_to_receive_team;\n` +
-                `DROP TABLE IF EXISTS offering_to_receive_player;\n` +
-                `DROP TABLE IF EXISTS offering_to_receive_team;\n` +
-                `DROP TABLE IF EXISTS crosses_player;\n` +
-                `DROP TABLE IF EXISTS crosses_team;\n` +
-                `DROP TABLE IF EXISTS line_breaks_player;\n` +
-                `DROP TABLE IF EXISTS line_breaks_team;\n` +
-                `DROP TABLE IF EXISTS line_height_length;\n` +
-                `DROP TABLE IF EXISTS shots_timeline;\n` +
-                `DROP TABLE IF EXISTS players_physical;\n` +
-                `DROP TABLE IF EXISTS players_out_of_possession;\n` +
-                `DROP TABLE IF EXISTS players_in_possession;\n` +
-                `DROP TABLE IF EXISTS lineups;\n` +
-                `DROP TABLE IF EXISTS match_stats;\n` +
-                `DROP TABLE IF EXISTS matches;\n\n` +
-                `-- ------------------------------------------------------------\n` +
-                `-- CREATE CORE SCHEMAS\n` +
-                `-- ------------------------------------------------------------\n` +
-                `CREATE TABLE matches (\n` +
-                `  id VARCHAR(255) PRIMARY KEY,\n` +
-                `  title VARCHAR(255) NOT NULL,\n` +
-                `  match_date VARCHAR(100),\n` +
-                `  kick_off VARCHAR(10),\n` +
-                `  stadium VARCHAR(255),\n` +
-                `  group_name VARCHAR(100),\n` +
-                `  home_team VARCHAR(100) NOT NULL,\n` +
-                `  away_team VARCHAR(100) NOT NULL,\n` +
-                `  home_score INTEGER NOT NULL,\n` +
-                `  away_score INTEGER NOT NULL,\n` +
-                `  referee VARCHAR(255),\n` +
-                `  weather VARCHAR(255),\n` +
-                `  spectators VARCHAR(100),\n` +
-                `  home_formation VARCHAR(50),\n` +
-                `  away_formation VARCHAR(50),\n` +
-                `  home_manager VARCHAR(255),\n` +
-                `  away_manager VARCHAR(255)\n` +
-                `);\n\n` +
-                `CREATE TABLE match_stats (\n` +
-                `  id INTEGER PRIMARY KEY AUTOINCREMENT,\n` +
-                `  match_id VARCHAR(255) NOT NULL,\n` +
-                `  metric VARCHAR(255) NOT NULL,\n` +
-                `  home_value REAL,\n` +
-                `  away_value REAL,\n` +
-                `  FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE\n` +
-                `);\n\n` +
-                `CREATE TABLE lineups (\n` +
-                `  id INTEGER PRIMARY KEY AUTOINCREMENT,\n` +
-                `  match_id VARCHAR(255) NOT NULL,\n` +
-                `  team_type VARCHAR(10) NOT NULL, -- 'home' or 'away'\n` +
-                `  player_name VARCHAR(255) NOT NULL,\n` +
-                `  player_number INTEGER NOT NULL,\n` +
-                `  position VARCHAR(50),\n` +
-                `  is_starting INTEGER NOT NULL, -- 1 = Yes, 0 = substitute/reserve\n` +
-                `  FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE\n` +
-                `);\n\n` +
-                `CREATE TABLE players_in_possession (\n` +
-                `  id INTEGER PRIMARY KEY AUTOINCREMENT,\n` +
-                `  match_id VARCHAR(255) NOT NULL,\n` +
-                `  team_type VARCHAR(10) NOT NULL,\n` +
-                `  player_number INTEGER NOT NULL,\n` +
-                `  player_name VARCHAR(255) NOT NULL,\n` +
-                `  passes_attempted INTEGER,\n` +
-                `  passes_completed INTEGER,\n` +
-                `  pass_completion_pct REAL,\n` +
-                `  switches_of_play INTEGER,\n` +
-                `  crosses_attempted INTEGER,\n` +
-                `  crosses_completed INTEGER,\n` +
-                `  line_breaks_attempted INTEGER,\n` +
-                `  line_breaks_completed INTEGER,\n` +
-                `  line_break_completion_pct REAL,\n` +
-                `  ball_progressions INTEGER,\n` +
-                `  take_ons INTEGER,\n` +
-                `  step_ins INTEGER,\n` +
-                `  attempts_at_goal INTEGER,\n` +
-                `  goals INTEGER,\n` +
-                `  FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE\n` +
-                `);\n\n` +
-                `CREATE TABLE players_out_of_possession (\n` +
-                `  id INTEGER PRIMARY KEY AUTOINCREMENT,\n` +
-                `  match_id VARCHAR(255) NOT NULL,\n` +
-                `  team_type VARCHAR(10) NOT NULL,\n` +
-                `  player_number INTEGER NOT NULL,\n` +
-                `  player_name VARCHAR(255) NOT NULL,\n` +
-                `  tackles_made_won VARCHAR(50),\n` +
-                `  blocks INTEGER,\n` +
-                `  interceptions INTEGER,\n` +
-                `  pressing_direct INTEGER,\n` +
-                `  pressing_indirect INTEGER,\n` +
-                `  duels_won_aerial INTEGER,\n` +
-                `  duels_won_physical INTEGER,\n` +
-                `  possession_contests_won INTEGER,\n` +
-                `  clearances INTEGER,\n` +
-                `  loose_ball_receptions INTEGER,\n` +
-                `  pushing_on INTEGER,\n` +
-                `  pushing_on_into_pressing INTEGER,\n` +
-                `  possession_regains INTEGER,\n` +
-                `  possession_interrupted INTEGER,\n` +
-                `  FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE\n` +
-                `);\n\n` +
-                `CREATE TABLE players_physical (\n` +
-                `  id INTEGER PRIMARY KEY AUTOINCREMENT,\n` +
-                `  match_id VARCHAR(255) NOT NULL,\n` +
-                `  team_type VARCHAR(10) NOT NULL,\n` +
-                `  player_number INTEGER NOT NULL,\n` +
-                `  player_name VARCHAR(255) NOT NULL,\n` +
-                `  total_distance REAL,\n` +
-                `  zone1 REAL,\n` +
-                `  zone2 REAL,\n` +
-                `  zone3 REAL,\n` +
-                `  zone4 REAL,\n` +
-                `  zone5 REAL,\n` +
-                `  high_speed_runs REAL,\n` +
-                `  sprints INTEGER,\n` +
-                `  top_speed REAL,\n` +
-                `  FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE\n` +
-                `);\n\n` +
-                `CREATE TABLE shots_timeline (\n` +
-                `  id INTEGER PRIMARY KEY AUTOINCREMENT,\n` +
-                `  match_id VARCHAR(255) NOT NULL,\n` +
-                `  shot_time VARCHAR(20),\n` +
-                `  team VARCHAR(100),\n` +
-                `  player VARCHAR(255),\n` +
-                `  outcome VARCHAR(50),\n` +
-                `  body_part VARCHAR(50),\n` +
-                `  delivery_type VARCHAR(50),\n` +
-                `  FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE\n` +
-                `);\n\n` +
-                `CREATE TABLE line_height_length (\n` +
-                `  id INTEGER PRIMARY KEY AUTOINCREMENT,\n` +
-                `  match_id VARCHAR(255) NOT NULL,\n` +
-                `  team VARCHAR(100),\n` +
-                `  phase VARCHAR(100),\n` +
-                `  length REAL,\n` +
-                `  width REAL,\n` +
-                `  depth_from_goal REAL,\n` +
-                `  FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE\n` +
-                `);\n\n` +
-                `CREATE TABLE line_breaks_team (\n` +
-                `  id INTEGER PRIMARY KEY AUTOINCREMENT,\n` +
-                `  match_id VARCHAR(255) NOT NULL,\n` +
-                `  team VARCHAR(100),\n` +
-                `  total_attempted INTEGER,\n` +
-                `  units4_attempted INTEGER,\n` +
-                `  units4_inside_shape INTEGER,\n` +
-                `  units4_outside_shape INTEGER,\n` +
-                `  units3_attempted INTEGER,\n` +
-                `  units3_inside_shape INTEGER,\n` +
-                `  units3_outside_shape INTEGER,\n` +
-                `  units2_attempted INTEGER,\n` +
-                `  units2_inside_shape INTEGER,\n` +
-                `  units2_outside_shape INTEGER,\n` +
-                `  FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE\n` +
-                `);\n\n` +
-                `CREATE TABLE line_breaks_player (\n` +
-                `  id INTEGER PRIMARY KEY AUTOINCREMENT,\n` +
-                `  match_id VARCHAR(255) NOT NULL,\n` +
-                `  team VARCHAR(100),\n` +
-                `  player_number INTEGER,\n` +
-                `  player_name VARCHAR(255),\n` +
-                `  attempted INTEGER,\n` +
-                `  completed INTEGER,\n` +
-                `  completion_pct REAL,\n` +
-                `  u4_att_line INTEGER,\n` +
-                `  u4_att_mid_line INTEGER,\n` +
-                `  u4_mid_line INTEGER,\n` +
-                `  u4_def_line INTEGER,\n` +
-                `  u3_att_line INTEGER,\n` +
-                `  u3_mid_line INTEGER,\n` +
-                `  u3_def_line INTEGER,\n` +
-                `  u2_mid_line INTEGER,\n` +
-                `  u2_def_line INTEGER,\n` +
-                `  through_val INTEGER,\n` +
-                `  around_val INTEGER,\n` +
-                `  over_val INTEGER,\n` +
-                `  pass_val INTEGER,\n` +
-                `  cross_val INTEGER,\n` +
-                `  ball_progression INTEGER,\n` +
-                `  FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE\n` +
-                `);\n\n` +
-                `CREATE TABLE crosses_team (\n` +
-                `  id INTEGER PRIMARY KEY AUTOINCREMENT,\n` +
-                `  match_id VARCHAR(255) NOT NULL,\n` +
-                `  team VARCHAR(100),\n` +
-                `  attempted INTEGER,\n` +
-                `  completed INTEGER,\n` +
-                `  attempting_players_count INTEGER,\n` +
-                `  FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE\n` +
-                `);\n\n` +
-                `CREATE TABLE crosses_player (\n` +
-                `  id INTEGER PRIMARY KEY AUTOINCREMENT,\n` +
-                `  match_id VARCHAR(255) NOT NULL,\n` +
-                `  team VARCHAR(100),\n` +
-                `  player_number INTEGER,\n` +
-                `  player_name VARCHAR(255),\n` +
-                `  inswing INTEGER,\n` +
-                `  outswing INTEGER,\n` +
-                `  driven INTEGER,\n` +
-                `  lofted INTEGER,\n` +
-                `  cutback INTEGER,\n` +
-                `  push_val INTEGER,\n` +
-                `  cross_completed INTEGER,\n` +
-                `  total_attempted INTEGER,\n` +
-                `  FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE\n` +
-                `);\n\n` +
-                `CREATE TABLE offering_to_receive_team (\n` +
-                `  id INTEGER PRIMARY KEY AUTOINCREMENT,\n` +
-                `  match_id VARCHAR(255) NOT NULL,\n` +
-                `  team VARCHAR(100),\n` +
-                `  total_offers INTEGER,\n` +
-                `  offers_received INTEGER,\n` +
-                `  offers_final_third INTEGER,\n` +
-                `  offers_middle_third INTEGER,\n` +
-                `  offers_defensive_third INTEGER,\n` +
-                `  most_offers_player VARCHAR(255),\n` +
-                `  FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE\n` +
-                `);\n\n` +
-                `CREATE TABLE offering_to_receive_player (\n` +
-                `  id INTEGER PRIMARY KEY AUTOINCREMENT,\n` +
-                `  match_id VARCHAR(255) NOT NULL,\n` +
-                `  team VARCHAR(100),\n` +
-                `  player_number INTEGER,\n` +
-                `  player_name VARCHAR(255),\n` +
-                `  offers_made INTEGER,\n` +
-                `  offers_received_pct VARCHAR(50),\n` +
-                `  offers_received INTEGER,\n` +
-                `  offers_in_behind INTEGER,\n` +
-                `  offers_in_between INTEGER,\n` +
-                `  offers_in_front INTEGER,\n` +
-                `  offers_wide INTEGER,\n` +
-                `  offers_final_third INTEGER,\n` +
-                `  FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE\n` +
-                `);\n\n` +
-                `CREATE TABLE movement_to_receive_team (\n` +
-                `  id INTEGER PRIMARY KEY AUTOINCREMENT,\n` +
-                `  match_id VARCHAR(255) NOT NULL,\n` +
-                `  team VARCHAR(100),\n` +
-                `  in_front INTEGER,\n` +
-                `  in_between INTEGER,\n` +
-                `  out_to_in INTEGER,\n` +
-                `  in_to_out INTEGER,\n` +
-                `  in_behind INTEGER,\n` +
-                `  total INTEGER,\n` +
-                `  FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE\n` +
-                `);\n\n` +
-                `CREATE TABLE movement_to_receive_player (\n` +
-                `  id INTEGER PRIMARY KEY AUTOINCREMENT,\n` +
-                `  match_id VARCHAR(255) NOT NULL,\n` +
-                `  team VARCHAR(100),\n` +
-                `  player_number INTEGER,\n` +
-                `  player_name VARCHAR(255),\n` +
-                `  in_front INTEGER,\n` +
-                `  in_between INTEGER,\n` +
-                `  out_to_in INTEGER,\n` +
-                `  in_to_out INTEGER,\n` +
-                `  in_behind INTEGER,\n` +
-                `  total INTEGER,\n` +
-                `  FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE\n` +
-                `);\n\n` +
-                `CREATE TABLE defensive_actions_player (\n` +
-                `  id INTEGER PRIMARY KEY AUTOINCREMENT,\n` +
-                `  match_id VARCHAR(255) NOT NULL,\n` +
-                `  team VARCHAR(100),\n` +
-                `  player_number INTEGER,\n` +
-                `  player_name VARCHAR(255),\n` +
-                `  tackles INTEGER,\n` +
-                `  interceptions INTEGER,\n` +
-                `  blocks INTEGER,\n` +
-                `  clearances INTEGER,\n` +
-                `  recoveries INTEGER,\n` +
-                `  defensive_duels INTEGER,\n` +
-                `  duels_won INTEGER,\n` +
-                `  FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE\n` +
-                `);\n\n` +
-                `CREATE TABLE defensive_pressure_player (\n` +
-                `  id INTEGER PRIMARY KEY AUTOINCREMENT,\n` +
-                `  match_id VARCHAR(255) NOT NULL,\n` +
-                `  team VARCHAR(100),\n` +
-                `  player_number INTEGER,\n` +
-                `  player_name VARCHAR(255),\n` +
-                `  direct_pressures INTEGER,\n` +
-                `  indirect_pressures INTEGER,\n` +
-                `  total_pressures INTEGER,\n` +
-                `  pressures_applied INTEGER,\n` +
-                `  FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE\n` +
-                `);\n\n` +
-                `CREATE TABLE goalkeeping_player (\n` +
-                `  id INTEGER PRIMARY KEY AUTOINCREMENT,\n` +
-                `  match_id VARCHAR(255) NOT NULL,\n` +
-                `  team VARCHAR(100),\n` +
-                `  player_number INTEGER,\n` +
-                `  player_name VARCHAR(255),\n` +
-                `  saves INTEGER,\n` +
-                `  goals_conceded INTEGER,\n` +
-                `  punches_complete INTEGER,\n` +
-                `  claims_complete INTEGER,\n` +
-                `  involvements INTEGER,\n` +
-                `  total_distributions INTEGER,\n` +
-                `  distribution_accuracy VARCHAR(50),\n` +
-                `  FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE\n` +
-                `);\n\n` +
-                `CREATE TABLE passing_networks_connections (\n` +
-                `  id INTEGER PRIMARY KEY AUTOINCREMENT,\n` +
-                `  match_id VARCHAR(255) NOT NULL,\n` +
-                `  team VARCHAR(10),\n` +
-                `  from_player VARCHAR(255) NOT NULL,\n` +
-                `  to_player VARCHAR(255) NOT NULL,\n` +
-                `  passes INTEGER NOT NULL,\n` +
-                `  FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE\n` +
-                `);\n\n` +
-                `CREATE TABLE passing_networks_player_positions (\n` +
-                `  id INTEGER PRIMARY KEY AUTOINCREMENT,\n` +
-                `  match_id VARCHAR(255) NOT NULL,\n` +
-                `  team VARCHAR(10),\n` +
-                `  player_number INTEGER,\n` +
-                `  player_name VARCHAR(255) NOT NULL,\n` +
-                `  position VARCHAR(50),\n` +
-                `  x REAL,\n` +
-                `  y REAL,\n` +
-                `  FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE\n` +
-                `);\n\n`;
-
-      const escapeSql = (val: any): string => {
-        if (val === undefined || val === null) return "NULL";
-        if (typeof val === "number") return val.toString();
-        const str = String(val).trim();
-        return `'${str.replace(/'/g, "''")}'`;
-      };
-
-      matchesToExport.forEach((m) => {
-        const mId = getMatchId(m);
-        const info = m.matchInfo || {};
-        
-        sql += `\n-- ============================================================\n`;
-        sql += `-- INSERT DATA FOR MATCH: ${info.homeTeam} vs ${info.awayTeam}\n`;
-        sql += `-- ============================================================\n`;
-        sql += `INSERT INTO matches (id, title, match_date, kick_off, stadium, group_name, home_team, away_team, home_score, away_score, referee, weather, spectators, home_formation, away_formation, home_manager, away_manager) VALUES (\n` +
-               `  ${escapeSql(mId)},\n` +
-               `  ${escapeSql(info.title)},\n` +
-               `  ${escapeSql(info.date)},\n` +
-               `  ${escapeSql(info.kickOff)},\n` +
-               `  ${escapeSql(info.stadium)},\n` +
-               `  ${escapeSql(info.group)},\n` +
-               `  ${escapeSql(info.homeTeam)},\n` +
-               `  ${escapeSql(info.awayTeam)},\n` +
-               `  ${escapeSql(info.homeScore)},\n` +
-               `  ${escapeSql(info.awayScore)},\n` +
-               `  ${escapeSql(info.referee || null)},\n` +
-               `  ${escapeSql(info.weather || null)},\n` +
-               `  ${escapeSql(info.spectators || null)},\n` +
-               `  ${escapeSql(info.homeFormation || null)},\n` +
-               `  ${escapeSql(info.awayFormation || null)},\n` +
-               `  ${escapeSql(info.homeManager || null)},\n` +
-               `  ${escapeSql(info.awayManager || null)}\n` +
-               `);\n`;
-
-        // 1. Core performance stats
-        const homeStats = m.keyStats?.home || {};
-        const awayStats = m.keyStats?.away || {};
-        
-        const coreMetrics = [
-          { name: "Goals", home: homeStats.goals, away: awayStats.goals },
-          { name: "Expected Goals (xG)", home: homeStats.xG, away: awayStats.xG },
-          { name: "Attempts at Goal", home: homeStats.attemptsAtGoal, away: awayStats.attemptsAtGoal },
-          { name: "Attempts on Target", home: homeStats.attemptsOnTarget, away: awayStats.attemptsOnTarget },
-          { name: "Passes Completed", home: homeStats.passesCompleted, away: awayStats.passesCompleted },
-          { name: "Pass Completion Percentage", home: homeStats.passAccuracy, away: awayStats.passAccuracy },
-          { name: "Ball Possession Percentage", home: homeStats.ballPossession, away: awayStats.ballPossession }
-        ];
-
-        coreMetrics.forEach((metric) => {
-          if (metric.home !== undefined || metric.away !== undefined) {
-             sql += `INSERT INTO match_stats (match_id, metric, home_value, away_value) VALUES (${escapeSql(mId)}, ${escapeSql(metric.name)}, ${escapeSql(metric.home)}, ${escapeSql(metric.away)});\n`;
-          }
-        });
-
-        // Loop phase indices (in / out of possession)
-        if (m.phasesOfPlay) {
-          if (Array.isArray(m.phasesOfPlay.inPossession)) {
-            m.phasesOfPlay.inPossession.forEach((p) => {
-              sql += `INSERT INTO match_stats (match_id, metric, home_value, away_value) VALUES (${escapeSql(mId)}, ${escapeSql(`In Possession: ${p.metric}`)}, ${escapeSql(p.home)}, ${escapeSql(p.away)});\n`;
-            });
-          }
-          if (Array.isArray(m.phasesOfPlay.outOfPossession)) {
-            m.phasesOfPlay.outOfPossession.forEach((p) => {
-              sql += `INSERT INTO match_stats (match_id, metric, home_value, away_value) VALUES (${escapeSql(mId)}, ${escapeSql(`Out Of Possession: ${p.metric}`)}, ${escapeSql(p.home)}, ${escapeSql(p.away)});\n`;
-            });
-          }
-        }
-
-        // 2. Lineups
-        if (m.homeTeamLineup) {
-          if (Array.isArray(m.homeTeamLineup.starting)) {
-            m.homeTeamLineup.starting.forEach((p) => {
-              sql += `INSERT INTO lineups (match_id, team_type, player_name, player_number, position, is_starting) VALUES (${escapeSql(mId)}, 'home', ${escapeSql(p.name)}, ${escapeSql(p.number)}, ${escapeSql(p.position || null)}, 1);\n`;
-            });
-          }
-          if (Array.isArray(m.homeTeamLineup.substitutes)) {
-            m.homeTeamLineup.substitutes.forEach((p) => {
-              sql += `INSERT INTO lineups (match_id, team_type, player_name, player_number, position, is_starting) VALUES (${escapeSql(mId)}, 'home', ${escapeSql(p.name)}, ${escapeSql(p.number)}, ${escapeSql(p.position || null)}, 0);\n`;
-            });
-          }
-        }
-
-        if (m.awayTeamLineup) {
-          if (Array.isArray(m.awayTeamLineup.starting)) {
-            m.awayTeamLineup.starting.forEach((p) => {
-              sql += `INSERT INTO lineups (match_id, team_type, player_name, player_number, position, is_starting) VALUES (${escapeSql(mId)}, 'away', ${escapeSql(p.name)}, ${escapeSql(p.number)}, ${escapeSql(p.position || null)}, 1);\n`;
-            });
-          }
-          if (Array.isArray(m.awayTeamLineup.substitutes)) {
-            m.awayTeamLineup.substitutes.forEach((p) => {
-              sql += `INSERT INTO lineups (match_id, team_type, player_name, player_number, position, is_starting) VALUES (${escapeSql(mId)}, 'away', ${escapeSql(p.name)}, ${escapeSql(p.number)}, ${escapeSql(p.position || null)}, 0);\n`;
-            });
-          }
-        }
-
-        // 3. Players In Possession
-        if (m.playersInPossession) {
-          const listHome = m.playersInPossession.home || [];
-          const listAway = m.playersInPossession.away || [];
-          listHome.forEach((p: any) => {
-            sql += `INSERT INTO players_in_possession (match_id, team_type, player_number, player_name, passes_attempted, passes_completed, pass_completion_pct, switches_of_play, crosses_attempted, crosses_completed, line_breaks_attempted, line_breaks_completed, line_break_completion_pct, ball_progressions, take_ons, step_ins, attempts_at_goal, goals) VALUES (` +
-                   `${escapeSql(mId)}, 'home', ${escapeSql(p.number)}, ${escapeSql(p.name)}, ${escapeSql(p.passesAttempted)}, ${escapeSql(p.passesCompleted)}, ${escapeSql(p.passCompletionPct)}, ${escapeSql(p.switchesOfPlay)}, ${escapeSql(p.crossesAttempted)}, ${escapeSql(p.crossesCompleted)}, ${escapeSql(p.lineBreaksAttempted)}, ${escapeSql(p.lineBreaksCompleted)}, ${escapeSql(p.lineBreakCompletionPct)}, ${escapeSql(p.ballProgressions)}, ${escapeSql(p.takeOns)}, ${escapeSql(p.stepIns)}, ${escapeSql(p.attemptsAtGoal)}, ${escapeSql(p.goals)});\n`;
-          });
-          listAway.forEach((p: any) => {
-            sql += `INSERT INTO players_in_possession (match_id, team_type, player_number, player_name, passes_attempted, passes_completed, pass_completion_pct, switches_of_play, crosses_attempted, crosses_completed, line_breaks_attempted, line_breaks_completed, line_break_completion_pct, ball_progressions, take_ons, step_ins, attempts_at_goal, goals) VALUES (` +
-                   `${escapeSql(mId)}, 'away', ${escapeSql(p.number)}, ${escapeSql(p.name)}, ${escapeSql(p.passesAttempted)}, ${escapeSql(p.passesCompleted)}, ${escapeSql(p.passCompletionPct)}, ${escapeSql(p.switchesOfPlay)}, ${escapeSql(p.crossesAttempted)}, ${escapeSql(p.crossesCompleted)}, ${escapeSql(p.lineBreaksAttempted)}, ${escapeSql(p.lineBreaksCompleted)}, ${escapeSql(p.lineBreakCompletionPct)}, ${escapeSql(p.ballProgressions)}, ${escapeSql(p.takeOns)}, ${escapeSql(p.stepIns)}, ${escapeSql(p.attemptsAtGoal)}, ${escapeSql(p.goals)});\n`;
-          });
-        }
-
-        // 4. Players Out of Possession
-        if (m.playersOutOfPossession) {
-          const listHome = m.playersOutOfPossession.home || [];
-          const listAway = m.playersOutOfPossession.away || [];
-          listHome.forEach((p: any) => {
-            sql += `INSERT INTO players_out_of_possession (match_id, team_type, player_number, player_name, tackles_made_won, blocks, interceptions, pressing_direct, pressing_indirect, duels_won_aerial, duels_won_physical, possession_contests_won, clearances, loose_ball_receptions, pushing_on, pushing_on_into_pressing, possession_regains, possession_interrupted) VALUES (` +
-                   `${escapeSql(mId)}, 'home', ${escapeSql(p.number)}, ${escapeSql(p.name)}, ${escapeSql(p.tacklesMadeWon)}, ${escapeSql(p.blocks)}, ${escapeSql(p.interceptions)}, ${escapeSql(p.pressingDirect)}, ${escapeSql(p.pressingIndirect)}, ${escapeSql(p.duelsWonAerial)}, ${escapeSql(p.duelsWonPhysical)}, ${escapeSql(p.possessionContestsWon)}, ${escapeSql(p.clearances)}, ${escapeSql(p.looseBallReceptions)}, ${escapeSql(p.pushingOn)}, ${escapeSql(p.pushingOnIntoPressing)}, ${escapeSql(p.possessionRegains)}, ${escapeSql(p.possessionInterrupted)});\n`;
-          });
-          listAway.forEach((p: any) => {
-            sql += `INSERT INTO players_out_of_possession (match_id, team_type, player_number, player_name, tackles_made_won, blocks, interceptions, pressing_direct, pressing_indirect, duels_won_aerial, duels_won_physical, possession_contests_won, clearances, loose_ball_receptions, pushing_on, pushing_on_into_pressing, possession_regains, possession_interrupted) VALUES (` +
-                   `${escapeSql(mId)}, 'away', ${escapeSql(p.number)}, ${escapeSql(p.name)}, ${escapeSql(p.tacklesMadeWon)}, ${escapeSql(p.blocks)}, ${escapeSql(p.interceptions)}, ${escapeSql(p.pressingDirect)}, ${escapeSql(p.pressingIndirect)}, ${escapeSql(p.duelsWonAerial)}, ${escapeSql(p.duelsWonPhysical)}, ${escapeSql(p.possessionContestsWon)}, ${escapeSql(p.clearances)}, ${escapeSql(p.looseBallReceptions)}, ${escapeSql(p.pushingOn)}, ${escapeSql(p.pushingOnIntoPressing)}, ${escapeSql(p.possessionRegains)}, ${escapeSql(p.possessionInterrupted)});\n`;
-          });
-        }
-
-        // 5. Physical Performance
-        if (m.playersPhysical) {
-          const listHome = m.playersPhysical.home || [];
-          const listAway = m.playersPhysical.away || [];
-          listHome.forEach((p: any) => {
-            sql += `INSERT INTO players_physical (match_id, team_type, player_number, player_name, total_distance, zone1, zone2, zone3, zone4, zone5, high_speed_runs, sprints, top_speed) VALUES (` +
-                   `${escapeSql(mId)}, 'home', ${escapeSql(p.number)}, ${escapeSql(p.name)}, ${escapeSql(p.totalDistance)}, ${escapeSql(p.zone1)}, ${escapeSql(p.zone2)}, ${escapeSql(p.zone3)}, ${escapeSql(p.zone4)}, ${escapeSql(p.zone5)}, ${escapeSql(p.highSpeedRuns)}, ${escapeSql(p.sprints)}, ${escapeSql(p.topSpeed)});\n`;
-          });
-          listAway.forEach((p: any) => {
-            sql += `INSERT INTO players_physical (match_id, team_type, player_number, player_name, total_distance, zone1, zone2, zone3, zone4, zone5, high_speed_runs, sprints, top_speed) VALUES (` +
-                   `${escapeSql(mId)}, 'away', ${escapeSql(p.number)}, ${escapeSql(p.name)}, ${escapeSql(p.totalDistance)}, ${escapeSql(p.zone1)}, ${escapeSql(p.zone2)}, ${escapeSql(p.zone3)}, ${escapeSql(p.zone4)}, ${escapeSql(p.zone5)}, ${escapeSql(p.highSpeedRuns)}, ${escapeSql(p.sprints)}, ${escapeSql(p.topSpeed)});\n`;
-          });
-        }
-
-        // 6. Shots Timeline
-        if (Array.isArray(m.shotsTimeline)) {
-          m.shotsTimeline.forEach((sh: any) => {
-            sql += `INSERT INTO shots_timeline (match_id, shot_time, team, player, outcome, body_part, delivery_type) VALUES (` +
-                   `${escapeSql(mId)}, ${escapeSql(sh.time)}, ${escapeSql(sh.team)}, ${escapeSql(sh.player)}, ${escapeSql(sh.outcome)}, ${escapeSql(sh.bodyPart)}, ${escapeSql(sh.deliveryType)});\n`;
-          });
-        }
-
-        // 7. Tactical Dimensions (Line Height & Length)
-        if (m.lineHeightLength) {
-          const inPoss = m.lineHeightLength.inPossession || [];
-          const outPoss = m.lineHeightLength.outOfPossession || [];
-          inPoss.forEach((entry: any) => {
-            sql += `INSERT INTO line_height_length (match_id, team, phase, length, width, depth_from_goal) VALUES (` +
-                   `${escapeSql(mId)}, ${escapeSql(entry.team)}, 'In Possession', ${escapeSql(entry.length)}, ${escapeSql(entry.width)}, ${escapeSql(entry.depthFromGoal)});\n`;
-          });
-          outPoss.forEach((entry: any) => {
-            sql += `INSERT INTO line_height_length (match_id, team, phase, length, width, depth_from_goal) VALUES (` +
-                   `${escapeSql(mId)}, ${escapeSql(entry.team)}, 'Out Of Possession', ${escapeSql(entry.length)}, ${escapeSql(entry.width)}, ${escapeSql(entry.depthFromGoal)});\n`;
-          });
-        }
-
-        // 8. Line Breaks
-        if (m.lineBreaks) {
-          if (Array.isArray(m.lineBreaks.teamSummary)) {
-            m.lineBreaks.teamSummary.forEach((entry: any) => {
-              sql += `INSERT INTO line_breaks_team (match_id, team, total_attempted, units4_attempted, units4_inside_shape, units4_outside_shape, units3_attempted, units3_inside_shape, units3_outside_shape, units2_attempted, units2_inside_shape, units2_outside_shape) VALUES (` +
-                     `${escapeSql(mId)}, ${escapeSql(entry.team)}, ${escapeSql(entry.totalAttempted)}, ${escapeSql(entry.units4Attempted)}, ${escapeSql(entry.units4InsideShape)}, ${escapeSql(entry.units4OutsideShape)}, ${escapeSql(entry.units3Attempted)}, ${escapeSql(entry.units3InsideShape)}, ${escapeSql(entry.units3OutsideShape)}, ${escapeSql(entry.units2Attempted)}, ${escapeSql(entry.units2InsideShape)}, ${escapeSql(entry.units2OutsideShape)});\n`;
-            });
-          }
-          if (Array.isArray(m.lineBreaks.playerSummary)) {
-            m.lineBreaks.playerSummary.forEach((entry: any) => {
-              sql += `INSERT INTO line_breaks_player (match_id, team, player_number, player_name, attempted, completed, completion_pct, u4_att_line, u4_att_mid_line, u4_mid_line, u4_def_line, u3_att_line, u3_mid_line, u3_def_line, u2_mid_line, u2_def_line, through_val, around_val, over_val, pass_val, cross_val, ball_progression) VALUES (` +
-                     `${escapeSql(mId)}, ${escapeSql(entry.team)}, ${escapeSql(entry.number)}, ${escapeSql(entry.name)}, ${escapeSql(entry.attempted)}, ${escapeSql(entry.completed)}, ${escapeSql(entry.completionPct)}, ${escapeSql(entry.u4_attLine)}, ${escapeSql(entry.u4_attMidLine)}, ${escapeSql(entry.u4_midLine)}, ${escapeSql(entry.u4_defLine)}, ${escapeSql(entry.u3_attLine)}, ${escapeSql(entry.u3_midLine)}, ${escapeSql(entry.u3_defLine)}, ${escapeSql(entry.u2_midLine)}, ${escapeSql(entry.u2_defLine)}, ${escapeSql(entry.through)}, ${escapeSql(entry.around)}, ${escapeSql(entry.over)}, ${escapeSql(entry.pass)}, ${escapeSql(entry.cross)}, ${escapeSql(entry.ballProgression)});\n`;
-            });
-          }
-        }
-
-        // 9. Crosses
-        if (m.crosses) {
-          if (Array.isArray(m.crosses.teamSummary)) {
-            m.crosses.teamSummary.forEach((entry: any) => {
-              sql += `INSERT INTO crosses_team (match_id, team, attempted, completed, attempting_players_count) VALUES (` +
-                     `${escapeSql(mId)}, ${escapeSql(entry.team)}, ${escapeSql(entry.attempted)}, ${escapeSql(entry.completed)}, ${escapeSql(entry.attemptingPlayersCount)});\n`;
-            });
-          }
-          if (Array.isArray(m.crosses.playerSummary)) {
-            m.crosses.playerSummary.forEach((entry: any) => {
-              sql += `INSERT INTO crosses_player (match_id, team, player_number, player_name, inswing, outswing, driven, lofted, cutback, push_val, cross_completed, total_attempted) VALUES (` +
-                     `${escapeSql(mId)}, ${escapeSql(entry.team)}, ${escapeSql(entry.number)}, ${escapeSql(entry.name)}, ${escapeSql(entry.inswing)}, ${escapeSql(entry.outswing)}, ${escapeSql(entry.driven)}, ${escapeSql(entry.lofted)}, ${escapeSql(entry.cutback)}, ${escapeSql(entry.push)}, ${escapeSql(entry.crossCompleted)}, ${escapeSql(entry.totalAttempted)});\n`;
-            });
-          }
-        }
-
-        // 10. Offering to Receive
-        if (m.offeringToReceive) {
-          if (Array.isArray(m.offeringToReceive.teamSummary)) {
-            m.offeringToReceive.teamSummary.forEach((entry: any) => {
-              sql += `INSERT INTO offering_to_receive_team (match_id, team, total_offers, offers_received, offers_final_third, offers_middle_third, offers_defensive_third, most_offers_player) VALUES (` +
-                     `${escapeSql(mId)}, ${escapeSql(entry.team)}, ${escapeSql(entry.totalOffers)}, ${escapeSql(entry.offersReceived)}, ${escapeSql(entry.offersFinalThird)}, ${escapeSql(entry.offersMiddleThird)}, ${escapeSql(entry.offersDefensiveThird)}, ${escapeSql(entry.mostOffersPlayer)});\n`;
-            });
-          }
-          if (Array.isArray(m.offeringToReceive.playerSummary)) {
-            m.offeringToReceive.playerSummary.forEach((entry: any) => {
-              sql += `INSERT INTO offering_to_receive_player (match_id, team, player_number, player_name, offers_made, offers_received_pct, offers_received, offers_in_behind, offers_in_between, offers_in_front, offers_wide, offers_final_third) VALUES (` +
-                     `${escapeSql(mId)}, ${escapeSql(entry.team)}, ${escapeSql(entry.number)}, ${escapeSql(entry.name)}, ${escapeSql(entry.offersMade)}, ${escapeSql(entry.offersReceivedPct)}, ${escapeSql(entry.offersReceived)}, ${escapeSql(entry.offersInBehind)}, ${escapeSql(entry.offersInBetween)}, ${escapeSql(entry.offersInFront)}, ${escapeSql(entry.offersWide)}, ${escapeSql(entry.offersFinalThird)});\n`;
-            });
-          }
-        }
-
-        // 11. Movement to Receive
-        if (m.movementToReceive) {
-          if (Array.isArray(m.movementToReceive.teamSummary)) {
-            m.movementToReceive.teamSummary.forEach((entry: any) => {
-              sql += `INSERT INTO movement_to_receive_team (match_id, team, in_front, in_between, out_to_in, in_to_out, in_behind, total) VALUES (` +
-                     `${escapeSql(mId)}, ${escapeSql(entry.team)}, ${escapeSql(entry.inFront)}, ${escapeSql(entry.inBetween)}, ${escapeSql(entry.outToIn)}, ${escapeSql(entry.inToOut)}, ${escapeSql(entry.inBehind)}, ${escapeSql(entry.total)});\n`;
-            });
-          }
-          if (Array.isArray(m.movementToReceive.playerDetails)) {
-            m.movementToReceive.playerDetails.forEach((entry: any) => {
-              sql += `INSERT INTO movement_to_receive_player (match_id, team, player_number, player_name, in_front, in_between, out_to_in, in_to_out, in_behind, total) VALUES (` +
-                     `${escapeSql(mId)}, ${escapeSql(entry.team)}, ${escapeSql(entry.number)}, ${escapeSql(entry.name)}, ${escapeSql(entry.inFront)}, ${escapeSql(entry.inBetween)}, ${escapeSql(entry.outToIn)}, ${escapeSql(entry.inToOut)}, ${escapeSql(entry.inBehind)}, ${escapeSql(entry.total)});\n`;
-            });
-          }
-        }
-
-        // 12. Defensive Actions (Player Detail)
-        if (m.defensiveActions && Array.isArray(m.defensiveActions.playerDetails)) {
-          m.defensiveActions.playerDetails.forEach((entry: any) => {
-            sql += `INSERT INTO defensive_actions_player (match_id, team, player_number, player_name, tackles, interceptions, blocks, clearances, recoveries, defensive_duels, duels_won) VALUES (` +
-                   `${escapeSql(mId)}, ${escapeSql(entry.team)}, ${escapeSql(entry.number)}, ${escapeSql(entry.name)}, ${escapeSql(entry.tackles)}, ${escapeSql(entry.interceptions)}, ${escapeSql(entry.blocks)}, ${escapeSql(entry.clearances)}, ${escapeSql(entry.recoveries)}, ${escapeSql(entry.defensiveDuels)}, ${escapeSql(entry.duelsWon)});\n`;
-          });
-        }
-
-        // 13. Defensive Pressure (Player Detail)
-        if (m.defensivePressure && Array.isArray(m.defensivePressure.playerDetails)) {
-          m.defensivePressure.playerDetails.forEach((entry: any) => {
-            sql += `INSERT INTO defensive_pressure_player (match_id, team, player_number, player_name, direct_pressures, indirect_pressures, total_pressures, pressures_applied) VALUES (` +
-                   `${escapeSql(mId)}, ${escapeSql(entry.team)}, ${escapeSql(entry.number)}, ${escapeSql(entry.name)}, ${escapeSql(entry.directPressures)}, ${escapeSql(entry.indirectPressures)}, ${escapeSql(entry.totalPressures)}, ${escapeSql(entry.pressuresApplied)});\n`;
-          });
-        }
-
-        // 14. Goalkeeping
-        if (m.goalkeeping && Array.isArray(m.goalkeeping.playerDetails)) {
-          m.goalkeeping.playerDetails.forEach((entry: any) => {
-            sql += `INSERT INTO goalkeeping_player (match_id, team, player_number, player_name, saves, goals_conceded, punches_complete, claims_complete, involvements, total_distributions, distribution_accuracy) VALUES (` +
-                   `${escapeSql(mId)}, ${escapeSql(entry.team)}, ${escapeSql(entry.number)}, ${escapeSql(entry.name)}, ${escapeSql(entry.saves)}, ${escapeSql(entry.goalsConceded)}, ${escapeSql(entry.punchesComplete)}, ${escapeSql(entry.claimsComplete)}, ${escapeSql(entry.involvements)}, ${escapeSql(entry.totalDistributions)}, ${escapeSql(entry.distributionAccuracy)});\n`;
-          });
-        }
-
-        // 15. Passing Networks
-        if (m.passingNetworks) {
-          if (m.passingNetworks.home) {
-            const net = m.passingNetworks.home;
-            if (Array.isArray(net.connections)) {
-              net.connections.forEach((conn: any) => {
-                sql += `INSERT INTO passing_networks_connections (match_id, team, from_player, to_player, passes) VALUES (${escapeSql(mId)}, 'home', ${escapeSql(conn.fromPlayer)}, ${escapeSql(conn.toPlayer)}, ${escapeSql(conn.passes)});\n`;
-              });
-            }
-            if (Array.isArray(net.playerPositions)) {
-              net.playerPositions.forEach((pos: any) => {
-                sql += `INSERT INTO passing_networks_player_positions (match_id, team, player_number, player_name, position, x, y) VALUES (${escapeSql(mId)}, 'home', ${escapeSql(pos.number)}, ${escapeSql(pos.name)}, ${escapeSql(pos.position)}, ${escapeSql(pos.x)}, ${escapeSql(pos.y)});\n`;
-              });
-            }
-          }
-          if (m.passingNetworks.away) {
-            const net = m.passingNetworks.away;
-            if (Array.isArray(net.connections)) {
-              net.connections.forEach((conn: any) => {
-                sql += `INSERT INTO passing_networks_connections (match_id, team, from_player, to_player, passes) VALUES (${escapeSql(mId)}, 'away', ${escapeSql(conn.fromPlayer)}, ${escapeSql(conn.toPlayer)}, ${escapeSql(conn.passes)});\n`;
-              });
-            }
-            if (Array.isArray(net.playerPositions)) {
-              net.playerPositions.forEach((pos: any) => {
-                sql += `INSERT INTO passing_networks_player_positions (match_id, team, player_number, player_name, position, x, y) VALUES (${escapeSql(mId)}, 'away', ${escapeSql(pos.number)}, ${escapeSql(pos.name)}, ${escapeSql(pos.position)}, ${escapeSql(pos.x)}, ${escapeSql(pos.y)});\n`;
-              });
-            }
-          }
-        }
-      });
-
-      sql += `\nCOMMIT;\n`;
-
-      const blob = new Blob([sql], { type: "text/plain;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `fifa_match_analysis_export_${new Date().toISOString().slice(0,10)}.sql`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
-      triggerToast("Veritabanı dökümü başarıyla SQL formatında indirildi!");
-    } catch (e: any) {
-      console.error("SQL Dump Generation failure:", e);
-      triggerToast("SQL oluşturulurken bir hata meydana geldi.");
-    }
   };
 
   const handleDeleteActiveMatch = () => {
@@ -3208,7 +2764,7 @@ export default function App() {
       
       {/* Top Banner Navigation */}
       <nav className="sticky top-0 z-40 bg-white border-b border-slate-100 shadow-xs transition-all h-20">
-        <div className="max-w-[1580px] w-full mx-auto h-full px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
+        <div className="max-w-full xl:max-w-[1650px] mx-auto h-full px-4 sm:px-8 lg:px-10 flex items-center justify-between gap-4">
           
           <div 
             className="flex items-center gap-3 cursor-pointer select-none" 
@@ -3237,46 +2793,144 @@ export default function App() {
 
           <div className="flex items-center gap-3 w-full md:w-auto justify-end">
             {/* Global Search Bar */}
-            <div className="relative flex items-center bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl px-3 py-2.5 focus-within:ring-2 focus-within:ring-indigo-500 w-56 transition-all">
-              <Search className="w-3.5 h-3.5 text-slate-500 mr-2 shrink-0" />
-              <input
-                type="text"
-                placeholder="Forma, mevki, oyuncu ara..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-transparent border-none text-[11px] focus:outline-none w-full text-slate-800 font-sans font-medium"
-              />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery("")} className="text-slate-400 hover:text-slate-600 transition-colors">
-                  <X className="w-3 h-3 shrink-0 cursor-pointer" />
-                </button>
-              )}
+            <div className="relative">
+              <div className="relative flex items-center bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl px-3 py-2 focus-within:ring-2 focus-within:ring-indigo-500 w-56 transition-all">
+                <Search className="w-3.5 h-3.5 text-slate-500 mr-2 shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Forma, mevki, oyuncu ara..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="bg-transparent border-none text-[11px] focus:outline-none w-full text-slate-800 font-sans font-medium"
+                />
+                {searchQuery && (
+                  <button onClick={() => setSearchQuery("")} className="text-slate-400 hover:text-slate-600 transition-colors">
+                    <X className="w-3 h-3 shrink-0 cursor-pointer" />
+                  </button>
+                )}
+              </div>
+
+              {/* Suggestions Dropdown */}
+              <AnimatePresence>
+                {searchSuggestions.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 5 }}
+                    className="absolute right-0 mt-2 w-72 bg-white border border-slate-150 rounded-2xl shadow-2xl z-50 overflow-hidden py-2"
+                  >
+                    <div className="px-3 py-1.5 border-b border-slate-100 mb-1 text-[9px] font-mono font-bold text-slate-400 uppercase tracking-widest">
+                      Bulunan Sonuçlar ({searchSuggestions.length})
+                    </div>
+                    <div className="max-h-60 overflow-y-auto scrollbar-none">
+                      {searchSuggestions.map((item, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => {
+                            if (item.type === "player") {
+                              (window as any).navigateToPlayer(item.name, item.team);
+                            } else {
+                              (window as any).navigateToTeam(item.name);
+                            }
+                            setSearchQuery("");
+                          }}
+                          className="w-full text-left px-4 py-2.5 hover:bg-slate-50 flex items-center justify-between gap-2 border-b border-slate-50 last:border-0 transition cursor-pointer"
+                        >
+                          <div className="min-w-0">
+                            <span className="block text-xs font-bold text-slate-800 truncate">{item.name}</span>
+                            <span className="block text-[10px] text-slate-400 font-mono">
+                              {item.type === "player" ? `${item.team} • #${item.number || "???"} (${item.position || ""})` : "Takım / Ülke"}
+                            </span>
+                          </div>
+                          <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-full ${
+                            item.type === "player" ? "bg-indigo-50 text-indigo-650" : "bg-emerald-50 text-emerald-650"
+                          }`}>
+                            {item.type === "player" ? "Oyuncu" : "Takım"}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
-            {/* Consolidated Settings Hub Toggler */}
+            {/* Global Theme Switcher Toggler */}
             <button
               onClick={() => {
-                setIsSettingsOpen(true);
-                setActiveSettingsTab("upload");
+                if (theme === "studio-dark") setTheme("pitch-green");
+                else if (theme === "pitch-green") setTheme("light");
+                else setTheme("studio-dark");
               }}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-4.5 py-3 rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-600/15 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer select-none"
-              title="Sistem Ayarları, Fotoğraf ve Bayrak Özelleştirme, Excel/SQL Çıktıları"
+              className={`border text-[11px] font-bold px-3 py-2.5 rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer select-none ${
+                theme === "pitch-green"
+                  ? "bg-emerald-100 border-emerald-300 text-emerald-800 hover:bg-emerald-200"
+                  : theme === "light"
+                  ? "bg-stone-100 border-stone-300 text-stone-800 hover:bg-stone-200"
+                  : "bg-indigo-100 border-indigo-300 text-indigo-800 hover:bg-indigo-200"
+              }`}
+              title="Temayı Değiştir"
             >
-              <SlidersHorizontal className="w-4 h-4 text-indigo-200 animate-pulse" />
-              <span>⚙️ Ayarlar & Dosya Yönetimi</span>
-              {Object.keys(squadPhotos).length > 0 && (
-                <span className="bg-indigo-400 text-white text-[9px] px-1.5 py-0.5 rounded-full font-mono font-bold leading-none">
-                  {Object.keys(squadPhotos).length}
-                </span>
-              )}
+              <Sparkles className="w-3.5 h-3.5 animate-pulse text-indigo-650" />
+              <span>
+                {theme === "studio-dark" ? "Studio Dark" : theme === "pitch-green" ? "Pitch Green" : "Polar Light"}
+              </span>
+            </button>
+
+            {/* Combined Settings & Management Hub Toggle */}
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="w-10 h-10 rounded-xl bg-slate-150 hover:bg-slate-200 border border-slate-200 text-slate-700 hover:text-slate-900 flex items-center justify-center transition-all shadow-3xs cursor-pointer select-none shrink-0"
+              title="Operasyonel Kokpit & Ayarlar"
+            >
+              <SlidersHorizontal className="w-4 h-4" />
             </button>
           </div>
 
         </div>
       </nav>
 
+      {/* Firestore Quota Warning Banner */}
+      {quotaError && !isQuotaDismissed && (
+        <div className="max-w-full xl:max-w-[1650px] mx-auto px-4 sm:px-8 lg:px-10 mt-6">
+          <div className="bg-amber-50 border border-amber-200 rounded-3xl p-5 shadow-xs relative overflow-hidden flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
+            <div className="flex gap-3 items-start">
+              <div className="p-2 bg-amber-100 text-amber-800 rounded-xl shrink-0 mt-0.5">
+                <Sparkles className="w-5 h-5 text-amber-700" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                  Bulut Veritabanı Kotası Aşılmıştır (Çevrimdışı Mod Aktif)
+                </h4>
+                <p className="text-xs text-slate-600 leading-relaxed max-w-4xl">
+                  Firebase Firestore veritabanının ücretsiz günlük okuma limitleri (Free daily read units) dolmuştur. 
+                  Uygulamanız şu anda tam donanımlı yerel veri tabanı altyapısı (IndexedDB) ile kesintisiz olarak çalışmaya devam etmektedir. 
+                  Yüklediğiniz maçlar, oyuncu fotoğrafları ve taktik raporlar yerel olarak güvenle saklanır. Kotanızı kontrol etmek veya yükseltmek isterseniz Firebase konsolunu ziyaret edebilirsiniz.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 shrink-0 self-end md:self-center">
+              <a 
+                href="https://console.firebase.google.com/project/single-verve-449919-j1/firestore/databases/ai-studio-7ec5a563-ae53-4c5a-a9fa-cb0271ebc0d2/data?openUpgradeDialog=true"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs px-4 py-2 rounded-xl shadow-xs whitespace-nowrap transition-all"
+              >
+                Firebase Konsolu'nu Aç
+              </a>
+              <button 
+                onClick={() => setIsQuotaDismissed(true)}
+                className="bg-white hover:bg-slate-100 border border-slate-250 text-slate-600 font-medium text-xs px-3.5 py-2 rounded-xl cursor-pointer transition-all"
+              >
+                Kapat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tournament Match Hub & Multi-Match Switcher */}
-      <section className="max-w-[1580px] w-full mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+      <section className="max-w-full xl:max-w-[1650px] mx-auto px-4 sm:px-8 lg:px-10 mt-6">
         <div className="bg-slate-900 rounded-3xl p-6 text-white shadow-xl border border-slate-800 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 relative overflow-hidden">
           {/* Subtle gradient light flare in background */}
           <div className="absolute right-0 top-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
@@ -3351,104 +3005,8 @@ export default function App() {
         </div>
       </section>
 
-      {/* Platform Akış ve Yönlendirme Kılavuzu */}
-      <section className="max-w-[1580px] w-full mx-auto px-4 sm:px-6 lg:px-8 mt-6">
-        <div className="bg-white border border-slate-150 rounded-3xl p-6 shadow-xs">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-5">
-            <div>
-              <h3 className="font-sans font-extrabold text-sm text-slate-900 flex items-center gap-2">
-                <Compass className="w-4.5 h-4.5 text-indigo-600" />
-                <span>Platform Adım Adım Taktiksel Gezinme Rehberi</span>
-              </h3>
-              <p className="text-[11px] text-slate-400 mt-0.5">Uygulamanın tüm özelliklerinden tam verim almak için aşağıdaki işlem akışını takip edebilirsiniz.</p>
-            </div>
-            <span className="text-[10px] font-mono font-bold bg-indigo-50 text-indigo-650 px-2.5 py-1 rounded-full border border-indigo-100 uppercase tracking-wider">
-              Yönlendirmeli Akış Sistemi
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {/* Step 1 */}
-            <div className={`p-4 rounded-2xl border transition-all ${
-              uploadedMatches.length > 0 
-                ? "bg-emerald-50/40 border-emerald-100 text-emerald-950" 
-                : "bg-slate-50/50 border-slate-150 text-slate-700"
-            }`}>
-              <div className="flex items-center justify-between mb-2">
-                <span className={`text-[10px] font-mono font-bold uppercase ${uploadedMatches.length > 0 ? "text-emerald-600" : "text-slate-400"}`}>ADIM 01</span>
-                {uploadedMatches.length > 0 ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                ) : (
-                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
-                )}
-              </div>
-              <h4 className="text-xs font-bold leading-tight mb-1">Maç Raporu Yükleme</h4>
-              <p className="text-[11px] text-slate-450 leading-relaxed">
-                {uploadedMatches.length > 0 
-                  ? `Sistemde ${uploadedMatches.length} adet maç analizi kayıtlı.` 
-                  : "Sağ üstteki ⚙️ Ayarlar menüsünden yeni bir maç raporu (PDF) yükleyin."}
-              </p>
-            </div>
-
-            {/* Step 2 */}
-            <div className={`p-4 rounded-2xl border transition-all ${
-              Object.keys(squadPhotos).length > 0 
-                ? "bg-emerald-50/40 border-emerald-100 text-emerald-950" 
-                : "bg-slate-50/50 border-slate-150 text-slate-700"
-            }`}>
-              <div className="flex items-center justify-between mb-2">
-                <span className={`text-[10px] font-mono font-bold uppercase ${Object.keys(squadPhotos).length > 0 ? "text-emerald-600" : "text-slate-400"}`}>ADIM 02</span>
-                {Object.keys(squadPhotos).length > 0 ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                ) : (
-                  <button 
-                    onClick={() => {
-                      setIsSettingsOpen(true);
-                      setActiveSettingsTab("squad");
-                    }}
-                    className="text-[10px] text-indigo-600 hover:underline font-bold cursor-pointer"
-                  >
-                    Özelleştir
-                  </button>
-                )}
-              </div>
-              <h4 className="text-xs font-bold leading-tight mb-1">Görsel Özelleştirme</h4>
-              <p className="text-[11px] text-slate-450 leading-relaxed">
-                {Object.keys(squadPhotos).length > 0 
-                  ? `Kadroda ${Object.keys(squadPhotos).length} oyuncu fotoğrafı aktif.` 
-                  : "⚙️ Ayarlar > Kadro & Fotoğraflar sekmesinden oyuncu görselleri ekleyin."}
-              </p>
-            </div>
-
-            {/* Step 3 */}
-            <div className="p-4 rounded-2xl border bg-slate-50/50 border-slate-150 text-slate-700 hover:bg-indigo-50/10 hover:border-indigo-100 transition-all">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-mono font-bold uppercase text-slate-400">ADIM 03</span>
-                <SlidersHorizontal className="w-4 h-4 text-indigo-500 shrink-0" />
-              </div>
-              <h4 className="text-xs font-bold leading-tight mb-1">Taktik Detayları Keşfet</h4>
-              <p className="text-[11px] text-slate-450 leading-relaxed">
-                Pas ağları, taktik diziliş maliyetleri, anomali pencereleri ve oyuncu radar profillerini sekmelerden inceleyin.
-              </p>
-            </div>
-
-            {/* Step 4 */}
-            <div className="p-4 rounded-2xl border bg-slate-50/50 border-slate-150 text-slate-700 hover:bg-indigo-50/10 hover:border-indigo-100 transition-all">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-mono font-bold uppercase text-slate-400">ADIM 04</span>
-                <Download className="w-4 h-4 text-indigo-500 shrink-0" />
-              </div>
-              <h4 className="text-xs font-bold leading-tight mb-1">Döküm & Rapor Alma</h4>
-              <p className="text-[11px] text-slate-450 leading-relaxed">
-                ⚙️ Ayarlar menüsünden tüm analizlerinizi çok sayfalı Excel veya ilişkisel veri tabanları için SQL dökümü (.sql) indirin.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {uploadedMatches.length === 0 && (
-        <section className="max-w-[1580px] w-full mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+        <section className="max-w-full xl:max-w-[1650px] mx-auto px-4 sm:px-8 lg:px-10 mt-4">
           <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-4 flex items-start gap-3.5 text-amber-900 shadow-sm animate-in fade-in slide-in-from-top-2 duration-200">
             <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
             <div className="flex-1">
@@ -3465,7 +3023,7 @@ export default function App() {
       )}
 
       {/* Hero Stats Header Card */}
-      <header className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
+      <header className="max-w-full xl:max-w-[1650px] mx-auto px-4 sm:px-8 lg:px-10 mt-8">
         <div className="bg-white border border-slate-100 rounded-3xl p-6 sm:p-8 relative overflow-hidden shadow-sm">
           
           {/* Subtle field grid pattern overlay */}
@@ -3771,8 +3329,8 @@ export default function App() {
                   <Info className="w-4 h-4" />
                 </div>
                 <div className="text-xs leading-relaxed text-slate-500 font-sans">
-                  <span className="text-slate-900 font-semibold block mb-0.5">FIFA Rapor Analizi</span>
-                  Yeni bir maç PDF'i yüklemek veya ayarları değiştirmek için sağ üstteki <strong>⚙️ Ayarlar & Dosya Yönetimi</strong> düğmesini kullanabilirsiniz.
+                  <span className="text-slate-900 font-semibold block mb-0.5">Need another match parsed?</span>
+                  Drag and drop FIFA's PDF summary report anywhere in the section below to extract all stats using Gemini's native vision!
                 </div>
               </div>
             </div>
@@ -3781,47 +3339,8 @@ export default function App() {
         </div>
       </header>
 
-      {/* Error and Success Status Center */}
-      <div className="max-w-[1580px] w-full mx-auto px-4 sm:px-6 lg:px-8 mt-4">
-        <AnimatePresence mode="wait">
-          {errorMessage && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="mb-4 bg-red-50 border border-red-200 text-red-800 p-4 rounded-xl flex items-start gap-3 shadow-xs"
-            >
-              <div className="p-1.5 rounded-lg bg-red-100 text-red-600">
-                <X className="w-4 h-4 cursor-pointer" onClick={() => setErrorMessage(null)} />
-              </div>
-              <div className="flex-1">
-                <h5 className="font-semibold text-sm">Extraction Error</h5>
-                <p className="text-xs text-red-700 mt-1">{errorMessage}</p>
-              </div>
-            </motion.div>
-          )}
-
-          {successToast && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="mb-4 bg-emerald-50 border border-emerald-200 text-emerald-900 p-4 rounded-xl flex items-center justify-between gap-3 shadow-xs"
-            >
-              <div className="flex items-center gap-2.5">
-                <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                <span className="text-sm font-medium">{successToast}</span>
-              </div>
-              <button onClick={() => setSuccessToast(null)} className="text-emerald-700 hover:text-emerald-950 text-xs font-semibold">
-                Dismiss
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
       {/* Main Stats Viewer Dashboard */}
-      <main className="max-w-[1580px] w-full mx-auto px-4 sm:px-6 lg:px-8 mt-10 animate-fade-in text-slate-800">
+      <main className="max-w-full xl:max-w-[1650px] mx-auto px-4 sm:px-8 lg:px-10 mt-10 animate-fade-in text-slate-800">
         
         {/* Interactive Guided Onboarding Map & Instructions Center */}
         <AnimatePresence>
@@ -4042,6 +3561,90 @@ export default function App() {
           )}
         </AnimatePresence>
 
+        {/* High-Level Executive Tab Clusters (Layered UI Operational Cockpit) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <button
+            onClick={() => {
+              setHighLevelTab("match_lab");
+              setActiveTab("overview");
+            }}
+            className={`flex items-start gap-4 p-4 rounded-3xl border text-left transition-all duration-300 relative overflow-hidden group cursor-pointer select-none ${
+              highLevelTab === "match_lab"
+                ? "bg-slate-900 border-slate-800 text-white shadow-lg"
+                : "bg-white border-slate-100 text-slate-800 hover:border-slate-200 hover:bg-slate-50/50"
+            }`}
+          >
+            <div className={`p-2.5 rounded-2xl shrink-0 ${
+              highLevelTab === "match_lab" ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600"
+            }`}>
+              <Activity className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="block font-sans font-bold text-sm tracking-tight">Maç Kokpiti (Match Lab)</span>
+              <span className={`block text-[11px] truncate mt-0.5 ${
+                highLevelTab === "match_lab" ? "text-indigo-200" : "text-slate-400"
+              }`}>12 Analitik Gösterge Modülü</span>
+            </div>
+            {highLevelTab === "match_lab" && (
+              <div className="absolute right-3 top-3 w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
+            )}
+          </button>
+
+          <button
+            onClick={() => {
+              setHighLevelTab("scout_engine");
+              setActiveTab("in_possession");
+            }}
+            className={`flex items-start gap-4 p-4 rounded-3xl border text-left transition-all duration-300 relative overflow-hidden group cursor-pointer select-none ${
+              highLevelTab === "scout_engine"
+                ? "bg-slate-900 border-slate-800 text-white shadow-lg"
+                : "bg-white border-slate-100 text-slate-800 hover:border-slate-200 hover:bg-slate-50/50"
+            }`}
+          >
+            <div className={`p-2.5 rounded-2xl shrink-0 ${
+              highLevelTab === "scout_engine" ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600"
+            }`}>
+              <User className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="block font-sans font-bold text-sm tracking-tight">Scout Engine (Oyuncu Raporları)</span>
+              <span className={`block text-[11px] truncate mt-0.5 ${
+                highLevelTab === "scout_engine" ? "text-indigo-200" : "text-slate-400"
+              }`}>Fiziksel, Ofansif & Defansif</span>
+            </div>
+            {highLevelTab === "scout_engine" && (
+              <div className="absolute right-3 top-3 w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
+            )}
+          </button>
+
+          <button
+            onClick={() => {
+              setHighLevelTab("tournament_insights");
+              setActiveTab("tournament_analytics");
+            }}
+            className={`flex items-start gap-4 p-4 rounded-3xl border text-left transition-all duration-300 relative overflow-hidden group cursor-pointer select-none ${
+              highLevelTab === "tournament_insights"
+                ? "bg-slate-900 border-slate-800 text-white shadow-lg"
+                : "bg-white border-slate-100 text-slate-800 hover:border-slate-200 hover:bg-slate-50/50"
+            }`}
+          >
+            <div className={`p-2.5 rounded-2xl shrink-0 ${
+              highLevelTab === "tournament_insights" ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600"
+            }`}>
+              <Trophy className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="block font-sans font-bold text-sm tracking-tight">Turnuva & Trendler (Insights)</span>
+              <span className={`block text-[11px] truncate mt-0.5 ${
+                highLevelTab === "tournament_insights" ? "text-indigo-200" : "text-slate-400"
+              }`}>Grup Tabloları & Taktik Rapor</span>
+            </div>
+            {highLevelTab === "tournament_insights" && (
+              <div className="absolute right-3 top-3 w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
+            )}
+          </button>
+        </div>
+
         {/* Navigation Tabs with Left/Right Scroll Buttons */}
         <div className="flex items-center gap-1.5 border-b border-slate-200 mb-6 bg-slate-55/45 p-1 rounded-2xl relative">
           {/* Scroll Left Button */}
@@ -4059,28 +3662,12 @@ export default function App() {
             className="flex-1 overflow-x-auto scrollbar-none flex items-center justify-between gap-4 scroll-smooth"
           >
             <div className="flex items-center gap-1 whitespace-nowrap">
-              {[
-                { id: "tournament_analytics", label: "🏆 Tournament & Group Analytics" },
-                { id: "data_validation", label: "🔍 Veri Doğrulama ve Sorgu" },
-                { id: "tactical_report", label: "🧠 Gelişmiş Taktik Rapor & PDF" },
-                { id: "overview", label: "Overview & Key Stats" },
-                { id: "phases", label: "Phases of Play" },
-                { id: "lineups", label: "Lineups" },
-                { id: "passing_networks", label: "Passing Networks" },
-                { id: "line_height", label: "Line Heights" },
-                { id: "line_breaks", label: "Line Breaks" },
-                { id: "crosses", label: "Crosses Open Play" },
-                { id: "offering", label: "Offering to Receive" },
-                { id: "movement", label: "Movement to Receive" },
-                { id: "in_possession", label: "Player In Possession" },
-                { id: "out_possession", label: "Player Out of Possession" },
-                { id: "defensive_actions", label: "Defensive Actions" },
-                { id: "defensive_pressure", label: "Defensive Pressure" },
-                { id: "goalkeeping", label: "Goalkeeping" },
-                { id: "set_plays", label: "Set Plays" },
-                { id: "physical", label: "Physical Performance" },
-                { id: "shots", label: "Shot Timeline" }
-              ].map(tab => (
+              {(highLevelTab === "match_lab" 
+                ? MATCH_LAB_TABS 
+                : highLevelTab === "scout_engine" 
+                ? SCOUT_ENGINE_TABS 
+                : TOURNAMENT_INSIGHTS_TABS
+              ).map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => {
@@ -6461,14 +6048,6 @@ export default function App() {
           </motion.div>
         )}
 
-        {activeTab === "data_validation" && (
-          <DataValidationView
-            matchData={matchData}
-            uploadedMatches={uploadedMatches}
-            triggerToast={triggerToast}
-          />
-        )}
-
         {/* Tab 18: Tournament & Group Stage Analytics Dashboard */}
         {activeTab === "tournament_analytics" && (
           <TournamentAnalyticsView
@@ -6485,420 +6064,6 @@ export default function App() {
         )}
 
       </main>
-
-      {/* Centralized Settings & File Management Modal */}
-      <AnimatePresence>
-        {isSettingsOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 overflow-y-auto"
-            onClick={() => setIsSettingsOpen(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 20 }}
-              className="bg-white rounded-3xl max-w-4xl w-full border border-slate-100 shadow-2xl overflow-hidden my-8"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Header */}
-              <div className="bg-slate-900 text-white p-6 relative overflow-hidden flex items-center justify-between">
-                <div className="absolute inset-0 opacity-[0.03] bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px]"></div>
-                <div className="relative z-10">
-                  <div className="flex items-center gap-2">
-                    <SlidersHorizontal className="w-5 h-5 text-indigo-400" />
-                    <h3 className="font-sans font-extrabold text-lg text-slate-50 tracking-tight">⚙️ Kontrol Paneli & Ayarlar</h3>
-                  </div>
-                  <p className="text-[11px] text-slate-400 mt-0.5">FIFA Match PDF & Xcel uygulamasının veritabanı, yükleme ve görsel ayarlarını bu panelden yönetebilirsiniz.</p>
-                </div>
-                <button
-                  onClick={() => setIsSettingsOpen(false)}
-                  className="relative z-10 p-2 hover:bg-white/10 rounded-xl transition text-slate-300 hover:text-white cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="flex flex-col md:flex-row min-h-[480px]">
-                {/* Sidebar Navigation */}
-                <div className="w-full md:w-64 bg-slate-50 border-r border-slate-100 p-4 flex flex-col gap-1.5">
-                  <button
-                    onClick={() => setActiveSettingsTab("upload")}
-                    className={`w-full px-4 py-3 rounded-xl font-sans font-semibold text-xs flex items-center gap-2.5 transition-all text-left ${
-                      activeSettingsTab === "upload"
-                        ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/10"
-                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                    }`}
-                  >
-                    <Upload className="w-4 h-4 shrink-0" />
-                    <span>📂 Yeni Maç Yükle (PDF)</span>
-                  </button>
-
-                  <button
-                    onClick={() => setActiveSettingsTab("squad")}
-                    className={`w-full px-4 py-3 rounded-xl font-sans font-semibold text-xs flex items-center gap-2.5 transition-all text-left ${
-                      activeSettingsTab === "squad"
-                        ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/10"
-                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                    }`}
-                  >
-                    <User className="w-4 h-4 shrink-0" />
-                    <span>👥 Kadro & Bayrak Editörü</span>
-                  </button>
-
-                  <button
-                    onClick={() => setActiveSettingsTab("sync")}
-                    className={`w-full px-4 py-3 rounded-xl font-sans font-semibold text-xs flex items-center gap-2.5 transition-all text-left ${
-                      activeSettingsTab === "sync"
-                        ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/10"
-                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                    }`}
-                  >
-                    <Activity className="w-4 h-4 shrink-0" />
-                    <span>☁️ Bulut Senkronizasyonu</span>
-                  </button>
-
-                  <button
-                    onClick={() => setActiveSettingsTab("system")}
-                    className={`w-full px-4 py-3 rounded-xl font-sans font-semibold text-xs flex items-center gap-2.5 transition-all text-left ${
-                      activeSettingsTab === "system"
-                        ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/10"
-                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                    }`}
-                  >
-                    <Database className="w-4 h-4 shrink-0" />
-                    <span>⚙️ Yedekleme & Sistem</span>
-                  </button>
-
-                  {/* App Logo segment in Settings Footer */}
-                  <div className="mt-auto border-t border-slate-150 pt-4 px-2">
-                    <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-slate-400 block mb-2">Kurumsal Logo</span>
-                    <div className="flex items-center gap-2.5">
-                      {appLogo ? (
-                        <img src={appLogo} alt="Custom app logo" className="w-8 h-8 rounded-lg object-contain bg-white border border-slate-200" />
-                      ) : (
-                        <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 text-xs font-bold">FIFA</div>
-                      )}
-                      <div>
-                        <span className="text-[11px] font-bold text-slate-800 block">Kurum Logosu</span>
-                        <button
-                          onClick={handleExitApp}
-                          className="text-[10px] text-indigo-650 hover:underline font-semibold"
-                        >
-                          Değiştir
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Content Panel */}
-                <div className="flex-1 p-6 relative">
-                  {/* TAB 1: UPLOAD (Yeni Maç Yükle) */}
-                  {activeSettingsTab === "upload" && (
-                    <div className="h-full flex flex-col justify-between">
-                      <div>
-                        <h4 className="font-sans font-extrabold text-slate-900 text-sm mb-1">📂 Yeni Post-Match Raporu Yükleme</h4>
-                        <p className="text-[11px] text-slate-400 leading-relaxed mb-6">
-                          FIFA tarafından üretilen resmi maç özet PDF raporlarını buraya sürükleyip bırakarak Gemini Vision AI motorunun verileri otomatik parse etmesini ve veritabanınıza eklemesini sağlayabilirsiniz.
-                        </p>
-
-                        {isParsing ? (
-                          <div className="bg-slate-50 border-2 border-dashed border-indigo-200 rounded-2xl p-10 text-center flex flex-col items-center justify-center min-h-[220px] relative overflow-hidden">
-                            <div className="absolute inset-x-0 bottom-0 top-0 bg-gradient-to-t from-indigo-500/5 to-transparent"></div>
-                            <div className="relative z-10 max-w-md mx-auto">
-                              <div className="w-10 h-10 rounded-full border-4 border-solid border-slate-200 border-t-indigo-600 animate-spin mx-auto mb-4"></div>
-                              <h4 className="font-sans font-semibold text-sm text-slate-800">Gemini Vision AI Verileri Çözümlüyor...</h4>
-                              <p className="text-[10px] text-slate-400 font-mono mt-1 bg-white py-1 px-2.5 rounded-lg border border-slate-200 inline-block">
-                                {uploadedFileName}
-                              </p>
-                              <div className="mt-4 flex items-center gap-1.5 justify-center text-xs font-mono text-indigo-600">
-                                <Zap className="w-3.5 h-3.5 animate-pulse text-indigo-500" />
-                                <span>{parsingStep}</span>
-                              </div>
-                              <div className="w-full bg-slate-200 rounded-full h-1 mt-4 relative overflow-hidden">
-                                <div className="bg-indigo-600 h-full w-2/3 rounded-full animate-pulse absolute left-0 top-0"></div>
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <div
-                            onDragOver={onDragOver}
-                            onDragLeave={onDragLeave}
-                            onDrop={onDrop}
-                            onClick={() => fileInputRef.current?.click()}
-                            className={`bg-slate-50 hover:bg-slate-150 border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer flex flex-col items-center justify-center min-h-[200px] transition-all duration-300 group ${
-                              isDragging ? "border-indigo-500 bg-indigo-50/20" : "border-slate-200"
-                            }`}
-                          >
-                            <input
-                              type="file"
-                              ref={fileInputRef}
-                              onChange={e => e.target.files && handlePdfUpload(e.target.files[0])}
-                              accept="application/pdf"
-                              className="hidden"
-                            />
-                            <div className="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center mb-4 text-indigo-650 group-hover:scale-110 transition-transform duration-300 shadow-inner">
-                              <Upload className="w-5 h-5" />
-                            </div>
-                            <div>
-                              <p className="text-slate-800 font-bold text-sm">FIFA Post-Match PDF Dosyasını Sürükleyin</p>
-                              <p className="text-xs text-slate-400 mt-1">Sürükleyip bırakın veya <span className="text-indigo-600 font-semibold underline">cihazınızdan göz atın</span></p>
-                              <p className="text-[10px] text-slate-400 mt-1.5 font-mono">Desteklenen formatlar: .pdf (Max. 50MB)</p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="border-t border-slate-100 pt-4 mt-6 flex justify-between items-center text-[11px] text-slate-400">
-                        <span>Yüklenen maç verileri anında yerel IndexedDB depolamanıza kaydedilir.</span>
-                        <button
-                          onClick={() => setIsSettingsOpen(false)}
-                          className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold transition"
-                        >
-                          Paneli Kapat
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* TAB 2: SQUAD (Kadro Fotoğrafları & Ülke Bayrakları) */}
-                  {activeSettingsTab === "squad" && (
-                    <div className="h-full flex flex-col justify-between">
-                      <div>
-                        <h4 className="font-sans font-extrabold text-slate-900 text-sm mb-1">👥 Oyuncu Kadro Fotoğrafları & Ülke Bayrakları</h4>
-                        <p className="text-[11px] text-slate-400 leading-relaxed mb-6">
-                          Sanal turnuvada oyuncuların radar grafiklerinde ve listelerde kendi orijinal fotoğraflarının çıkması için yerel/bulut eşleme yapabilir, milli takım bayraklarını dilediğiniz özel ülke logolarıyla değiştirebilirsiniz.
-                        </p>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          {/* Squad Photo Card */}
-                          <div className="border border-slate-100 rounded-2xl p-4 bg-slate-50/50 flex flex-col justify-between min-h-[140px]">
-                            <div>
-                              <div className="flex items-center gap-2 mb-2">
-                                <User className="w-4 h-4 text-indigo-600" />
-                                <span className="font-bold text-xs text-slate-800">Oyuncu Fotoğraf Yönetimi</span>
-                              </div>
-                              <p className="text-[10px] text-slate-450 leading-relaxed">
-                                Her bir oyuncu için özel PNG/JPEG profil fotoğrafları atayın. Şu an yüklü fotoğraf sayısı: <strong>{Object.keys(squadPhotos).length}</strong>
-                              </p>
-                            </div>
-                            <button
-                              onClick={() => setIsSquadModalOpen(true)}
-                              className="mt-3 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px] rounded-lg shadow-sm transition w-full cursor-pointer"
-                            >
-                              Fotoğraf Listesini Düzenle ({Object.keys(squadPhotos).length})
-                            </button>
-                          </div>
-
-                          {/* Country Flag Card */}
-                          <div className="border border-slate-100 rounded-2xl p-4 bg-slate-50/50 flex flex-col justify-between min-h-[140px]">
-                            <div>
-                              <div className="flex items-center gap-2 mb-2">
-                                <Sparkles className="w-4 h-4 text-emerald-600" />
-                                <span className="font-bold text-xs text-slate-800">Milli Takım Bayrakları</span>
-                              </div>
-                              <p className="text-[10px] text-slate-450 leading-relaxed">
-                                Turnuvadaki ülkelerin bayrak simgelerini özel SVG veya PNG dosyalarıyla özelleştirin.
-                              </p>
-                            </div>
-                            <button
-                              onClick={() => {
-                                setIsSettingsOpen(false);
-                                triggerToast("Milli takım bayrak simgelerini değiştirmek için takım kartlarının sağ üstündeki bayrak düzenleyicisine tıklayabilirsiniz.");
-                              }}
-                              className="mt-3 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] rounded-lg shadow-sm transition w-full cursor-pointer"
-                            >
-                              Bayrak Kılavuzunu Gör
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="border-t border-slate-100 pt-4 mt-6 flex justify-end">
-                        <button
-                          onClick={() => setIsSettingsOpen(false)}
-                          className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold transition text-xs cursor-pointer"
-                        >
-                          Değişiklikleri Koru ve Kapat
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* TAB 3: SYNC (Bulut Eşitlemesi) */}
-                  {activeSettingsTab === "sync" && (
-                    <div className="h-full flex flex-col justify-between">
-                      <div>
-                        <h4 className="font-sans font-extrabold text-slate-900 text-sm mb-1">☁️ Firebase Firestore Bulut Senkronizasyonu</h4>
-                        <p className="text-[11px] text-slate-400 leading-relaxed mb-6">
-                          IndexedDB'deki tüm maç analiz verilerinizi, özelleştirilmiş oyuncu kadro fotoğraflarını ve ülke bayraklarını Firebase Firestore bulut sunucularıyla anında senkronize edebilir, cihazlar arası yedekleyebilirsiniz.
-                        </p>
-
-                        <div className="border border-slate-100 bg-slate-50/50 rounded-2xl p-5 mb-5">
-                          <div className="flex items-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
-                            <div>
-                              <span className="text-[10px] font-mono font-bold uppercase text-slate-400">Bulut Veritabanı Durumu</span>
-                              <div className="flex items-center gap-2 mt-1">
-                                <span className={`w-2.5 h-2.5 rounded-full ${isSyncing ? "bg-amber-500 animate-pulse" : "bg-emerald-500"}`}></span>
-                                <span className="font-bold text-xs text-slate-800">
-                                  {isSyncing ? "Aktif Senkronizasyon Yapılıyor..." : "Bağlantı Hazır ve Çevrimiçi"}
-                                </span>
-                              </div>
-                            </div>
-
-                            <button
-                              onClick={() => startFirestoreSync(false)}
-                              disabled={isSyncing}
-                              className={`px-4 py-2 rounded-xl text-xs font-bold transition shadow-md cursor-pointer ${
-                                isSyncing
-                                  ? "bg-amber-100 text-amber-800 cursor-not-allowed"
-                                  : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/10"
-                              }`}
-                            >
-                              {isSyncing ? "Eşitleniyor..." : "Bulut Eşitlemesini Başlat"}
-                            </button>
-                          </div>
-
-                          {syncStatus && (
-                            <div className="bg-slate-900 rounded-xl p-3 text-emerald-400 font-mono text-[10px] leading-relaxed max-h-[120px] overflow-y-auto border border-slate-800">
-                              🚀 {syncStatus}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex items-start gap-2.5 text-amber-950">
-                          <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                          <p className="text-[10px] leading-relaxed">
-                            <strong>Hatırlatma:</strong> Bulut senkronizasyonu internet bağlantınızın hızı ve yüklediğiniz özel yüksek boyutlu resim dosyalarına bağlı olarak birkaç saniye sürebilir. Lütfen işlem tamamlanana kadar sekmeyi kapatmayınız.
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="border-t border-slate-100 pt-4 mt-6 flex justify-end">
-                        <button
-                          onClick={() => setIsSettingsOpen(false)}
-                          className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold transition text-xs cursor-pointer"
-                        >
-                          Tamam
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* TAB 4: SYSTEM (Yedekleme & Sistem Ayarları) */}
-                  {activeSettingsTab === "system" && (
-                    <div className="h-full flex flex-col justify-between">
-                      <div>
-                        <h4 className="font-sans font-extrabold text-slate-900 text-sm mb-1">⚙️ Yedekleme, Dışa Aktarma & Sistem Yönetimi</h4>
-                        <p className="text-[11px] text-slate-400 leading-relaxed mb-6">
-                          Uygulamadaki tüm maçları, puan durumlarını, koordine diziliş metriklerini ilişkisel veri tabanlarına uygun SQL şeması şeklinde veya her hücresi formüllü Excel dosyası olarak anında döküm alabilirsiniz.
-                        </p>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-                          {/* Export Excel */}
-                          <div className="border border-slate-100 bg-slate-50 p-4 rounded-xl flex flex-col justify-between text-center">
-                            <div>
-                              <Download className="w-5 h-5 text-indigo-600 mx-auto mb-2" />
-                              <span className="font-bold text-xs text-slate-850 block mb-1">Excel İndir (.xlsx)</span>
-                              <p className="text-[9px] text-slate-450 leading-normal">
-                                Tüm maç analizlerini, istatistikleri ve takımları sekmeli formüllü Excel kitabı şeklinde dışa aktar.
-                              </p>
-                            </div>
-                            <button
-                              onClick={handleExportToExcel}
-                              className="mt-3 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold text-[10px] transition cursor-pointer"
-                            >
-                              İndirmeyi Başlat
-                            </button>
-                          </div>
-
-                          {/* Export SQL */}
-                          <div className="border border-slate-100 bg-slate-50 p-4 rounded-xl flex flex-col justify-between text-center">
-                            <div>
-                              <Database className="w-5 h-5 text-indigo-600 mx-auto mb-2" />
-                              <span className="font-bold text-xs text-slate-850 block mb-1">SQL Dökümü Al (.sql)</span>
-                              <p className="text-[9px] text-slate-450 leading-normal">
-                                Tüm maç kayıtlarını ilişkisel PostgreSQL, SQLite veya MySQL tablolarına aktarabileceğiniz şema SQL'i.
-                              </p>
-                            </div>
-                            <button
-                              onClick={handleExportToSQL}
-                              className="mt-3 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold text-[10px] transition cursor-pointer"
-                            >
-                              SQL Dosyasını İndir
-                            </button>
-                          </div>
-
-                          {/* Reset Database */}
-                          <div className="border border-red-50 bg-red-50/20 p-4 rounded-xl flex flex-col justify-between text-center">
-                            <div>
-                              <RotateCcw className="w-5 h-5 text-red-600 mx-auto mb-2" />
-                              <span className="font-bold text-xs text-red-950 block mb-1">Veritabanını Sıfırla</span>
-                              <p className="text-[9px] text-red-750 leading-normal">
-                                Yüklenmiş olan tüm analiz raporlarını IndexedDB'den temizler ve başlangıç önizleme moduna geri döner.
-                              </p>
-                            </div>
-                            <button
-                              onClick={() => {
-                                triggerReset();
-                              }}
-                              className="mt-3 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg font-bold text-[10px] transition cursor-pointer"
-                            >
-                              Arşivi Temizle
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="bg-slate-900 rounded-xl p-4 text-white">
-                          <span className="text-[10px] font-mono font-bold text-indigo-400 block mb-1">AKTİF TEMA YÖNETİCİSİ</span>
-                          <div className="flex gap-2 mt-2">
-                            <button
-                              onClick={() => setTheme("studio-dark")}
-                              className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
-                                theme === "studio-dark" ? "bg-indigo-600 border-indigo-500 text-white" : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750"
-                              }`}
-                            >
-                              Studio Dark
-                            </button>
-                            <button
-                              onClick={() => setTheme("pitch-green")}
-                              className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
-                                theme === "pitch-green" ? "bg-emerald-600 border-emerald-500 text-white" : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750"
-                              }`}
-                            >
-                              Pitch Green
-                            </button>
-                            <button
-                              onClick={() => setTheme("light")}
-                              className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
-                                theme === "light" ? "bg-slate-200 border-slate-300 text-slate-900" : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750"
-                              }`}
-                            >
-                              Polar Light
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="border-t border-slate-100 pt-4 mt-6 flex justify-end">
-                        <button
-                          onClick={() => setIsSettingsOpen(false)}
-                          className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold transition text-xs cursor-pointer"
-                        >
-                          Tamam
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <ManageSquadPhotosModal
         isOpen={isSquadModalOpen}
@@ -6950,47 +6115,433 @@ export default function App() {
         </div>
       )}
 
-      {healthCheckWarning && healthCheckWarning.show && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-xs p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center gap-3 text-red-400 mb-4">
-              <span className="p-3 bg-red-950/40 rounded-2xl border border-red-800/35">
-                <AlertTriangle className="w-6 h-6 shrink-0" />
-              </span>
-              <div>
-                <span className="block text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest leading-none">Automated Health Check</span>
-                <h3 className="text-sm font-black text-white font-sans tracking-tight mt-1">
-                  Kritik Eksik Veri Tespiti (Health Warning)
-                </h3>
-              </div>
-            </div>
+      {/* Dynamic Layered UI Settings Drawer */}
+      <AnimatePresence>
+        {isSettingsOpen && (
+          <div className="fixed inset-0 z-50 flex justify-end">
+            {/* Backdrop with elegant blur */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsSettingsOpen(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-xs"
+            />
 
-            <div className="bg-slate-950/60 p-4 rounded-2xl border border-slate-850 space-y-2 mb-6">
-              <div className="text-xs">
-                <span className="text-slate-400 font-bold">Analiz Profili:</span>{" "}
-                <span className="text-white font-extrabold">{healthCheckWarning.matchTitle}</span>
+            {/* Slide-over panel */}
+            <motion.div
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              transition={{ type: "spring", damping: 26, stiffness: 220 }}
+              className={`relative w-full max-w-xl h-full shadow-2xl flex flex-col z-10 border-l ${
+                theme === "studio-dark" || theme === "pitch-green"
+                  ? "bg-slate-900 border-slate-800 text-slate-100"
+                  : "bg-white border-slate-200 text-slate-800"
+              }`}
+            >
+              {/* Header */}
+              <div className="p-6 border-b border-slate-100/10 flex items-center justify-between shrink-0">
+                <div>
+                  <h2 className="text-base font-extrabold font-sans tracking-tight text-slate-900 dark:text-white">⚙️ Operasyonel Kokpit Ayarları</h2>
+                  <p className="text-[10px] text-slate-400 font-mono mt-0.5">BACKGROUND DATA SYNC & VIRTUAL ENGINES</p>
+                </div>
+                <button
+                  onClick={() => setIsSettingsOpen(false)}
+                  className="p-2 hover:bg-slate-100/10 rounded-xl transition cursor-pointer"
+                >
+                  <X className="w-4 h-4 text-slate-400 hover:text-slate-650" />
+                </button>
               </div>
-              <div className="text-xs text-slate-300 leading-relaxed font-sans">
-                {healthCheckWarning.reason}
+
+              {/* Sub-Tab Navigation inside the Drawer */}
+              <div className="flex border-b border-slate-100/10 overflow-x-auto scrollbar-none font-sans shrink-0 px-2 gap-1 py-1.5 bg-slate-950/20">
+                {[
+                  { id: "upload", label: "Rapor Yükle (PDF)", icon: Upload },
+                  { id: "sync", label: "Bulut Eşitleme (Auth)", icon: Sparkles },
+                  { id: "sql", label: "SQL Engine", icon: Database },
+                  { id: "photos", label: "Grup Fotoğrafları", icon: User },
+                  { id: "controls", label: "Sıfırla & Dışa Aktar", icon: RotateCcw }
+                ].map(sub => {
+                  const Icon = sub.icon;
+                  return (
+                    <button
+                      key={sub.id}
+                      onClick={() => setSettingsSubTab(sub.id as any)}
+                      className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition cursor-pointer select-none ${
+                        settingsSubTab === sub.id
+                          ? "bg-indigo-650 text-white font-bold shadow-xs"
+                          : "text-slate-400 hover:text-slate-600 hover:bg-slate-100/5"
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5 shrink-0" />
+                      <span>{sub.label}</span>
+                    </button>
+                  );
+                })}
               </div>
-            </div>
 
-            <div className="bg-amber-950/15 border border-amber-900/40 p-4 rounded-2xl text-amber-300 text-[11px] leading-relaxed mb-6 font-sans">
-              <strong className="block mb-1 text-amber-200">💡 Tavsiye:</strong>
-              Bu analizin sağlıklı tamamlanabilmesi için, PDF raporunu tekrar yüklemeniz veya PDF'in bölge limitlerini kontrol etmeniz önerilir. Çok sayfalı PDF'lerin parse edilmesi sırasında model çıktı limitleri nedeniyle veriler eksik kalabilir.
-            </div>
+              {/* Drawer Content Body */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                
+                {/* 1. PDF UPLOAD SUB-TAB */}
+                {settingsSubTab === "upload" && (
+                  <div className="space-y-4">
+                    <div className="bg-slate-950/30 p-4 rounded-2xl border border-slate-100/5 space-y-1">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">FIFA Post-Match PDF Yükleme</h3>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        FIFA'nın resmi maç sonu performans özet raporunu PDF formatında buraya yükleyerek yeni analizler ekleyebilirsiniz.
+                      </p>
+                    </div>
 
-            <div className="flex items-center justify-end gap-3 font-medium text-xs">
-              <button
-                onClick={() => setHealthCheckWarning(null)}
-                className="px-5 py-2.5 bg-slate-850 hover:bg-slate-800 text-slate-200 hover:text-white rounded-xl transition-all cursor-pointer select-none font-bold shadow-sm"
-              >
-                Anladım, Kapat
-              </button>
-            </div>
+                    {errorMessage && (
+                      <div className="bg-rose-500/10 border border-rose-500/20 p-4 rounded-2xl text-xs text-rose-300 space-y-2">
+                        <div className="flex items-start gap-2.5">
+                          <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                          <div className="flex-1 space-y-1">
+                            <span className="font-bold text-rose-200 block">Sistem / Kota Hatası</span>
+                            <p className="leading-relaxed whitespace-pre-wrap">{errorMessage}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Drag and Drop zone inside Settings */}
+                    <div
+                      onDragOver={onDragOver}
+                      onDragLeave={onDragLeave}
+                      onDrop={onDrop}
+                      className={`border-2 border-dashed rounded-3xl p-8 flex flex-col items-center justify-center text-center transition-all ${
+                        isDragging
+                          ? "border-amber-500 bg-amber-500/5"
+                          : "border-slate-350 hover:border-indigo-500/50 bg-slate-950/20"
+                      }`}
+                    >
+                      <Upload className={`w-10 h-10 mb-3 ${isDragging ? "text-amber-400 animate-bounce" : "text-slate-400"}`} />
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200">Maç Raporunu (PDF) Sürükle Bırak</p>
+                      <p className="text-[10px] text-slate-400 mt-1 max-w-[240px]">veya bilgisayarınızdan manuel seçin</p>
+                      
+                      <label className="mt-4 px-4 py-2 bg-indigo-650 hover:bg-indigo-500 text-white font-bold text-[11px] rounded-xl cursor-pointer shadow-md hover:scale-102 transition active:scale-98">
+                        Dosya Seç
+                        <input
+                          type="file"
+                          accept=".pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files.length > 0) {
+                              handlePdfUpload(e.target.files[0]);
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+
+                    {/* Parsing status bar */}
+                    {isParsing && (
+                      <div className="bg-slate-950/60 border border-slate-800 p-4 rounded-2xl space-y-2 animate-pulse">
+                        <div className="flex justify-between items-center text-xs font-mono">
+                          <span className="text-slate-400">Veriler İşleniyor...</span>
+                          <span className="text-amber-400 font-bold">Lütfen Bekleyin</span>
+                        </div>
+                        <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                          <div className="bg-amber-500 h-full w-[65%] rounded-full animate-progress" />
+                        </div>
+                        <p className="text-[9px] text-slate-500 leading-relaxed">
+                          Gemini Vision yapay zeka motoru PDF sayfalarını analiz edip hiyerarşik JSON veri şablonuna dönüştürüyor...
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Currently loaded archive summary */}
+                    <div className="bg-slate-950/45 border border-slate-100/5 p-4 rounded-2xl space-y-3">
+                      <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300">Yüklü Maç Analiz Arşivi ({uploadedMatches.length > 0 ? uploadedMatches.length : 1})</h4>
+                      <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                        {/* Preloaded default */}
+                        <div className="flex items-center justify-between p-2.5 bg-slate-900/40 border border-slate-800/40 rounded-xl">
+                          <div className="min-w-0">
+                            <span className="block text-[11px] font-bold text-slate-200 truncate">Mexico vs South Africa (Rich Match)</span>
+                            <span className="block text-[9px] text-slate-500 font-mono">SİSTEM VARSAYILANI (PDF)</span>
+                          </div>
+                          <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 shrink-0">Baseline</span>
+                        </div>
+
+                        {uploadedMatches.map((match, mIdx) => (
+                          <div
+                            key={mIdx}
+                            className={`flex items-center justify-between p-2.5 border rounded-xl transition ${
+                              activeMatchIndex === mIdx
+                                ? "bg-indigo-650/15 border-indigo-500/50"
+                                : "bg-slate-900/20 border-slate-800/60 hover:bg-slate-900/40"
+                            }`}
+                          >
+                            <button
+                              onClick={() => {
+                                setActiveMatchIndex(mIdx);
+                                triggerToast(`Aktif maç raporu değiştirildi: "${match.matchInfo.title}"`);
+                              }}
+                              className="text-left min-w-0 flex-1 mr-2 cursor-pointer"
+                            >
+                              <span className="block text-[11px] font-bold text-slate-200 truncate">{match.matchInfo.title}</span>
+                              <span className="block text-[9px] text-slate-400 font-mono">{match.matchInfo.date} • {match.matchInfo.group}</span>
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setActiveMatchIndex(mIdx);
+                                handleDeleteActiveMatch();
+                              }}
+                              className="p-1.5 bg-rose-950/35 border border-rose-800/30 hover:bg-rose-900 hover:text-white rounded-lg text-rose-400 transition cursor-pointer"
+                              title="Sil"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. FIRESTORE SYNC SUB-TAB */}
+                {settingsSubTab === "sync" && (
+                  <div className="space-y-4">
+                    <div className="bg-slate-950/30 p-4 rounded-2xl border border-slate-100/5 space-y-1">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Bulut Firestore Senkronizasyonu</h3>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        Yüklediğiniz ek PDF raporlarını, özel kadro fotoğraflarını ve ülke bayraklarını güvenli bulut veritabanınızla eşitleyerek kalıcı kılın.
+                      </p>
+                    </div>
+
+                    <div className="bg-slate-950/25 border border-slate-800 p-5 rounded-2xl space-y-4 flex flex-col items-center justify-center text-center">
+                      <Sparkles className={`w-10 h-10 ${isSyncing ? "text-indigo-400 animate-spin" : "text-indigo-300"}`} />
+                      
+                      <div className="space-y-1">
+                        <strong className="text-xs text-slate-800 dark:text-slate-100 block">Bulut Durumu</strong>
+                        {syncStatus ? (
+                          <p className="text-xs text-indigo-300 font-mono leading-relaxed bg-indigo-950/30 p-2.5 rounded-xl border border-indigo-800/20 max-w-sm">
+                            {syncStatus}
+                          </p>
+                        ) : (
+                          <p className="text-[11px] text-slate-400 leading-relaxed max-w-sm">
+                            Senkronizasyon işlemi başlatılmadı.
+                          </p>
+                        )}
+                      </div>
+
+                      {quotaError && (
+                        <div className="p-3 bg-amber-950/30 border border-amber-800/30 rounded-xl text-amber-400 text-[10px] text-left leading-relaxed">
+                          ⚠️ Firestore depolama limiti sınırına ulaşıldı veya kotalar aşıldı. Yerel verileriniz IndexedDB üzerinde güvendedir fakat buluta eşitlenemeyebilir.
+                        </div>
+                      )}
+
+                      <button
+                        onClick={() => startFirestoreSync(false)}
+                        disabled={isSyncing}
+                        className="w-full bg-indigo-650 hover:bg-indigo-600 disabled:bg-slate-800 text-white font-bold text-xs py-3 rounded-xl shadow-md transition active:scale-98 flex items-center justify-center gap-2 cursor-pointer select-none"
+                      >
+                        <Sparkles className="w-4 h-4 shrink-0" />
+                        <span>{isSyncing ? "Buluta Eşitleniyor..." : "Bulut Veri Tabanını Eşitle"}</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. VIRTUAL SQL QUERY ENGINE */}
+                {settingsSubTab === "sql" && (
+                  <div className="space-y-4">
+                    <div className="bg-slate-950/30 p-4 rounded-2xl border border-slate-100/5 space-y-1">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Sanal SQL Sorgulama Motoru</h3>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        Yüklenen maçların tüm oyuncu ve performans verilerini standart SQL sorguları yazarak sorgulayın.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider">SQL SORGUSU</label>
+                      <textarea
+                        value={sqlQuery}
+                        onChange={(e) => setSqlQuery(e.target.value)}
+                        className="w-full h-24 bg-slate-950 text-emerald-400 border border-slate-800 rounded-xl p-3 font-mono text-[11px] focus:ring-1 focus:ring-indigo-500 focus:outline-none leading-relaxed"
+                        placeholder="SELECT ..."
+                      />
+                    </div>
+
+                    {sqlError && (
+                      <div className="p-3 bg-rose-950/30 border border-rose-800/30 rounded-xl text-rose-400 text-[10px] font-mono leading-relaxed whitespace-pre-wrap">
+                        {sqlError}
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => runVirtualSQL(sqlQuery)}
+                        className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold py-2.5 rounded-xl shadow-xs transition active:scale-98 cursor-pointer select-none"
+                      >
+                        Sorguyu Çalıştır
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSqlQuery("SELECT name, team, sprints, top_speed_kmh FROM players_physical ORDER BY sprints DESC LIMIT 5");
+                          setSqlResult(null);
+                          setSqlError(null);
+                        }}
+                        className="p-2 bg-slate-950 border border-slate-800 hover:bg-slate-900 text-slate-300 rounded-xl transition cursor-pointer"
+                        title="Varsayılana Sıfırla"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Pre-packaged quick queries */}
+                    <div className="space-y-2">
+                      <span className="text-[9px] font-mono text-slate-500 font-bold uppercase tracking-wider">Örnek Sorgu Şablonları</span>
+                      <div className="grid grid-cols-2 gap-2 text-[10px]">
+                        <button
+                          onClick={() => setSqlQuery("SELECT name, team, top_speed_kmh FROM players_physical WHERE top_speed_kmh > 33 ORDER BY top_speed_kmh DESC")}
+                          className="p-2 bg-slate-950/30 border border-slate-800/50 text-slate-300 rounded-xl hover:bg-slate-900 text-left transition truncate cursor-pointer"
+                        >
+                          ⚡ En Süratli Oyuncular (&gt;33 kmh)
+                        </button>
+                        <button
+                          onClick={() => setSqlQuery("SELECT name, team, passes_completed, pass_accuracy_pct FROM players_possession WHERE pass_accuracy_pct > 85 ORDER BY passes_completed DESC LIMIT 5")}
+                          className="p-2 bg-slate-950/30 border border-slate-800/50 text-slate-300 rounded-xl hover:bg-slate-900 text-left transition truncate cursor-pointer"
+                        >
+                          🎯 Pasör Liderleri (&gt;%85 İsabet)
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* SQL Result Table */}
+                    {sqlResult && (
+                      <div className="space-y-2 border-t border-slate-800/80 pt-4">
+                        <span className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider">Sorgu Sonuç Tablosu ({sqlResult.length} satır)</span>
+                        <div className="overflow-x-auto max-h-48 border border-slate-800 rounded-xl bg-slate-950">
+                          <table className="w-full text-left border-collapse text-[10px]">
+                            <thead>
+                              <tr className="bg-slate-900 border-b border-slate-850">
+                                {Object.keys(sqlResult[0] || {}).map((col, cIdx) => (
+                                  <th key={cIdx} className="p-2 font-bold text-slate-400 uppercase tracking-wider font-mono">{col}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {sqlResult.map((row, rIdx) => (
+                                <tr key={rIdx} className="border-b border-slate-900/50 last:border-0 hover:bg-slate-900/30">
+                                  {Object.values(row).map((val: any, vIdx) => (
+                                    <td key={vIdx} className="p-2 font-mono text-slate-300">{String(val)}</td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 4. SQUAD PHOTOS */}
+                {settingsSubTab === "photos" && (
+                  <div className="space-y-4">
+                    <div className="bg-slate-950/30 p-4 rounded-2xl border border-slate-100/5 space-y-1">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Kadro Fotoğrafları & Bayraklar</h3>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        Oyuncuların taktik radar listelerinde, kadrolarda ve PDF raporlarında görünecek gerçek fotoğraflarını ve ülke bayraklarını sisteme yükleyin.
+                      </p>
+                    </div>
+
+                    <div className="bg-slate-950/20 border border-slate-800 p-6 rounded-3xl space-y-4 text-center">
+                      <User className="w-10 h-10 mx-auto text-indigo-400 animate-pulse" />
+                      <div className="space-y-1">
+                        <strong className="text-xs text-slate-200 block">Kadro Fotoğrafı Yönetimi</strong>
+                        <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
+                          Sürükle bırak şeklinde oyuncu adıyla eşleşen `.jpg`/`.png` dosyalarını seçerek kadroyu profesyonelleştirin.
+                        </p>
+                      </div>
+
+                      <div className="flex justify-around text-center py-2 border-t border-b border-slate-800">
+                        <div>
+                          <span className="block text-lg font-black text-white font-mono">{Object.keys(squadPhotos || {}).length}</span>
+                          <span className="block text-[9px] text-slate-500 uppercase tracking-wider">Yüklü Fotoğraf</span>
+                        </div>
+                        <div>
+                          <span className="block text-lg font-black text-white font-mono">{Object.keys(customTeamFlags || {}).length}</span>
+                          <span className="block text-[9px] text-slate-500 uppercase tracking-wider">Yüklü Bayrak</span>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          setIsSquadModalOpen(true);
+                          setIsSettingsOpen(false); // Close settings drawer to open photo manager cleanly!
+                        }}
+                        className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs py-3 rounded-xl shadow-md transition active:scale-98 cursor-pointer select-none"
+                      >
+                        Fotoğraf & Bayrak Panelini Aç
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* 5. BACKUP & HARD RESET CONTROLS */}
+                {settingsSubTab === "controls" && (
+                  <div className="space-y-4">
+                    <div className="bg-slate-950/30 p-4 rounded-2xl border border-slate-100/5 space-y-1">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Operasyonel Veri Kontrolleri</h3>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        Çalışma alanınızı temizlemek, verileri sıfırlamak veya tam veri kümesini Excel formatında indirmek için bu araçları kullanın.
+                      </p>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="p-4 bg-slate-950/20 border border-slate-800 rounded-2xl flex flex-col gap-3">
+                        <div>
+                          <strong className="text-xs text-slate-800 dark:text-slate-200 block">Excel Rapor Kitapçığı</strong>
+                          <p className="text-[10px] text-slate-400 leading-relaxed mt-0.5">
+                            Sistemdeki mevcut tüm analiz detaylarını, her bir metriği ayrı sayfalarda sunan profesyonel bir Excel kitapçığı olarak indirin.
+                          </p>
+                        </div>
+                        <button
+                          onClick={handleExportToExcel}
+                          className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs py-2.5 rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition active:scale-98 cursor-pointer select-none"
+                        >
+                          <Download className="w-4 h-4" />
+                          Excel Tablo Kitapçığı İndir (.xlsx)
+                        </button>
+                      </div>
+
+                      <div className="p-4 bg-rose-950/15 border border-rose-900/30 rounded-2xl flex flex-col gap-3">
+                        <div>
+                          <strong className="text-xs text-rose-400 block">Kritik Bölge: Tüm Arşivi Temizle</strong>
+                          <p className="text-[10px] text-slate-400 leading-relaxed mt-0.5">
+                            Yüklenmiş tüm ek PDF maç analizlerini ve bulut veritabanını temizleyerek sistemi fabrika ayarlarına sıfırlar. Bu işlem geri alınamaz.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setIsSettingsOpen(false);
+                            triggerReset();
+                          }}
+                          className="bg-rose-650 hover:bg-rose-600 text-white font-bold text-xs py-2.5 rounded-xl shadow-xs transition active:scale-98 cursor-pointer select-none"
+                        >
+                          Kalıcı Olarak Her Şeyi Sıfırla
+                        </button>
+                      </div>
+                    </div>
+
+                  </div>
+                )}
+
+              </div>
+              
+              {/* Footer info inside settings panel */}
+              <div className="p-4 bg-slate-950/45 text-center text-[10px] text-slate-500 font-mono border-t border-slate-100/10 shrink-0">
+                FIFA WORLD CUP ANALYSIS COCKPIT v1.6.0
+              </div>
+            </motion.div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
 
     </div>
   );

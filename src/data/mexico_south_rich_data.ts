@@ -271,7 +271,7 @@ export interface MatchReport {
   defensivePressure?: {
     teamSummary: Array<{ metric: string, home: number, away: number }>;
     playerDetails?: Array<{ team: string; number: number; name: string; directPressures: number; indirectPressures: number; totalPressures: number; pressuresApplied: number }>;
-    mostDirect: Array<{ team: string, player: string; pressures?: number }>;
+    mostDirect: Array<{ team: string, player: string }>;
   };
   goalkeeping?: {
     playerDetails?: Array<{ team: string; number: number; name: string; saves: number; goalsConceded: number; punchesComplete: number; claimsComplete: number; involvements: number; totalDistributions: number; distributionAccuracy: string }>;

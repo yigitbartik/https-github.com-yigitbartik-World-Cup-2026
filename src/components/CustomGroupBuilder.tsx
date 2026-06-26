@@ -566,7 +566,13 @@ export default function CustomGroupBuilder({
                     <div className="flex flex-col min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="text-[10.5px] font-sans font-black text-slate-800 truncate leading-snug">{p.name}</span>
-                        {flag && <span className="text-xs leading-none shrink-0">{flag}</span>}
+                        {flag && (
+                          flag.startsWith("data:") ? (
+                            <img src={flag} alt={p.team} className="w-4 h-2.5 object-cover rounded-xs border border-slate-200 shadow-3xs shrink-0" referrerPolicy="no-referrer" />
+                          ) : (
+                            <span className="text-xs leading-none shrink-0">{flag}</span>
+                          )
+                        )}
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-[8px] font-mono font-black py-0.5 px-1.5 bg-slate-100 text-slate-500 rounded-md shrink-0">{p.position || "MF"}</span>
