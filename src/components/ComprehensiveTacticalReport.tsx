@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { motion } from "motion/react";
+import { prepareStylesheetsForPdf } from "../lib/pdfUtils";
 import {
   TrendingUp,
   Activity,
@@ -70,6 +71,8 @@ export default function ComprehensiveTacticalReport({ matchData, squadPhotos = {
   const [logisticPassingSkill, setLogisticPassingSkill] = useState<number>(78); // 0-100
   const [logisticPressure, setLogisticPressure] = useState<number>(65); // 0-100 (Direct Pressure)
   const [logisticTargetUnit, setLogisticTargetUnit] = useState<number>(3); // Units 2, 3 or 4
+
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   // Helper safe statistic parsing functions
   const safeInt = (val: any, fallback = 0) => {
@@ -696,9 +699,62 @@ export default function ComprehensiveTacticalReport({ matchData, squadPhotos = {
     };
   }, [matchData, homeTeam, awayTeam]);
 
-  // Printable action
-  const triggerPdfPrint = () => {
-    window.print();
+  // Printable action with real High-Res PDF generation!
+  const triggerPdfPrint = async () => {
+    setIsExportingPdf(true);
+    
+    // Dynamically resolve oklch/oklab colors for html2canvas compatibility
+    const restoreStyles = prepareStylesheetsForPdf();
+
+    try {
+      const element = document.getElementById("comprehensive-tactical-report-root");
+      if (!element) {
+        window.print();
+        return;
+      }
+      
+      const { jsPDF } = await import("jspdf");
+      const html2canvas = (await import("html2canvas")).default;
+
+      // Selectively hide elements with no-print class
+      const canvas = await html2canvas(element, {
+        scale: 1.5, // 1.5 scale is high res but keeps file size moderate
+        useCORS: true,
+        logging: false,
+        backgroundColor: "#f8fafc", // slate-50 background for beautiful output
+        ignoreElements: (el) => {
+          return el.classList.contains("no-print") || (el.tagName === "BUTTON" && !el.classList.contains("keep-print"));
+        }
+      });
+
+      const imgData = canvas.toDataURL("image/jpeg", 0.95);
+      const pdf = new jsPDF("p", "mm", "a4");
+      const imgWidth = 210; // A4 size width in mm
+      const pageHeight = 297; // A4 size height in mm
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      const matchTitle = matchData.matchInfo.title ? matchData.matchInfo.title.replace(/\s+/g, "_") : "Taktiksel_Rapor";
+      pdf.save(`Gelismis_Taktiksel_Rapor_${matchTitle}.pdf`);
+    } catch (err) {
+      console.error("PDF generation failed, fallback to window.print()", err);
+      window.print();
+    } finally {
+      // Restore original stylesheets
+      restoreStyles();
+      setIsExportingPdf(false);
+    }
   };
 
   return (
@@ -720,13 +776,25 @@ export default function ComprehensiveTacticalReport({ matchData, squadPhotos = {
         <div className="flex flex-col items-end gap-1.5">
           <button
             onClick={triggerPdfPrint}
-            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-650 hover:bg-indigo-600 active:bg-indigo-700 text-white font-sans font-bold text-xs rounded-xl shadow-lg cursor-pointer transition-all hover:scale-[1.02]"
+            disabled={isExportingPdf}
+            className={`inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-650 hover:bg-indigo-600 active:bg-indigo-700 text-white font-sans font-bold text-xs rounded-xl shadow-lg cursor-pointer transition-all hover:scale-[1.02] ${
+              isExportingPdf ? "opacity-75 cursor-not-allowed" : ""
+            }`}
           >
-            <FileDown className="w-4 h-4" />
-            <span>📄 PDF Raporu Olarak Yazdır / Kaydet</span>
+            {isExportingPdf ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <span>Yüksek Çözünürlüklü PDF Üretiliyor...</span>
+              </>
+            ) : (
+              <>
+                <FileDown className="w-4 h-4" />
+                <span>📄 PDF Raporu Olarak Kaydet (Yüksek Çözünürlük)</span>
+              </>
+            )}
           </button>
           <span className="text-[9.5px] text-slate-400 max-w-[240px] text-right leading-tight">
-            💡 <strong>İpucu:</strong> Eğer PDF penceresi açılmıyorsa, lütfen sağ üstteki <strong>"Yeni Sekmede Aç"</strong> ikonuna tıklayın. Yazdırırken <strong>"Arka Plan Grafikleri"</strong> seçeneğini etkinleştirmeyi unutmayın!
+            💡 <strong>Not:</strong> Sayfadaki tüm grafikler, anomali haritaları ve dikey pas analizleri tek bir PDF'te birleştirilir.
           </span>
         </div>
       </div>

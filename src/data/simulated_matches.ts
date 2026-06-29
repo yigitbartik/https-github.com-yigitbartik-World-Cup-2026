@@ -302,18 +302,7 @@ export function generateSimulatedMatch(
   return match;
 }
 
-// Generate the beautiful pre-populated Simulated Group stage matches for the user
+// Only use the real extracted data for the predefined matches list
 export const predefinedSimulatedMatches: MatchReport[] = [
-  mexicoSouthAfricaMatchData, // Match 1 (Real extracted data)
-  generateSimulatedMatch("Italy", "Japan", 2, 1, "12 June 2026", "Group A"), // Match 2
-  generateSimulatedMatch("Mexico", "Italy", 1, 1, "16 June 2026", "Group A"), // Match 3
-  generateSimulatedMatch("South Africa", "Japan", 2, 2, "17 June 2026", "Group A"), // Match 4
-  generateSimulatedMatch("Japan", "Mexico", 0, 2, "21 June 2026", "Group A"), // Match 5
-  generateSimulatedMatch("South Africa", "Italy", 1, 3, "21 June 2026", "Group A"), // Match 6
-
-  // Group B matches
-  generateSimulatedMatch("USA", "England", 1, 2, "13 June 2026", "Group B"),
-  generateSimulatedMatch("France", "Argentina", 3, 2, "14 June 2026", "Group B"),
-  generateSimulatedMatch("USA", "France", 1, 3, "18 June 2026", "Group B"),
-  generateSimulatedMatch("England", "Argentina", 2, 2, "19 June 2026", "Group B")
+  mexicoSouthAfricaMatchData // Match 1 (Real extracted data)
 ];

@@ -129,11 +129,11 @@ export default function MovementToReceiveVisualizer({
                   <img
                     src={getPhoto(selectedPlayer.name)!}
                     alt={selectedPlayer.name}
-                    className="w-14 h-14 rounded-full object-cover border-2 border-white shadow-md"
+                    className="w-20 h-20 rounded-2xl object-cover border-2 border-white shadow-md shrink-0"
                     referrerPolicy="no-referrer"
                   />
                 ) : (
-                  <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-650 text-lg font-black font-sans uppercase shadow-inner">
+                  <div className="w-20 h-20 rounded-2xl bg-emerald-100 flex items-center justify-center text-emerald-650 text-2xl font-black font-sans uppercase shadow-inner shrink-0">
                     {selectedPlayer.name.substring(0, 2)}
                   </div>
                 )}

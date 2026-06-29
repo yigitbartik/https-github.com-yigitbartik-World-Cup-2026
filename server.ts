@@ -789,6 +789,69 @@ Bu verileri birbiriyle ilişkilendirerek, turnuvanın genel karakterini, hangi g
   }
 });
 
+// Varyans Multi-Agent Narrative Orchestration Endpoint
+app.post("/api/varyans-narrative", express.json(), async (req, res) => {
+  try {
+    const { varyansPackage } = req.body;
+    if (!varyansPackage) {
+      return res.status(400).json({ error: "Missing varyansPackage in request body." });
+    }
+
+    const ai = getGeminiClient();
+
+    const promptText = `
+Sen Varyans Futbol Analitiği platformunun elit, teknik ve son derece deneyimli yapay zeka beynisin (FIFA TSG ve Pro-Lisans seviyesinde baş taktikçi).
+Önünde, tamamı kod tarafından deterministik ve matematiksel olarak hesaplanmış, 8 farklı futbol zeka motorunun (KPI, Formasyon, DNA, Bölge, Oyun Fazı, Şut, Fiziksel ve Örüntü) çıkardığı rafine bir maç analiz paketi duruyor.
+
+SENİN GÖREVİN:
+Bu istatistiksel ve taktiksel verileri okumak, sentezlemek ve 'saçmalamadan', hayal ürünü veya uydurma hiçbir sayı katmadan, tamamen bilimsel ve akıcı bir Türkçe Maç Öyküsü Raporu (Narrative) yazmaktır.
+
+ANALİZ EDİLECEK TAKTİKSEL VERİLER:
+----------------------------------------------------------------------
+${JSON.stringify(varyansPackage, null, 2)}
+----------------------------------------------------------------------
+
+RAPOR ŞABLONU VE DETAYLI İÇERİK REHBERİ:
+
+Lütfen tam olarak aşağıdaki Markdown başlıklarını kullan ve içeriği Türkçe olarak son derece derinlikli, akıcı bir teknik dille doldur. Süslü satış veya pazarlama klişelerinden uzak dur; doğrudan futboldaki taktiksel bağlama odaklan. İstatistikleri ve teknik kavramları (örneğin **Field Tilt**, **xG**, **GPIS**, **Compactness**) mutlaka kalın yaz.
+
+## 🧠 Taktiksel Maç Öyküsü ve Kırılma Anları
+[Maçın kronolojik gidişatını, takımların birbirine kurduğu taktiksel üstünlüğü veya üstünlüğün el değiştirdiği dakikaları analiz et. Şut momentum çizelgesindeki (shot windows) baskı pencerelerini, varsa turningPointMinute (dönüm noktası dakikası) bilgisini, formasyon çarpışmalarının ve orta saha üstünlüğünün (midfieldAdvantage) sahaya nasıl yansıdığını açıkla. En az 2-3 derin paragraf yaz.]
+
+## 💪 Takımların Güçlü Taktiksel Yönleri
+- **${varyansPackage.matchInfo.homeTeam}**: [Verilerdeki yüksek KPI'lara (örneğin hat kırma başarısı, yüksek pres gücü veya alan hakimiyeti) dayalı olarak ev sahibinin en güçlü 2-3 taktiksel yönünü maddeler halinde rasyonel gerekçelerle yaz.]
+- **${varyansPackage.matchInfo.awayTeam}**: [Deplasman takımının yüksek KPI'larına veya verilerde öne çıkan başarılı yönlerine atıfta bulunarak en güçlü 2-3 taktiksel yönünü yaz.]
+
+## ⚠️ Takımların Zayıf Yönleri ve Açıkları
+- **${varyansPackage.matchInfo.homeTeam}**: [Düşük KPI'lar, riskli geriden çıkış endeksi (buildUpRiskIndex) veya kompaktlık zayıflığı gibi verilerden elde edilen kısıtları 2 madde halinde yaz.]
+- **${varyansPackage.matchInfo.awayTeam}**: [Deplasman takımının zayıf yönlerini verilerle destekleyerek 2 madde halinde yaz.]
+
+## 🏃 Atletik Performans ve Fiziksel-Taktiksel Eşleşme
+[Atletik Performans Departmanı için özel analiz yap. Koşulan mesafeleri, sprint sayılarını ve her iki takımın pozisyon gruplarının (DF, MF, FW) ortalamalarını karşılaştır. mostAthleticPlayer (maçın en dinamik oyuncusu) bilgisine değin ve bu fiziksel eforun taktiksel yoğunluğa (sprint yoğunluğuna, gegenpressing'e) nasıl katkı sağladığını yorumla.]
+
+## ⭐️ Maçın Taktiksel Kilit Oyuncusu
+[Verilerdeki bireysel başarılar, hat kırma, şut kalitesi ve atletik değerler ışığında maçın en kilit taktiksel figürünü/oyuncusunu seç ve neden bu oyuncunun kilit rol oynadığını 1-2 cümleyle açıkla.]
+
+Görevi başlat ve elite düzeyde bir futbol taktik makalesi niteliğinde çıktı üret.
+`;
+
+    const response = await generateContentWithRetry(ai, {
+      contents: [
+        { text: promptText }
+      ],
+      config: {
+        systemInstruction: "Sen Varyans futbol analitiği platformunun yapay zeka beynisin. Profesyonel, objektif, FIFA TSG düzeyinde ve teknik futbol analisti diliyle konuş."
+      },
+      fallbackModels: ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"]
+    });
+
+    res.json({ success: true, text: response.text });
+  } catch (err: any) {
+    console.error("Error generating Varyans multi-agent narrative: ", err);
+    res.status(500).json({ error: err.message || "Failed to generate Varyans narrative." });
+  }
+});
+
 // Vite Middleware & static fallback setups
 async function setupServer() {
   if (process.env.NODE_ENV !== "production") {

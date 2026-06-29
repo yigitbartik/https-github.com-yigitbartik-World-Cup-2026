@@ -29,7 +29,14 @@ import {
   PolarAngleAxis,
   PolarRadiusAxis,
   ResponsiveContainer,
-  Tooltip as RechartsTooltip
+  Tooltip as RechartsTooltip,
+  ScatterChart,
+  Scatter,
+  XAxis,
+  YAxis,
+  ZAxis,
+  Cell,
+  CartesianGrid
 } from "recharts";
 
 interface PlayerAggregateValue {
@@ -189,6 +196,8 @@ export default function PlayerProfilesView({
   const [teamFilter, setTeamFilter] = useState<string>("All");
   const [positionFilter, setPositionFilter] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [minMinutesFilter, setMinMinutesFilter] = useState<number>(0);
+  const [minMatchesFilter, setMinMatchesFilter] = useState<number>(0);
   
   // Per match toggle vs Totals
   const [useAverages, setUseAverages] = useState<boolean>(true);
@@ -202,6 +211,11 @@ export default function PlayerProfilesView({
   // Ranker metric selection
   const [rankerMetric, setRankerMetric] = useState<keyof PlayerAggregateValue>("goals");
 
+  // Scatter plot comparison state
+  const [scatterScope, setScatterScope] = useState<"tournament" | "team" | "position">("tournament");
+  const [scatterXMetric, setScatterXMetric] = useState<keyof PlayerAggregateValue>("passesCompleted");
+  const [scatterYMetric, setScatterYMetric] = useState<keyof PlayerAggregateValue>("regains");
+
   // Get unique teams list
   const uniqueTeams = useMemo(() => {
     return Array.from(new Set(aggregatedPlayers.map(p => p.team))).filter(Boolean);
@@ -211,15 +225,20 @@ export default function PlayerProfilesView({
   const filteredPlayersList = useMemo(() => {
     return aggregatedPlayers.filter(p => {
       const matchTeam = teamFilter === "All" || p.team === teamFilter;
-      const matchPos = positionFilter === "All" || p.position === positionFilter;
+      const matchPos = positionFilter === "All" || (p.position || "").toUpperCase().includes(positionFilter.toUpperCase());
       const matchSearch = !searchQuery || p.name.toLowerCase().includes(searchQuery);
-      return matchTeam && matchPos && matchSearch;
+      
+      const estimatedMinutes = (p.gp || 0) * 90;
+      const matchMinMinutes = estimatedMinutes >= minMinutesFilter;
+      const matchMinMatches = (p.gp || 0) >= minMatchesFilter;
+
+      return matchTeam && matchPos && matchSearch && matchMinMinutes && matchMinMatches;
     }).sort((a, b) => {
       // Sort goals descending, then name ascending
       if (b.goals !== a.goals) return b.goals - a.goals;
       return a.name.localeCompare(b.name);
     });
-  }, [aggregatedPlayers, teamFilter, positionFilter, searchQuery]);
+  }, [aggregatedPlayers, teamFilter, positionFilter, searchQuery, minMinutesFilter, minMatchesFilter]);
 
   // Selected player logic
   const activePlayer = useMemo(() => {
@@ -339,6 +358,40 @@ export default function PlayerProfilesView({
       teamCount: teamMapped.length
     };
   }, [aggregatedPlayers, rankerMetric, activePlayer, useAverages]);
+
+  // Scatter plot comparison data
+  const scatterData = useMemo(() => {
+    if (!activePlayer) return [];
+    
+    // Filter by scope
+    const scopedPlayers = aggregatedPlayers.filter(p => {
+      if (scatterScope === "team") return p.team === activePlayer.team;
+      if (scatterScope === "position") {
+        const myPos = activePlayer.position || "MF";
+        return (p.position || "MF") === myPos;
+      }
+      return true; // tournament
+    });
+
+    return scopedPlayers.map(p => {
+      const xValRaw = Number(p[scatterXMetric] || 0);
+      const yValRaw = Number(p[scatterYMetric] || 0);
+
+      const x = useAverages ? (p.gp > 0 ? Number((xValRaw / p.gp).toFixed(2)) : 0) : xValRaw;
+      const y = useAverages ? (p.gp > 0 ? Number((yValRaw / p.gp).toFixed(2)) : 0) : yValRaw;
+
+      const isSelf = p.name === activePlayer.name && p.team === activePlayer.team;
+
+      return {
+        name: p.name,
+        team: p.team,
+        position: p.position || "MF",
+        x,
+        y,
+        isSelf
+      };
+    });
+  }, [aggregatedPlayers, activePlayer, scatterScope, scatterXMetric, scatterYMetric, useAverages]);
 
   // Compute Radar Chart data dynamically based on player percentiles
   const radarChartData = useMemo(() => {
@@ -479,6 +532,41 @@ export default function PlayerProfilesView({
                 </select>
               </div>
             </div>
+
+            {/* Minutes & Matches Sliders */}
+            <div className="grid grid-cols-2 gap-3 pt-1 border-t border-slate-100/60 mt-2">
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-[9px] font-mono font-bold uppercase text-slate-400">Min Dakika</span>
+                  <span className="text-[10px] font-mono font-bold text-indigo-600">{minMinutesFilter} dk</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="270"
+                  step="30"
+                  value={minMinutesFilter}
+                  onChange={(e) => setMinMinutesFilter(Number(e.target.value))}
+                  className="w-full accent-indigo-600 cursor-pointer h-1.5 bg-slate-100 rounded-lg appearance-none"
+                />
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-[9px] font-mono font-bold uppercase text-slate-400">Min Maç Sayısı</span>
+                  <span className="text-[10px] font-mono font-bold text-indigo-600">{minMatchesFilter} maç</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="3"
+                  step="1"
+                  value={minMatchesFilter}
+                  onChange={(e) => setMinMatchesFilter(Number(e.target.value))}
+                  className="w-full accent-indigo-600 cursor-pointer h-1.5 bg-slate-100 rounded-lg appearance-none"
+                />
+              </div>
+            </div>
           </div>
 
           {/* Player List */}
@@ -499,16 +587,16 @@ export default function PlayerProfilesView({
                       : "hover:bg-slate-50 border-l-4 border-transparent"
                   }`}
                 >
-                  <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="flex items-center gap-3 min-w-0">
                     {hasPhoto ? (
                       <img
                         src={hasPhoto.base64}
                         alt=""
-                        className="w-8 h-8 rounded-full object-cover shrink-0 border border-slate-100 shadow-2xs"
+                        className="w-11 h-11 rounded-full object-cover shrink-0 border-2 border-indigo-100 shadow-sm"
                         referrerPolicy="no-referrer"
                       />
                     ) : (
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs uppercase font-extrabold font-mono shrink-0 ${
+                      <div className={`w-11 h-11 rounded-full flex items-center justify-center text-sm uppercase font-black font-mono shrink-0 ${
                         isSelected ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-500"
                       }`}>
                         {p.number || p.name.substring(0, 2)}
@@ -516,11 +604,11 @@ export default function PlayerProfilesView({
                     )}
 
                     <div className="min-w-0">
-                      <strong className={`block truncate text-xs ${isSelected ? "text-indigo-950 font-bold" : "text-slate-800"}`}>
+                      <strong className={`block truncate text-sm font-extrabold ${isSelected ? "text-indigo-950 font-black" : "text-slate-800"}`}>
                         {p.name}
                       </strong>
-                      <span className="text-[10px] text-slate-400 flex items-center gap-1.5">
-                        <TeamFlag team={p.team} getTeamFlag={getTeamFlag} className="w-4 h-2.5 object-cover rounded-xs border border-slate-200" fallbackTextSize="text-xs" />
+                      <span className="text-[10.5px] text-slate-400 flex items-center gap-1.5 mt-0.5">
+                        <TeamFlag team={p.team} getTeamFlag={getTeamFlag} className="w-5.5 h-3.5 object-cover rounded-xs border border-slate-200 shadow-xs" fallbackTextSize="text-xs" />
                         <span className="truncate">{p.team} • {p.position || "MF"}</span>
                       </span>
                     </div>
@@ -559,18 +647,18 @@ export default function PlayerProfilesView({
                     <img
                       src={activePhoto.base64}
                       alt=""
-                      className="w-24 h-24 rounded-2xl object-cover border-2 border-indigo-100 shadow-sm"
+                      className="w-28 h-28 rounded-2xl object-cover border-2 border-indigo-200 shadow-md"
                       referrerPolicy="no-referrer"
                     />
                   ) : (
-                    <div className="w-24 h-24 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 text-slate-400 flex flex-col items-center justify-center text-xs gap-1">
-                      <User className="w-8 h-8 text-slate-300" />
-                      <span className="font-mono text-xs font-bold text-slate-500">#{activePlayer.number || "N/A"}</span>
+                    <div className="w-28 h-28 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 text-slate-400 flex flex-col items-center justify-center text-xs gap-1">
+                      <User className="w-10 h-10 text-slate-300" />
+                      <span className="font-mono text-sm font-bold text-slate-500">#{activePlayer.number || "N/A"}</span>
                     </div>
                   )}
 
                   {activePlayer.number && (
-                    <div className="absolute -bottom-2 -right-2 bg-indigo-600 text-white min-w-[24px] h-6 px-1.5 rounded-full flex items-center justify-center font-mono font-bold text-xs ring-2 ring-white">
+                    <div className="absolute -bottom-2 -right-2 bg-indigo-600 text-white min-w-[28px] h-7 px-2 rounded-full flex items-center justify-center font-mono font-bold text-sm ring-2 ring-white shadow-md">
                       #{activePlayer.number}
                     </div>
                   )}
@@ -580,11 +668,11 @@ export default function PlayerProfilesView({
                 <div className="flex-1 text-center md:text-left">
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5">
                     <div>
-                      <h3 className="font-sans font-extrabold text-slate-900 text-xl tracking-tight flex items-center justify-center md:justify-start gap-2">
-                        {activePlayer.name}
-                        <TeamFlag team={activePlayer.team} getTeamFlag={getTeamFlag} className="w-6 h-4 object-cover rounded shadow-2xs border border-slate-200 shrink-0" fallbackTextSize="text-xl" />
+                      <h3 className="font-sans font-extrabold text-slate-900 text-2xl tracking-tight flex items-center justify-center md:justify-start gap-2.5">
+                        <span>{activePlayer.name}</span>
+                        <TeamFlag team={activePlayer.team} getTeamFlag={getTeamFlag} className="w-10 h-6.5 object-cover rounded shadow-md border border-slate-200 shrink-0" fallbackTextSize="text-2xl" />
                       </h3>
-                      <p className="text-xs text-slate-500 font-medium">
+                      <p className="text-xs text-slate-500 font-medium mt-1">
                         {activePlayer.team} • {activePlayer.position || "MF"} • {activePlayer.gp} Turnuva Maçı
                       </p>
                     </div>
@@ -702,6 +790,7 @@ export default function PlayerProfilesView({
                       <PolarAngleAxis dataKey="subject" tick={{ fill: "#334155", fontSize: 8.5, fontWeight: 700, fontFamily: "Inter" }} />
                       <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 7.5, fill: "#64748b", fontWeight: 500 }} />
                       <Radar
+                        key={activePlayer.name}
                         name={activePlayer.name}
                         dataKey="A"
                         stroke="#4f46e5"
@@ -709,6 +798,9 @@ export default function PlayerProfilesView({
                         fillOpacity={0.25}
                         dot={{ r: 4.5, stroke: "#312e81", strokeWidth: 1.5, fill: "#e0e7ff" }}
                         activeDot={{ r: 6.5, stroke: "#312e81", strokeWidth: 2 }}
+                        isAnimationActive={true}
+                        animationDuration={1000}
+                        animationEasing="ease-out"
                       />
                       <RechartsTooltip contentStyle={{ fontSize: 10, fontFamily: "sans-serif", borderRadius: 8 }} />
                     </RadarChart>
@@ -964,6 +1056,157 @@ export default function PlayerProfilesView({
                     </div>
                   );
                 })}
+              </div>
+            </div>
+
+            {/* DYNAMIC SCATTER COMPARISON BLOCK */}
+            <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-xs flex flex-col gap-5">
+              <div className="border-b border-slate-100 pb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                  <h4 className="font-sans font-extrabold text-slate-900 text-base flex items-center gap-1.5">
+                    <TrendingUp className="w-4 h-4 text-indigo-500" />
+                    <span>Regresyon ve Dağılım Korelasyon Matrisi (Scatter Correlation Map)</span>
+                  </h4>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Farklı performans metriklerini çaprazlayarak oyuncunuzun lig veya takım içerisindeki yerini korelasyon grafiğinde tespit edin.
+                  </p>
+                </div>
+                
+                {/* Scope selector */}
+                <div className="flex bg-slate-100 p-0.5 rounded-xl border border-slate-200 shrink-0">
+                  <button
+                    onClick={() => setScatterScope("tournament")}
+                    className={`px-3 py-1 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                      scatterScope === "tournament" ? "bg-white text-indigo-700 shadow-3xs" : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    Turnuva Geneli
+                  </button>
+                  <button
+                    onClick={() => setScatterScope("team")}
+                    className={`px-3 py-1 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                      scatterScope === "team" ? "bg-white text-indigo-700 shadow-3xs" : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    Takım İçi
+                  </button>
+                  <button
+                    onClick={() => setScatterScope("position")}
+                    className={`px-3 py-1 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                      scatterScope === "position" ? "bg-white text-indigo-700 shadow-3xs" : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    Pozisyonda ({activePlayer.position || "MF"})
+                  </button>
+                </div>
+              </div>
+
+              {/* Metric selectors */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                <div>
+                  <label className="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-wider block mb-1">X Ekseni Metriği</label>
+                  <select
+                    value={scatterXMetric}
+                    onChange={(e) => setScatterXMetric(e.target.value as any)}
+                    className="w-full bg-white border border-slate-200 rounded-xl py-1.5 px-3 text-xs font-semibold text-slate-700 focus:outline-none cursor-pointer"
+                  >
+                    <option value="goals">Goller (Goals)</option>
+                    <option value="passesCompleted">Başarılı Pas (Passes Completed)</option>
+                    <option value="regains">Top Geri Kazanma (Regains)</option>
+                    <option value="ballProgressions">Top Taşımalar (Ball Progressions)</option>
+                    <option value="attemptsAtGoal">Şut Değeri (Shots)</option>
+                    <option value="tackles">Top Çalmalar (Tackles)</option>
+                    <option value="interceptions">Pas Araları (Interceptions)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-wider block mb-1">Y Ekseni Metriği</label>
+                  <select
+                    value={scatterYMetric}
+                    onChange={(e) => setScatterYMetric(e.target.value as any)}
+                    className="w-full bg-white border border-slate-200 rounded-xl py-1.5 px-3 text-xs font-semibold text-slate-700 focus:outline-none cursor-pointer"
+                  >
+                    <option value="attemptsAtGoal">Şut Değeri (Shots)</option>
+                    <option value="regains">Top Geri Kazanma (Regains)</option>
+                    <option value="tackles">Top Çalmalar (Tackles)</option>
+                    <option value="passesCompletionPct">Pas Başarısı % (Completion %)</option>
+                    <option value="lineBreaksCompleted">Hat Kıran Paslar (Line Breaks)</option>
+                    <option value="duelsWon">Kazanılan İkili Mücadele (Duels Won)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Scatter Chart visualization */}
+              <div className="h-[280px] mt-2 relative">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: -20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis 
+                      type="number" 
+                      dataKey="x" 
+                      name={scatterXMetric} 
+                      tick={{ fontSize: 9, fill: "#64748b" }} 
+                      label={{ value: `${scatterXMetric} ${useAverages ? "(ort.)" : "(top.)"}`, position: "insideBottom", offset: -5, fontSize: 9, fill: "#475569" }}
+                    />
+                    <YAxis 
+                      type="number" 
+                      dataKey="y" 
+                      name={scatterYMetric} 
+                      tick={{ fontSize: 9, fill: "#64748b" }} 
+                      label={{ value: `${scatterYMetric} ${useAverages ? "(ort.)" : "(top.)"}`, angle: -90, position: "insideLeft", offset: 10, fontSize: 9, fill: "#475569" }}
+                    />
+                    <ZAxis type="number" range={[50, 200]} />
+                    <RechartsTooltip 
+                      cursor={{ strokeDasharray: "3 3" }} 
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const pData = payload[0].payload;
+                          return (
+                            <div className="bg-slate-900 text-white rounded-xl p-3 shadow-lg border border-slate-800 text-xs space-y-1">
+                              <strong className="block text-amber-400">{pData.name}</strong>
+                              <span className="block text-[10px] text-slate-300">{pData.team} • {pData.position}</span>
+                              <div className="pt-1.5 border-t border-slate-800 flex justify-between gap-4">
+                                <span>{String(scatterXMetric)}: <strong>{pData.x}</strong></span>
+                                <span>{String(scatterYMetric)}: <strong>{pData.y}</strong></span>
+                              </div>
+                              {pData.isSelf && <span className="block text-[9px] text-emerald-400 font-bold mt-1">★ SEÇİLİ OYUNCU (AKTİF)</span>}
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Scatter 
+                      name="Oyuncular" 
+                      data={scatterData} 
+                      fill="#818cf8"
+                      onClick={(node) => {
+                        if (node && node.name) {
+                          setSelectedPlayerKey(`${node.name}_(${node.team})`);
+                        }
+                      }}
+                      className="cursor-pointer"
+                    >
+                      {scatterData.map((entry, index) => (
+                        <Cell 
+                          key={`cell-${index}`} 
+                          fill={entry.isSelf ? "#ef4444" : entry.team === activePlayer.team ? "#10b981" : "#4f46e5"}
+                          stroke={entry.isSelf ? "#ffffff" : "none"}
+                          strokeWidth={entry.isSelf ? 2 : 0}
+                          r={entry.isSelf ? 10 : 6}
+                        />
+                      ))}
+                    </Scatter>
+                  </ScatterChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Informative Help note */}
+              <div className="flex items-center gap-2 p-3 bg-indigo-50 rounded-2xl border border-indigo-100 text-[10px] text-indigo-750">
+                <Sparkles className="w-4 h-4 text-indigo-600 shrink-0" />
+                <span>
+                  <strong>İpucu:</strong> Grafik üzerindeki herhangi bir noktaya tıklayarak <strong>o oyuncunun profil detaylarına doğrudan geçiş yapabilirsiniz!</strong> Kırmızı nokta ({activePlayer.name}) seçili oyuncuyu, yeşil noktalar ise aynı takımdaki ({activePlayer.team}) takım arkadaşlarını simgeler.
+                </span>
               </div>
             </div>
 

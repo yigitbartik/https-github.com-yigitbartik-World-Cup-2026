@@ -524,6 +524,29 @@ export async function deleteTeamFlagFromDB(teamName: string): Promise<void> {
 }
 
 
+export function cleanPlayerName(rawName: string | undefined | null): string {
+  if (!rawName) return "";
+  let name = String(rawName).trim();
+  
+  // Find index of any base64 identifiers or image prefixes
+  const b64Markers = ["data:image", ";base64,", "base64"];
+  for (const marker of b64Markers) {
+    const idx = name.toLowerCase().indexOf(marker);
+    if (idx !== -1) {
+      name = name.substring(0, idx).trim();
+    }
+  }
+  
+  // If the name starts with some common PDF artifact noise like "ivbor", or is super long and doesn't look like a name
+  if (name.toLowerCase().startsWith("ivbor") || (name.length > 50 && !name.includes(" "))) {
+    return "";
+  }
+  
+  // Remove trailing and leading punctuation/dashes often left over
+  name = name.replace(/^[\s\-_,.]+|[\s\-_,.]+$/g, "").trim();
+  return name;
+}
+
 /**
  * Highly robust full-name matcher that processes name and surname together.
  * Resolves potential reverse order names without matching incorrectly directly on single surnames (e.g., both name parts must match).
@@ -534,7 +557,8 @@ export function findPlayerPhoto(
   squadPhotos: Record<string, { base64: string; fileName?: string }>
 ): { base64: string; fileName?: string } | null {
   if (!playerName || !squadPhotos) return null;
-  const targetLower = playerName.toLowerCase().trim();
+  const cleanedName = cleanPlayerName(playerName);
+  const targetLower = cleanedName.toLowerCase().trim();
 
   // 1. Direct exact match
   if (squadPhotos[targetLower]) {
@@ -545,7 +569,7 @@ export function findPlayerPhoto(
   const cleanStr = (s: string) => s.replace(/[\s\-_,.]+/g, "");
   const targetClean = cleanStr(targetLower);
   const foundExactCleanKey = Object.keys(squadPhotos).find(
-    k => cleanStr(k.toLowerCase()) === targetClean
+    k => cleanStr(cleanPlayerName(k).toLowerCase()) === targetClean
   );
   if (foundExactCleanKey) {
     return squadPhotos[foundExactCleanKey];
@@ -564,7 +588,8 @@ export function findPlayerPhoto(
 
   // Let's iterate through all squad keys
   for (const key of Object.keys(squadPhotos)) {
-    const keyLower = key.toLowerCase().trim();
+    const cleanedKey = cleanPlayerName(key);
+    const keyLower = cleanedKey.toLowerCase().trim();
     if (keyLower === targetLower) {
       return squadPhotos[key];
     }

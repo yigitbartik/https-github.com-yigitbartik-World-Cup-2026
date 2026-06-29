@@ -43,14 +43,20 @@ import {
   deleteMatchFromDB,
   saveTeamFlagToDB,
   findPlayerPhoto,
+  cleanPlayerName,
   syncWithFirestore
 } from "./lib/db";
 import ManageSquadPhotosModal from "./components/ManageSquadPhotosModal";
 import OfferingToReceiveVisualizer from "./components/OfferingToReceiveVisualizer";
 import MovementToReceiveVisualizer from "./components/MovementToReceiveVisualizer";
 import { PhysicalAnalysis } from "./components/PhysicalAnalysis";
+import { FootballHackersLab } from "./components/FootballHackersLab";
 import DistributionAndComparison from "./components/DistributionAndComparison";
 import ComprehensiveTacticalReport from "./components/ComprehensiveTacticalReport";
+import VaryansIntelligenceEngine from "./components/VaryansIntelligenceEngine";
+import TeamUnifiedPosterReport from "./components/TeamUnifiedPosterReport";
+import { TournamentComparisonView } from "./components/TournamentComparisonView";
+import ReportDownloadHub from "./components/ReportDownloadHub";
 
 const defaultTeamStats = {
   possession: 0,
@@ -450,8 +456,185 @@ function normalizeMatchReport(data: any): MatchReport {
       summary: Array.isArray(data.setPlays?.summary) ? data.setPlays.summary : [],
     }
   };
+
+  const cleanPlayerNameInObj = (obj: any): any => {
+    if (!obj || typeof obj !== "object") return obj;
+    const newObj = { ...obj };
+    if (typeof newObj.name === "string") {
+      newObj.name = cleanPlayerName(newObj.name);
+    }
+    if (typeof newObj.playerName === "string") {
+      newObj.playerName = cleanPlayerName(newObj.playerName);
+    }
+    return newObj;
+  };
+
+  const cleanPlayerNameInList = (arr: any[]): any[] => {
+    if (!Array.isArray(arr)) return [];
+    return arr.map(cleanPlayerNameInObj).filter(x => {
+      const name = x.name || x.playerName;
+      if (name !== undefined) {
+        return name.length >= 2;
+      }
+      return true;
+    });
+  };
+
+  normalized.homeTeamLineup.starting = cleanPlayerNameInList(normalized.homeTeamLineup.starting);
+  normalized.homeTeamLineup.substitutes = cleanPlayerNameInList(normalized.homeTeamLineup.substitutes);
+  normalized.awayTeamLineup.starting = cleanPlayerNameInList(normalized.awayTeamLineup.starting);
+  normalized.awayTeamLineup.substitutes = cleanPlayerNameInList(normalized.awayTeamLineup.substitutes);
+
+  normalized.playersInPossession.home = cleanPlayerNameInList(normalized.playersInPossession.home);
+  normalized.playersInPossession.away = cleanPlayerNameInList(normalized.playersInPossession.away);
+  normalized.playersOutOfPossession.home = cleanPlayerNameInList(normalized.playersOutOfPossession.home);
+  normalized.playersOutOfPossession.away = cleanPlayerNameInList(normalized.playersOutOfPossession.away);
+  
+  normalized.playersPhysical.home = cleanPlayerNameInList(normalized.playersPhysical.home);
+  normalized.playersPhysical.away = cleanPlayerNameInList(normalized.playersPhysical.away);
+
+  normalized.lineBreaks.playerSummary = cleanPlayerNameInList(normalized.lineBreaks.playerSummary);
+  normalized.crosses.playerSummary = cleanPlayerNameInList(normalized.crosses.playerSummary);
+  normalized.offeringToReceive.playerSummary = cleanPlayerNameInList(normalized.offeringToReceive.playerSummary);
+
+  normalized.movementToReceive.playerDetails = cleanPlayerNameInList(normalized.movementToReceive.playerDetails);
+  normalized.movementToReceive.topRanked = cleanPlayerNameInList(normalized.movementToReceive.topRanked);
+
+  normalized.defensiveActions.playerDetails = cleanPlayerNameInList(normalized.defensiveActions.playerDetails);
+  normalized.defensiveActions.playerRegains = cleanPlayerNameInList(normalized.defensiveActions.playerRegains);
+
+  normalized.defensivePressure.playerDetails = cleanPlayerNameInList(normalized.defensivePressure.playerDetails);
+  normalized.defensivePressure.mostDirect = cleanPlayerNameInList(normalized.defensivePressure.mostDirect);
+
+  normalized.goalkeeping.playerDetails = cleanPlayerNameInList(normalized.goalkeeping.playerDetails);
+
+  if (normalized.passingNetworks?.home?.playerPositions) {
+    normalized.passingNetworks.home.playerPositions = cleanPlayerNameInList(normalized.passingNetworks.home.playerPositions);
+  }
+  if (normalized.passingNetworks?.away?.playerPositions) {
+    normalized.passingNetworks.away.playerPositions = cleanPlayerNameInList(normalized.passingNetworks.away.playerPositions);
+  }
+
+  const cleanConnection = (conn: any) => {
+    if (!conn) return conn;
+    const newConn = { ...conn };
+    if (typeof newConn.from === "string") newConn.from = cleanPlayerName(newConn.from);
+    if (typeof newConn.to === "string") newConn.to = cleanPlayerName(newConn.to);
+    return newConn;
+  };
+  if (Array.isArray(normalized.passingNetworks?.home?.connections)) {
+    normalized.passingNetworks.home.connections = normalized.passingNetworks.home.connections.map(cleanConnection);
+  }
+  if (Array.isArray(normalized.passingNetworks?.away?.connections)) {
+    normalized.passingNetworks.away.connections = normalized.passingNetworks.away.connections.map(cleanConnection);
+  }
+
   return enrichMatchAndLineups(normalized);
 }
+
+const MarqueeFlag = ({ country }: { country: string }) => {
+  const norm = country.toUpperCase().trim();
+  switch (norm) {
+    case "MEXICO":
+      return (
+        <svg className="w-5 h-3.5 rounded-xs shadow-xs border border-slate-700/30" viewBox="0 0 3 2">
+          <rect width="1" height="2" fill="#006847" />
+          <rect x="1" width="1" height="2" fill="#ffffff" />
+          <rect x="2" width="1" height="2" fill="#ce1126" />
+          <circle cx="1.5" cy="1" r="0.15" fill="#f59e0b" />
+        </svg>
+      );
+    case "SOUTH AFRICA":
+      return (
+        <svg className="w-5 h-3.5 rounded-xs shadow-xs border border-slate-700/30" viewBox="0 0 6 4">
+          <rect width="6" height="4" fill="#007a3d" />
+          <path d="M0,0 L2.5,1.66 L6,1.66 L6,0 Z" fill="#e21c32" />
+          <path d="M0,4 L2.5,2.33 L6,2.33 L6,4 Z" fill="#001b6a" />
+          <path d="M0,4 L2,2.67 L2,1.33 L0,0 Z" fill="#000000" />
+          <path d="M0,4 L2.5,2.33 L0,0.67 Z" fill="#000000" stroke="#ffb612" strokeWidth="0.3" />
+        </svg>
+      );
+    case "TÜRKİYE":
+    case "TURKIYE":
+      return (
+        <svg className="w-5 h-3.5 rounded-xs shadow-xs border border-slate-700/30" viewBox="0 0 30 20">
+          <rect width="30" height="20" fill="#e30a17" />
+          <circle cx="12" cy="10" r="4.5" fill="#ffffff" />
+          <circle cx="13.2" cy="10" r="3.7" fill="#e30a17" />
+          <path d="M17.5,10 L16.3,10.8 L16.7,9.3 L15.5,8.4 L17,8.4 L17.5,7 L18,8.4 L19.5,8.4 L18.3,9.3 L18.7,10.8 Z" fill="#ffffff" transform="rotate(-20 17.5 10)" />
+        </svg>
+      );
+    case "BRAZIL":
+      return (
+        <svg className="w-5 h-3.5 rounded-xs shadow-xs border border-slate-700/30" viewBox="0 0 20 14">
+          <rect width="20" height="14" fill="#009b3a" />
+          <path d="M10,1 L19,7 L10,13 L1,7 Z" fill="#fec911" />
+          <circle cx="10" cy="7" r="3" fill="#002776" />
+          <path d="M6.8,7.5 Q10,5.8 13.2,7.5" stroke="#ffffff" strokeWidth="0.4" fill="none" />
+        </svg>
+      );
+    case "ARGENTINA":
+      return (
+        <svg className="w-5 h-3.5 rounded-xs shadow-xs border border-slate-700/30" viewBox="0 0 3 2">
+          <rect width="3" height="0.66" fill="#75aadb" />
+          <rect y="0.66" width="3" height="0.68" fill="#ffffff" />
+          <rect y="1.34" width="3" height="0.66" fill="#75aadb" />
+          <circle cx="1.5" cy="1" r="0.18" fill="#f3bc30" />
+        </svg>
+      );
+    case "FRANCE":
+      return (
+        <svg className="w-5 h-3.5 rounded-xs shadow-xs border border-slate-700/30" viewBox="0 0 3 2">
+          <rect width="1" height="2" fill="#00209f" />
+          <rect x="1" width="1" height="2" fill="#ffffff" />
+          <rect x="2" width="1" height="2" fill="#f11b22" />
+        </svg>
+      );
+    case "GERMANY":
+      return (
+        <svg className="w-5 h-3.5 rounded-xs shadow-xs border border-slate-700/30" viewBox="0 0 5 3">
+          <rect width="5" height="1" fill="#000000" />
+          <rect y="1" width="5" height="1" fill="#dd0000" />
+          <rect y="2" width="5" height="1" fill="#ffce00" />
+        </svg>
+      );
+    case "SPAIN":
+      return (
+        <svg className="w-5 h-3.5 rounded-xs shadow-xs border border-slate-700/30" viewBox="0 0 3 2">
+          <rect width="3" height="0.5" fill="#aa151b" />
+          <rect y="0.5" width="3" height="1" fill="#f1bf00" />
+          <rect y="1.5" width="3" height="0.5" fill="#aa151b" />
+          <circle cx="0.8" cy="1" r="0.15" fill="#aa151b" />
+        </svg>
+      );
+    case "ENGLAND":
+      return (
+        <svg className="w-5 h-3.5 rounded-xs shadow-xs border border-slate-700/30" viewBox="0 0 5 3">
+          <rect width="5" height="3" fill="#ffffff" />
+          <rect x="2.1" width="0.8" height="3" fill="#ce1124" />
+          <rect y="1.1" width="5" height="0.8" fill="#ce1124" />
+        </svg>
+      );
+    case "CROATIA":
+      return (
+        <svg className="w-5 h-3.5 rounded-xs shadow-xs border border-slate-700/30" viewBox="0 0 20 12">
+          <rect width="20" height="4" fill="#ff0000" />
+          <rect y="4" width="20" height="4" fill="#ffffff" />
+          <rect y="8" width="20" height="4" fill="#0000ff" />
+          <rect x="9.2" y="3.5" width="1.6" height="2" fill="#ff0000" stroke="#ffffff" strokeWidth="0.2" />
+        </svg>
+      );
+    case "JAPAN":
+      return (
+        <svg className="w-5 h-3.5 rounded-xs shadow-xs border border-slate-700/30" viewBox="0 0 3 2">
+          <rect width="3" height="2" fill="#ffffff" />
+          <circle cx="1.5" cy="1" r="0.55" fill="#bc002d" />
+        </svg>
+      );
+    default:
+      return <span className="text-sm">🏳️</span>;
+  }
+};
 
 export default function App() {
   // Entrance Page & Custom Logo states
@@ -518,6 +701,53 @@ export default function App() {
   const [uploadedMatches, setUploadedMatches] = useState<MatchReport[]>([]);
   const [activeMatchIndex, setActiveMatchIndex] = useState<number>(0);
   const [searchQuery, setSearchQuery] = useState("");
+  const [globalGroupFilter, setGlobalGroupFilter] = useState<string>("All");
+  const [globalMatchdayFilter, setGlobalMatchdayFilter] = useState<string>("All");
+
+  const getMatchdayForMatch = React.useCallback((match: MatchReport, allList: MatchReport[]) => {
+    const idx = allList.indexOf(match);
+    if (idx === -1) return "All";
+    const home = match.matchInfo.homeTeam;
+    const away = match.matchInfo.awayTeam;
+    let homeCount = 0;
+    let awayCount = 0;
+    for (let i = 0; i <= idx; i++) {
+      const m = allList[i];
+      if (m.matchInfo.homeTeam === home || m.matchInfo.awayTeam === home) homeCount++;
+      if (m.matchInfo.homeTeam === away || m.matchInfo.awayTeam === away) awayCount++;
+    }
+    const num = Math.max(homeCount, awayCount);
+    if (num === 1) return "1";
+    if (num === 2) return "2";
+    if (num === 3) return "3";
+    return "KO";
+  }, []);
+
+  React.useEffect(() => {
+    if (uploadedMatches.length === 0) return;
+    const currentMatch = uploadedMatches[activeMatchIndex];
+    if (!currentMatch) return;
+    
+    const mGroup = currentMatch.matchInfo.group || "";
+    const mDay = getMatchdayForMatch(currentMatch, uploadedMatches);
+    
+    const groupMatches = globalGroupFilter === "All" || mGroup.toUpperCase().includes(globalGroupFilter.toUpperCase());
+    const dayMatches = globalMatchdayFilter === "All" || mDay === globalMatchdayFilter;
+    
+    if (!groupMatches || !dayMatches) {
+      // Find the first match that satisfies the filters
+      const firstMatchIdx = uploadedMatches.findIndex(m => {
+        const g = m.matchInfo.group || "";
+        const d = getMatchdayForMatch(m, uploadedMatches);
+        const matchG = globalGroupFilter === "All" || g.toUpperCase().includes(globalGroupFilter.toUpperCase());
+        const matchD = globalMatchdayFilter === "All" || d === globalMatchdayFilter;
+        return matchG && matchD;
+      });
+      if (firstMatchIdx !== -1) {
+        setActiveMatchIndex(firstMatchIdx);
+      }
+    }
+  }, [globalGroupFilter, globalMatchdayFilter, uploadedMatches, activeMatchIndex, getMatchdayForMatch]);
 
   const [initialPlayerKey, setInitialPlayerKey] = useState("");
   const [initialTeamKey, setInitialTeamKey] = useState("");
@@ -699,6 +929,17 @@ export default function App() {
 
   // --- Virtual SQL Query Engine and Settings Drawer States ---
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSettingsUnlocked, setIsSettingsUnlocked] = useState(() => {
+    try {
+      const saved = localStorage.getItem("__varyans_settings_unlocked_session");
+      return saved === "true";
+    } catch (e) {}
+    return false;
+  });
+  const [isPassModalOpen, setIsPassModalOpen] = useState(false);
+  const [settingsPasswordInput, setSettingsPasswordInput] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+
   const [settingsSubTab, setSettingsSubTab] = useState<"upload" | "sync" | "photos" | "sql">("upload");
   const [sqlQuery, setSqlQuery] = useState<string>(
     "SELECT name, team, sprints, top_speed_kmh FROM players_physical ORDER BY sprints DESC LIMIT 5"
@@ -919,33 +1160,52 @@ export default function App() {
     }
   };
 
+  const [language, setLanguage] = useState<"TR" | "EN">(() => {
+    try {
+      return (localStorage.getItem("fifa_app_lang") as "TR" | "EN") || "TR";
+    } catch (e) {
+      return "TR";
+    }
+  });
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem("fifa_app_lang", language);
+    } catch (e) {}
+  }, [language]);
+
   const MATCH_LAB_TABS = useMemo(() => [
-    { id: "overview", label: "Overview & Key Stats" },
-    { id: "shots", label: "Shot Timeline" },
-    { id: "lineups", label: "Lineups" },
-    { id: "passing_networks", label: "Passing Networks" },
-    { id: "phases", label: "Phases of Play" },
-    { id: "line_height", label: "Line Heights" },
-    { id: "line_breaks", label: "Line Breaks" },
-    { id: "crosses", label: "Crosses Open Play" },
-    { id: "offering", label: "Offering to Receive" },
-    { id: "movement", label: "Movement to Receive" },
-    { id: "goalkeeping", label: "Goalkeeping" },
-    { id: "set_plays", label: "Set Plays" }
-  ], []);
+    { id: "overview", label: language === "TR" ? "Genel Bakış & Ana İstatistikler" : "Overview & Key Stats" },
+    { id: "shots", label: language === "TR" ? "Şut Zaman Çizelgesi" : "Shot Timeline" },
+    { id: "lineups", label: language === "TR" ? "Kadrolar" : "Lineups" },
+    { id: "passing_networks", label: language === "TR" ? "Pas Ağları" : "Passing Networks" },
+    { id: "phases", label: language === "TR" ? "Oyun Evreleri" : "Phases of Play" },
+    { id: "line_height", label: language === "TR" ? "Takım Boyu / Yükseklik" : "Line Heights" },
+    { id: "line_breaks", label: language === "TR" ? "Çizgi Kırmalar" : "Line Breaks" },
+    { id: "crosses", label: language === "TR" ? "Açık Oyun Ortaları" : "Crosses Open Play" },
+    { id: "offering", label: language === "TR" ? "Kabul Etmeye Sunma" : "Offering to Receive" },
+    { id: "movement", label: language === "TR" ? "Kabul Etme Koşuları" : "Movement to Receive" },
+    { id: "goalkeeping", label: language === "TR" ? "Kalecilik" : "Goalkeeping" },
+    { id: "set_plays", label: language === "TR" ? "Duran Toplar" : "Set Plays" }
+  ], [language]);
 
   const SCOUT_ENGINE_TABS = useMemo(() => [
-    { id: "in_possession", label: "Player In Possession" },
-    { id: "out_possession", label: "Player Out of Possession" },
-    { id: "defensive_actions", label: "Defensive Actions" },
-    { id: "defensive_pressure", label: "Defensive Pressure" },
-    { id: "physical", label: "Physical Performance" }
-  ], []);
+    { id: "in_possession", label: language === "TR" ? "Topa Sahipken Oyuncular" : "Player In Possession" },
+    { id: "out_possession", label: language === "TR" ? "Top Rakipteyken Oyuncular" : "Player Out of Possession" },
+    { id: "defensive_actions", label: language === "TR" ? "Savunma Aksiyonları" : "Defensive Actions" },
+    { id: "defensive_pressure", label: language === "TR" ? "Savunma Baskısı" : "Defensive Pressure" },
+    { id: "physical", label: language === "TR" ? "Fiziksel Performans" : "Physical Performance" }
+  ], [language]);
 
   const TOURNAMENT_INSIGHTS_TABS = useMemo(() => [
-    { id: "tournament_analytics", label: "🏆 Tournament & Group Analytics" },
-    { id: "tactical_report", label: "🧠 Gelişmiş Taktik Rapor & PDF" }
-  ], []);
+    { id: "tournament_analytics", label: language === "TR" ? "🏆 Turnuva & Grup Analizleri" : "🏆 Tournament & Group Analytics" },
+    { id: "tournament_comparison", label: language === "TR" ? "📊 Turnuva Kıyaslama & DNA" : "📊 Tournament Comparison & DNA" },
+    { id: "varyans_engine", label: language === "TR" ? "⚡ VARYANS Yapay Zeka Hattı" : "⚡ VARYANS Football Intelligence Pipeline" },
+    { id: "football_hackers_lab", label: language === "TR" ? "💻 Football Hackers Lab" : "💻 Football Hackers Lab" },
+    { id: "team_poster_report", label: language === "TR" ? "📋 Takım Birleşik İnfografik Raporu (PDF)" : "📋 Team Unified Poster Report (PDF)" },
+    { id: "tactical_report", label: language === "TR" ? "🧠 Gelişmiş Taktik Rapor & PDF" : "🧠 Advanced Tactical Report & PDF" },
+    { id: "export_hub", label: language === "TR" ? "🚀 Karar Akışı & İndirme İstasyonu" : "🚀 Decision Flow & Export Station" }
+  ], [language]);
 
   const [highLevelTab, setHighLevelTab] = useState<"match_lab" | "scout_engine" | "tournament_insights">("tournament_insights");
 
@@ -968,6 +1228,12 @@ export default function App() {
     | "lineups"
     | "passing_networks"
     | "tournament_analytics"
+    | "tournament_comparison"
+    | "tactical_report"
+    | "varyans_engine"
+    | "team_poster_report"
+    | "football_hackers_lab"
+    | "export_hub"
   >("tournament_analytics"); // Default to Tournament & Group stage tab so they can see this new capability instantly!
 
   // Synchronize highLevelTab when activeTab changes (e.g. from global search or nav)
@@ -998,6 +1264,19 @@ export default function App() {
   const [positionFilter, setPositionFilter] = useState<"ALL" | "GK" | "DF" | "MF" | "FW">("ALL");
   const [minMatchesFilter, setMinMatchesFilter] = useState<number>(1);
   const [minutesPlayedFilter, setMinutesPlayedFilter] = useState<number>(0);
+
+  // Sorting state variables for specific tables
+  const [lineBreaksSortField, setLineBreaksSortField] = useState<string>("completed");
+  const [lineBreaksSortAsc, setLineBreaksSortAsc] = useState<boolean>(false);
+
+  const [crossesSortField, setCrossesSortField] = useState<string>("crossCompleted");
+  const [crossesSortAsc, setCrossesSortAsc] = useState<boolean>(false);
+
+  const [offeringSortField, setOfferingSortField] = useState<string>("offersMade");
+  const [offeringSortAsc, setOfferingSortAsc] = useState<boolean>(false);
+
+  const [movementSortField, setMovementSortField] = useState<string>("total");
+  const [movementSortAsc, setMovementSortAsc] = useState<boolean>(false);
 
   // Squad photos states
   const [squadPhotos, setSquadPhotos] = useState<Record<string, { base64: string; fileName: string }>>({});
@@ -1241,6 +1520,185 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successToast, setSuccessToast] = useState<string | null>(null);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+
+  const [selectedScoutPlayer, setSelectedScoutPlayer] = useState<{ name: string; position: string; teamName: string; [key: string]: any } | null>(null);
+
+  const getPositionalGroup = (pPos: string): "GK" | "DF" | "MF" | "FW" => {
+    const pos = (pPos || "").toUpperCase();
+    if (pos.includes("GK")) return "GK";
+    if (pos.includes("DF") || pos.includes("CB") || pos.includes("LB") || pos.includes("RB") || pos.includes("WB")) return "DF";
+    if (pos.includes("MF") || pos.includes("CM") || pos.includes("DM") || pos.includes("AM") || pos.includes("RM") || pos.includes("LM")) return "MF";
+    if (pos.includes("FW") || pos.includes("ST") || pos.includes("CF") || pos.includes("LW") || pos.includes("RW") || pos.includes("ATT") || pos.includes("FC")) return "FW";
+    return "MF"; // fallback
+  };
+
+  const scoutPeerDatabase = useMemo(() => {
+    const playerMap = new Map<string, {
+      name: string;
+      teamName: string;
+      position: string;
+      sprints: number;
+      interceptions: number;
+      passesAttempted: number;
+      passesCompleted: number;
+      tacklesWon: number;
+      goals: number;
+      shots: number;
+      totalDistance: number;
+      topSpeed: number;
+      lineBreaksCompleted: number;
+      possessionRegains: number;
+      matchesCount: number;
+    }>();
+
+    uploadedMatches.forEach(m => {
+      const hTeam = m.matchInfo?.homeTeam || "Home";
+      const aTeam = m.matchInfo?.awayTeam || "Away";
+      
+      const homeStarting = m.homeTeamLineup?.starting || [];
+      const homeSubs = m.homeTeamLineup?.substitutes || [];
+      const awayStarting = m.awayTeamLineup?.starting || [];
+      const awaySubs = m.awayTeamLineup?.substitutes || [];
+
+      const getPos = (name: string, isHome: boolean) => {
+        const found = isHome 
+          ? [...homeStarting, ...homeSubs].find(x => x?.name.toUpperCase().trim() === name.toUpperCase().trim())
+          : [...awayStarting, ...awaySubs].find(x => x?.name.toUpperCase().trim() === name.toUpperCase().trim());
+        return found?.position || "MF";
+      };
+
+      const matchPlayers = new Map<string, any>();
+
+      const getOrInit = (name: string, team: string, isHome: boolean) => {
+        const key = `${name.toUpperCase().trim()}_(${team.toUpperCase().trim()})`;
+        if (!matchPlayers.has(key)) {
+          matchPlayers.set(key, {
+            name,
+            teamName: team,
+            position: getPos(name, isHome),
+            sprints: 0,
+            interceptions: 0,
+            passesAttempted: 0,
+            passesCompleted: 0,
+            tacklesWon: 0,
+            goals: 0,
+            shots: 0,
+            totalDistance: 0,
+            topSpeed: 0,
+            lineBreaksCompleted: 0,
+            possessionRegains: 0
+          });
+        }
+        return matchPlayers.get(key)!;
+      };
+
+      (m.playersInPossession?.home || []).forEach(p => {
+        const rec = getOrInit(p.name, hTeam, true);
+        rec.passesAttempted += Number(p.passesAttempted || 0);
+        rec.passesCompleted += Number(p.passesCompleted || 0);
+        rec.goals += Number(p.goals || 0);
+        rec.shots += Number(p.attemptsAtGoal || p.shots || 0);
+        rec.lineBreaksCompleted += Number(p.lineBreaksCompleted || 0);
+      });
+      (m.playersInPossession?.away || []).forEach(p => {
+        const rec = getOrInit(p.name, aTeam, false);
+        rec.passesAttempted += Number(p.passesAttempted || 0);
+        rec.passesCompleted += Number(p.passesCompleted || 0);
+        rec.goals += Number(p.goals || 0);
+        rec.shots += Number(p.attemptsAtGoal || p.shots || 0);
+        rec.lineBreaksCompleted += Number(p.lineBreaksCompleted || 0);
+      });
+
+      (m.playersOutOfPossession?.home || []).forEach(p => {
+        const rec = getOrInit(p.name, hTeam, true);
+        rec.interceptions += Number(p.interceptions || 0);
+        const won = p.tacklesMadeWon ? parseInt(String(p.tacklesMadeWon).split("/")[1] || "0", 10) : 0;
+        rec.tacklesWon += won;
+        rec.possessionRegains += Number(p.possessionRegains || 0);
+      });
+      (m.playersOutOfPossession?.away || []).forEach(p => {
+        const rec = getOrInit(p.name, aTeam, false);
+        rec.interceptions += Number(p.interceptions || 0);
+        const won = p.tacklesMadeWon ? parseInt(String(p.tacklesMadeWon).split("/")[1] || "0", 10) : 0;
+        rec.tacklesWon += won;
+        rec.possessionRegains += Number(p.possessionRegains || 0);
+      });
+
+      (m.playersPhysical?.home || []).forEach(p => {
+        const rec = getOrInit(p.name, hTeam, true);
+        rec.sprints += Number(p.sprints || p.sprintCount || 0);
+        rec.totalDistance += Number(p.totalDistance || 0);
+        rec.topSpeed = Math.max(rec.topSpeed, Number(p.topSpeed || 0));
+      });
+      (m.playersPhysical?.away || []).forEach(p => {
+        const rec = getOrInit(p.name, aTeam, false);
+        rec.sprints += Number(p.sprints || p.sprintCount || 0);
+        rec.totalDistance += Number(p.totalDistance || 0);
+        rec.topSpeed = Math.max(rec.topSpeed, Number(p.topSpeed || 0));
+      });
+
+      matchPlayers.forEach((v, k) => {
+        const existing = playerMap.get(k);
+        if (existing) {
+          existing.sprints += v.sprints;
+          existing.interceptions += v.interceptions;
+          existing.passesAttempted += v.passesAttempted;
+          existing.passesCompleted += v.passesCompleted;
+          existing.tacklesWon += v.tacklesWon;
+          existing.goals += v.goals;
+          existing.shots += v.shots;
+          existing.totalDistance += v.totalDistance;
+          existing.topSpeed = Math.max(existing.topSpeed, v.topSpeed);
+          existing.lineBreaksCompleted += v.lineBreaksCompleted;
+          existing.possessionRegains += v.possessionRegains;
+          existing.matchesCount += 1;
+        } else {
+          playerMap.set(k, { ...v, matchesCount: 1 });
+        }
+      });
+    });
+
+    playerMap.forEach(v => {
+      if (v.matchesCount > 1) {
+        v.sprints = Number((v.sprints / v.matchesCount).toFixed(1));
+        v.interceptions = Number((v.interceptions / v.matchesCount).toFixed(1));
+        v.passesAttempted = Number((v.passesAttempted / v.matchesCount).toFixed(1));
+        v.passesCompleted = Number((v.passesCompleted / v.matchesCount).toFixed(1));
+        v.tacklesWon = Number((v.tacklesWon / v.matchesCount).toFixed(1));
+        v.goals = Number((v.goals / v.matchesCount).toFixed(2));
+        v.shots = Number((v.shots / v.matchesCount).toFixed(1));
+        v.totalDistance = Number((v.totalDistance / v.matchesCount).toFixed(0));
+        v.lineBreaksCompleted = Number((v.lineBreaksCompleted / v.matchesCount).toFixed(1));
+        v.possessionRegains = Number((v.possessionRegains / v.matchesCount).toFixed(1));
+      }
+    });
+
+    return Array.from(playerMap.values());
+  }, [uploadedMatches]);
+
+  const getScoutPlayerPercentile = (pName: string, pPos: string, metric: string): { percentile: number; value: number; avg: number } => {
+    const group = getPositionalGroup(pPos);
+    const peers = scoutPeerDatabase.filter(p => getPositionalGroup(p.position) === group);
+    
+    const dbRecord = scoutPeerDatabase.find(p => p.name.toUpperCase().trim() === pName.toUpperCase().trim());
+    const val = dbRecord ? (dbRecord[metric] || 0) : 0;
+    
+    if (peers.length === 0) return { percentile: 50, value: val, avg: val };
+
+    const peerValues = peers.map(p => p[metric] || 0).sort((a, b) => a - b);
+    const sum = peerValues.reduce((a, b) => a + b, 0);
+    const avg = Number((sum / peerValues.length).toFixed(1));
+
+    const countBelow = peerValues.filter(v => v < val).length;
+    const countEqual = peerValues.filter(v => v === val).length;
+    const percentile = ((countBelow + 0.5 * countEqual) / peerValues.length) * 100;
+
+    return {
+      percentile: Math.max(1, Math.min(100, Math.round(percentile))),
+      value: val,
+      avg
+    };
+  };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -1580,6 +2038,37 @@ export default function App() {
         const inPossIndex = homeInPoss.find(x => x?.number === p.number || x?.name === p.name);
         const outPossIndex = homeOutPoss.find(x => x?.number === p.number || x?.name === p.name);
 
+        const isStarting = homeStarting.some(x => x?.number === p.number || (x?.name && p.name && x.name.toLowerCase() === p.name.toLowerCase()));
+        const isSub = homeSubs.some(x => x?.number === p.number || (x?.name && p.name && x.name.toLowerCase() === p.name.toLowerCase()));
+
+        let minutesPlayed = 90;
+        let subStatus = "Starter";
+
+        if (isStarting) {
+          const lineUpPlayer = homeStarting.find(x => x?.number === p.number || (x?.name && p.name && x.name.toLowerCase() === p.name.toLowerCase()));
+          const matchMin = lineUpPlayer?.extra ? lineUpPlayer.extra.match(/(\d+)/) : null;
+          if (matchMin) {
+            minutesPlayed = parseInt(matchMin[1]);
+            subStatus = "Subbed Out";
+          } else {
+            minutesPlayed = 90;
+            subStatus = "Starter";
+          }
+        } else if (isSub) {
+          const lineUpPlayer = homeSubs.find(x => x?.number === p.number || (x?.name && p.name && x.name.toLowerCase() === p.name.toLowerCase()));
+          const matchMin = lineUpPlayer?.extra ? lineUpPlayer.extra.match(/(\d+)/) : null;
+          if (matchMin) {
+            minutesPlayed = Math.max(1, 90 - parseInt(matchMin[1]));
+            subStatus = "Subbed In";
+          } else {
+            minutesPlayed = Math.max(1, Math.round(p.totalDistance / 110));
+            subStatus = "Subbed In";
+          }
+        } else {
+          minutesPlayed = Math.max(1, Math.round(p.totalDistance / 110));
+          subStatus = p.totalDistance > 8000 ? "Starter" : "Subbed In";
+        }
+
         // Calculate successful tackles from tacklesMadeWon string (e.g., "2 / 1")
         let tacklesCompleted = 0;
         if (outPossIndex?.tacklesMadeWon) {
@@ -1601,6 +2090,8 @@ export default function App() {
           "High Speed Runs": p.highSpeedRuns,
           "Sprints": p.sprints,
           "Top Speed (km/h)": p.topSpeed,
+          "Minutes Played": minutesPlayed,
+          "Sub Status": subStatus,
           
           // Tactical/Game metrics
           "Goals": inPossIndex?.goals || 0,
@@ -1629,6 +2120,37 @@ export default function App() {
         const inPossIndex = awayInPoss.find(x => x?.number === p.number || x?.name === p.name);
         const outPossIndex = awayOutPoss.find(x => x?.number === p.number || x?.name === p.name);
 
+        const isStarting = awayStarting.some(x => x?.number === p.number || (x?.name && p.name && x.name.toLowerCase() === p.name.toLowerCase()));
+        const isSub = awaySubs.some(x => x?.number === p.number || (x?.name && p.name && x.name.toLowerCase() === p.name.toLowerCase()));
+
+        let minutesPlayed = 90;
+        let subStatus = "Starter";
+
+        if (isStarting) {
+          const lineUpPlayer = awayStarting.find(x => x?.number === p.number || (x?.name && p.name && x.name.toLowerCase() === p.name.toLowerCase()));
+          const matchMin = lineUpPlayer?.extra ? lineUpPlayer.extra.match(/(\d+)/) : null;
+          if (matchMin) {
+            minutesPlayed = parseInt(matchMin[1]);
+            subStatus = "Subbed Out";
+          } else {
+            minutesPlayed = 90;
+            subStatus = "Starter";
+          }
+        } else if (isSub) {
+          const lineUpPlayer = awaySubs.find(x => x?.number === p.number || (x?.name && p.name && x.name.toLowerCase() === p.name.toLowerCase()));
+          const matchMin = lineUpPlayer?.extra ? lineUpPlayer.extra.match(/(\d+)/) : null;
+          if (matchMin) {
+            minutesPlayed = Math.max(1, 90 - parseInt(matchMin[1]));
+            subStatus = "Subbed In";
+          } else {
+            minutesPlayed = Math.max(1, Math.round(p.totalDistance / 110));
+            subStatus = "Subbed In";
+          }
+        } else {
+          minutesPlayed = Math.max(1, Math.round(p.totalDistance / 110));
+          subStatus = p.totalDistance > 8000 ? "Starter" : "Subbed In";
+        }
+
         let tacklesCompleted = 0;
         if (outPossIndex?.tacklesMadeWon) {
           const parts = String(outPossIndex.tacklesMadeWon).split("/");
@@ -1649,6 +2171,8 @@ export default function App() {
           "High Speed Runs": p.highSpeedRuns,
           "Sprints": p.sprints,
           "Top Speed (km/h)": p.topSpeed,
+          "Minutes Played": minutesPlayed,
+          "Sub Status": subStatus,
           
           // Tactical/Game metrics
           "Goals": inPossIndex?.goals || 0,
@@ -1749,8 +2273,45 @@ export default function App() {
       list = list.filter(p => p.name.toLowerCase().includes(q) || p.number.toString().includes(q));
     }
 
+    // Apply Sort for Line Breaks
+    if (lineBreaksSortField) {
+      list.sort((a, b) => {
+        const valA = a[lineBreaksSortField];
+        const valB = b[lineBreaksSortField];
+        if (typeof valA === "number" && typeof valB === "number") {
+          return lineBreaksSortAsc ? valA - valB : valB - valA;
+        } else {
+          return lineBreaksSortAsc
+            ? String(valA).localeCompare(String(valB))
+            : String(valB).localeCompare(String(valA));
+        }
+      });
+    }
+
     return list;
-  }, [matchData, teamFilter, playerSearchQuery]);
+  }, [matchData, teamFilter, playerSearchQuery, lineBreaksSortField, lineBreaksSortAsc]);
+
+  const lineBreaksMaxes = useMemo(() => {
+    const list = filteredLineBreaksPlayers || [];
+    const getSafeMax = (field: string) => {
+      const vals = list.map(p => Number(p[field] || 0));
+      return vals.length > 0 ? Math.max(...vals, 1) : 1;
+    };
+    return {
+      attempted: getSafeMax("attempted"),
+      completed: getSafeMax("completed"),
+      u4_attLine: getSafeMax("u4_attLine"),
+      u4_midLine: getSafeMax("u4_midLine"),
+      u3_midLine: getSafeMax("u3_midLine"),
+      u2_defLine: getSafeMax("u2_defLine"),
+      through: getSafeMax("through"),
+      around: getSafeMax("around"),
+      over: getSafeMax("over"),
+      pass: getSafeMax("pass"),
+      cross: getSafeMax("cross"),
+      ballProgression: getSafeMax("ballProgression")
+    };
+  }, [filteredLineBreaksPlayers]);
 
   // 5. Crosses player calculations (Enrich with all players to avoid any missing individuals)
   const filteredCrossesPlayers = useMemo(() => {
@@ -1798,8 +2359,207 @@ export default function App() {
       list = list.filter(p => p.name.toLowerCase().includes(q) || p.number.toString().includes(q));
     }
 
+    // Apply Sort for Crosses
+    if (crossesSortField) {
+      list.sort((a, b) => {
+        const valA = a[crossesSortField];
+        const valB = b[crossesSortField];
+        if (typeof valA === "number" && typeof valB === "number") {
+          return crossesSortAsc ? valA - valB : valB - valA;
+        } else {
+          return crossesSortAsc
+            ? String(valA).localeCompare(String(valB))
+            : String(valB).localeCompare(String(valA));
+        }
+      });
+    }
+
     return list;
-  }, [matchData, teamFilter, playerSearchQuery]);
+  }, [matchData, teamFilter, playerSearchQuery, crossesSortField, crossesSortAsc]);
+
+  const crossesMaxes = useMemo(() => {
+    const list = filteredCrossesPlayers || [];
+    const getSafeMax = (field: string) => {
+      const vals = list.map(p => Number(p[field] || 0));
+      return vals.length > 0 ? Math.max(...vals, 1) : 1;
+    };
+    return {
+      inswing: getSafeMax("inswing"),
+      outswing: getSafeMax("outswing"),
+      driven: getSafeMax("driven"),
+      lofted: getSafeMax("lofted"),
+      cutback: getSafeMax("cutback"),
+      push: getSafeMax("push"),
+      crossCompleted: getSafeMax("crossCompleted"),
+      totalAttempted: getSafeMax("totalAttempted")
+    };
+  }, [filteredCrossesPlayers]);
+
+  // 6. Offering to Receive player calculations
+  const filteredOfferingPlayers = useMemo(() => {
+    const rawOfferingList = matchData.offeringToReceive?.playerSummary || [];
+    const existingNames = new Set(rawOfferingList.map(p => p.name.toUpperCase()));
+
+    const homeStarting = matchData.homeTeamLineup?.starting || [];
+    const homeSubs = matchData.homeTeamLineup?.substitutes || [];
+    const awayStarting = matchData.awayTeamLineup?.starting || [];
+    const awaySubs = matchData.awayTeamLineup?.substitutes || [];
+    const allLineupPlayers = [...homeStarting, ...homeSubs, ...awayStarting, ...awaySubs];
+
+    const extraOfferingPlayers: Array<any> = [];
+    allLineupPlayers.forEach(p => {
+      if (!existingNames.has(p.name.toUpperCase())) {
+        const isHome = homeStarting.some(h => h.name.toUpperCase() === p.name.toUpperCase()) || homeSubs.some(h => h.name.toUpperCase() === p.name.toUpperCase());
+        extraOfferingPlayers.push({
+          team: isHome ? matchData.matchInfo.homeTeam : matchData.matchInfo.awayTeam,
+          number: p.number,
+          name: p.name,
+          offersMade: 0,
+          offersReceived: 0,
+          offersReceivedPct: "0%",
+          offersInBehind: 0,
+          offersInBetween: 0,
+          offersInFront: 0,
+          offersWide: 0,
+          offersFinalThird: 0
+        });
+      }
+    });
+
+    let list = [...rawOfferingList, ...extraOfferingPlayers];
+
+    // Apply Team Filter
+    if (teamFilter !== "all") {
+      list = list.filter(p => {
+        const isHome = p.team === matchData.matchInfo.homeTeam;
+        return teamFilter === "home" ? isHome : !isHome;
+      });
+    }
+
+    // Apply Search Filter
+    if (playerSearchQuery.trim()) {
+      const q = playerSearchQuery.toLowerCase();
+      list = list.filter(p => p.name.toLowerCase().includes(q) || p.number.toString().includes(q));
+    }
+
+    // Apply Sort for Offering to Receive
+    if (offeringSortField) {
+      list.sort((a, b) => {
+        let valA = a[offeringSortField];
+        let valB = b[offeringSortField];
+        // Handle Percentage string "75%" parsing
+        if (offeringSortField === "offersReceivedPct") {
+          valA = parseFloat(String(valA).replace("%", "")) || 0;
+          valB = parseFloat(String(valB).replace("%", "")) || 0;
+        }
+        if (typeof valA === "number" && typeof valB === "number") {
+          return offeringSortAsc ? valA - valB : valB - valA;
+        } else {
+          return offeringSortAsc
+            ? String(valA).localeCompare(String(valB))
+            : String(valB).localeCompare(String(valA));
+        }
+      });
+    }
+
+    return list;
+  }, [matchData, teamFilter, playerSearchQuery, offeringSortField, offeringSortAsc]);
+
+  const offeringMaxes = useMemo(() => {
+    const list = filteredOfferingPlayers;
+    const getSafeMax = (field: string) => {
+      const vals = list.map(p => Number(p[field] || 0));
+      return vals.length > 0 ? Math.max(...vals, 1) : 1;
+    };
+    return {
+      offersMade: getSafeMax("offersMade"),
+      offersReceived: getSafeMax("offersReceived"),
+      offersInBehind: getSafeMax("offersInBehind"),
+      offersInBetween: getSafeMax("offersInBetween"),
+      offersInFront: getSafeMax("offersInFront"),
+      offersWide: getSafeMax("offersWide"),
+      offersFinalThird: getSafeMax("offersFinalThird")
+    };
+  }, [filteredOfferingPlayers]);
+
+  // 7. Movement to Receive player calculations
+  const filteredMovementPlayers = useMemo(() => {
+    const rawMovementList = matchData.movementToReceive?.playerDetails || [];
+    const existingNames = new Set(rawMovementList.map(p => p.name.toUpperCase()));
+
+    const homeStarting = matchData.homeTeamLineup?.starting || [];
+    const homeSubs = matchData.homeTeamLineup?.substitutes || [];
+    const awayStarting = matchData.awayTeamLineup?.starting || [];
+    const awaySubs = matchData.awayTeamLineup?.substitutes || [];
+    const allLineupPlayers = [...homeStarting, ...homeSubs, ...awayStarting, ...awaySubs];
+
+    const extraMovementPlayers: Array<any> = [];
+    allLineupPlayers.forEach(p => {
+      if (!existingNames.has(p.name.toUpperCase())) {
+        const isHome = homeStarting.some(h => h.name.toUpperCase() === p.name.toUpperCase()) || homeSubs.some(h => h.name.toUpperCase() === p.name.toUpperCase());
+        extraMovementPlayers.push({
+          team: isHome ? matchData.matchInfo.homeTeam : matchData.matchInfo.awayTeam,
+          number: p.number,
+          name: p.name,
+          inBehind: 0,
+          inBetween: 0,
+          inFront: 0,
+          outToIn: 0,
+          inToOut: 0,
+          total: 0
+        });
+      }
+    });
+
+    let list = [...rawMovementList, ...extraMovementPlayers];
+
+    // Apply Team Filter
+    if (teamFilter !== "all") {
+      list = list.filter(p => {
+        const isHome = p.team === matchData.matchInfo.homeTeam;
+        return teamFilter === "home" ? isHome : !isHome;
+      });
+    }
+
+    // Apply Search Filter
+    if (playerSearchQuery.trim()) {
+      const q = playerSearchQuery.toLowerCase();
+      list = list.filter(p => p.name.toLowerCase().includes(q) || p.number.toString().includes(q));
+    }
+
+    // Apply Sort for Movement to Receive
+    if (movementSortField) {
+      list.sort((a, b) => {
+        const valA = a[movementSortField];
+        const valB = b[movementSortField];
+        if (typeof valA === "number" && typeof valB === "number") {
+          return movementSortAsc ? valA - valB : valB - valA;
+        } else {
+          return movementSortAsc
+            ? String(valA).localeCompare(String(valB))
+            : String(valB).localeCompare(String(valA));
+        }
+      });
+    }
+
+    return list;
+  }, [matchData, teamFilter, playerSearchQuery, movementSortField, movementSortAsc]);
+
+  const movementMaxes = useMemo(() => {
+    const list = filteredMovementPlayers;
+    const getSafeMax = (field: string) => {
+      const vals = list.map(p => Number(p[field] || 0));
+      return vals.length > 0 ? Math.max(...vals, 1) : 1;
+    };
+    return {
+      inFront: getSafeMax("inFront"),
+      inBetween: getSafeMax("inBetween"),
+      outToIn: getSafeMax("outToIn"),
+      inToOut: getSafeMax("inToOut"),
+      inBehind: getSafeMax("inBehind"),
+      total: getSafeMax("total")
+    };
+  }, [filteredMovementPlayers]);
 
   // Export to Multi-sheet Excel workbook
   const handleExportToExcel = () => {
@@ -2560,6 +3320,36 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans relative overflow-hidden selection:bg-amber-500 selection:text-slate-950">
         
+        {/* Top-Right corner Language toggle & Author badge on landing page */}
+        <div className="absolute top-6 right-6 z-20 flex items-center gap-4">
+          <div className="bg-slate-900/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-slate-800 text-[10px] text-slate-400 font-mono">
+            Dev: <span className="text-amber-400 font-bold font-sans">Yiğit Bartık</span>
+          </div>
+          
+          <div className="flex bg-slate-900/60 backdrop-blur-md p-1 rounded-xl border border-slate-800 select-none">
+            <button
+              onClick={() => setLanguage("TR")}
+              className={`px-2.5 py-1 text-[10.5px] font-black rounded-lg transition-all cursor-pointer ${
+                language === "TR" 
+                  ? "bg-amber-500 text-slate-950 shadow-xs" 
+                  : "text-slate-400 hover:text-slate-250"
+              }`}
+            >
+              TR
+            </button>
+            <button
+              onClick={() => setLanguage("EN")}
+              className={`px-2.5 py-1 text-[10.5px] font-black rounded-lg transition-all cursor-pointer ${
+                language === "EN" 
+                  ? "bg-amber-500 text-slate-950 shadow-xs" 
+                  : "text-slate-400 hover:text-slate-250"
+              }`}
+            >
+              EN
+            </button>
+          </div>
+        </div>
+
         {/* Ambient golden/indigo glow backgrounds and stars */}
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-950/40 via-slate-950 to-slate-950 pointer-events-none z-0" />
         <div className="absolute top-[-10%] left-[20%] w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-3xl pointer-events-none animate-pulse duration-[8000ms]" />
@@ -2639,14 +3429,18 @@ export default function App() {
 
             {/* Title & Slogans */}
             <div className="flex flex-col gap-2 mt-4 animate-fade-in">
-              <h1 className="text-4xl sm:text-5xl font-black font-sans tracking-tight text-white leading-none">
-                FIFA <span className="bg-gradient-to-r from-amber-400 to-yellow-350 bg-clip-text text-transparent">DÜNYA KUPASI</span>
+              <h1 className="text-4xl sm:text-5xl font-black font-sans tracking-tight text-white leading-none uppercase">
+                FIFA WORLD CUP ANALYSIS <span className="bg-gradient-to-r from-amber-400 to-yellow-350 bg-clip-text text-transparent">- VARYANS</span>
               </h1>
               <span className="text-lg sm:text-xl font-semibold font-sans tracking-tight text-indigo-300">
-                Gelişmiş Taktiksel Analiz & Veri Bilimi Platformu
+                {language === "TR" 
+                  ? "Gelişmiş Taktiksel Analiz & Veri Bilimi Platformu" 
+                  : "Advanced Tactical Analysis & Data Science Platform"}
               </span>
               <p className="text-xs sm:text-sm text-slate-400 leading-relaxed max-w-lg mx-auto mt-1">
-                FIFA resmi maç raporlarındaki statik PDF'leri otomatik olarak dinamik veri hatlarına döker; oyuncu performanslarını anomali tespiti ve makine öğrenimi modelleriyle inceler.
+                {language === "TR"
+                  ? "FIFA resmi maç raporlarındaki statik PDF'leri otomatik olarak dinamik veri hatlarına döker; oyuncu performanslarını anomali tespiti ve makine öğrenimi modelleriyle inceler."
+                  : "Automatically parses static PDFs from official FIFA match reports into dynamic data pipelines; analyzes player performances with anomaly detection and machine learning models."}
               </p>
             </div>
           </div>
@@ -2659,10 +3453,12 @@ export default function App() {
               <div>
                 <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
                   <Upload className="w-4 h-4 text-amber-500 shrink-0" />
-                  Özel Logo Yükleme & Yönetme
+                  {language === "TR" ? "Özel Logo Yükleme & Yönetme" : "Upload & Manage Custom Logo"}
                 </h3>
                 <p className="text-xs text-slate-400 mt-1">
-                  Uygulamanın genelinde (analiz sayfalarında, başlıkta ve PDF çıktı tasarımlarında) kullanılacak istediğiniz görsele ait resmi buraya yükleyin.
+                  {language === "TR" 
+                    ? "Uygulamanın genelinde (analiz sayfalarında, başlıkta ve PDF çıktı tasarımlarında) kullanılacak istediğiniz görsele ait resmi buraya yükleyin." 
+                    : "Upload your custom image to be used as the application logo across all analytics views, headers, and PDF report prints."}
                 </p>
               </div>
 
@@ -2685,16 +3481,24 @@ export default function App() {
                 {appLogo ? (
                   <div className="flex flex-col items-center gap-2 text-indigo-400">
                     <CheckCircle2 className="w-8 h-8 text-emerald-400 shrink-0" />
-                    <span className="text-xs font-semibold text-slate-200">Kanal logonuz başarıyla sisteme kaydedildi!</span>
-                    <span className="text-[10px] text-slate-500">Logoyu değiştirmek için üzerine tıklayın</span>
+                    <span className="text-xs font-semibold text-slate-200">
+                      {language === "TR" ? "Kanal logonuz başarıyla sisteme kaydedildi!" : "Your custom logo has been successfully saved!"}
+                    </span>
+                    <span className="text-[10px] text-slate-500">
+                      {language === "TR" ? "Logoyu değiştirmek için üzerine tıklayın" : "Click to change logo"}
+                    </span>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center gap-2">
                     <div className="w-10 h-10 bg-slate-900 rounded-full flex items-center justify-center border border-slate-800 text-slate-400 hover:text-amber-500 transition-all">
                       <Plus className="w-5 h-5 text-amber-500" />
                     </div>
-                    <span className="text-xs font-bold text-slate-300">Resim Seçin veya Sürükleyin</span>
-                    <span className="text-[10px] text-slate-500">Tüm resim uzantılarını destekler (Max 10MB)</span>
+                    <span className="text-xs font-bold text-slate-300">
+                      {language === "TR" ? "Resim Seçin veya Sürükleyin" : "Select or Drag Image"}
+                    </span>
+                    <span className="text-[10px] text-slate-500">
+                      {language === "TR" ? "Tüm resim uzantılarını destekler (Max 10MB)" : "Supports all image extensions (Max 10MB)"}
+                    </span>
                   </div>
                 )}
               </div>
@@ -2707,32 +3511,36 @@ export default function App() {
                   ⚡ INSTANT SYSTEM CAPABILITY
                 </span>
                 <h3 className="text-sm font-bold text-slate-100 mt-1">
-                  Entegre Analiz Modülleri & Veritabanı
+                  {language === "TR" ? "Entegre Analiz Modülleri & Veritabanı" : "Integrated Analysis Modules & Database"}
                 </h3>
               </div>
 
               <div className="grid grid-cols-2 gap-3.5">
                 <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-900">
-                  <span className="text-[10px] text-slate-400">Kayıtlı Maç</span>
-                  <div className="text-base font-black text-white font-mono mt-0.5">{uploadedMatches.length} Rapor</div>
+                  <span className="text-[10px] text-slate-400">{language === "TR" ? "Kayıtlı Maç" : "Saved Matches"}</span>
+                  <div className="text-base font-black text-white font-mono mt-0.5">{uploadedMatches.length} {language === "TR" ? "Rapor" : "Reports"}</div>
                 </div>
                 <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-900">
-                  <span className="text-[10px] text-slate-400">ML Kümeleme</span>
-                  <div className="text-base font-black text-white mt-0.5 font-mono">Dinamik Roller</div>
+                  <span className="text-[10px] text-slate-400">{language === "TR" ? "ML Kümeleme" : "ML Clustering"}</span>
+                  <div className="text-base font-black text-white mt-0.5 font-mono">{language === "TR" ? "Dinamik Roller" : "Dynamic Roles"}</div>
                 </div>
                 <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-900">
-                  <span className="text-[10px] text-slate-400">Sürat Limitleri</span>
+                  <span className="text-[10px] text-slate-400">{language === "TR" ? "Sürat Limitleri" : "Speed Limits"}</span>
                   <div className="text-base font-black text-white mt-0.5 font-mono">Zone 4 & 5</div>
                 </div>
                 <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-900">
-                  <span className="text-[10px] text-slate-400">Veri Tabanı</span>
+                  <span className="text-[10px] text-slate-400">{language === "TR" ? "Veri Tabanı" : "Database"}</span>
                   <div className="text-base font-black text-white mt-0.5 font-mono">IndexedDB</div>
                 </div>
               </div>
 
               <div className="flex items-center gap-2 text-xs text-slate-400 border-t border-slate-900/60 pt-3">
                 <Activity className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                <span>IndexedDB yerel veri depolaması sayesinde internetiniz kopsa dahi verileriniz korunur.</span>
+                <span>
+                  {language === "TR"
+                    ? "IndexedDB yerel veri depolaması sayesinde internetiniz kopsa dahi verileriniz korunur."
+                    : "Your data is kept safe locally using IndexedDB storage even if your connection drops."}
+                </span>
               </div>
             </div>
 
@@ -2745,15 +3553,24 @@ export default function App() {
               className="px-12 py-4.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 active:from-amber-700 active:to-yellow-700 text-slate-950 font-black tracking-wide uppercase text-sm sm:text-base rounded-2xl shadow-xl shadow-amber-500/10 cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98] text-center flex items-center justify-center gap-3 select-none"
             >
               <Trophy className="w-5 h-5 shrink-0" />
-              <span>DÜNYA KUPASI ANALİZİNE BAŞLA</span>
+              <span>{language === "TR" ? "DÜNYA KUPASI ANALİZİNE BAŞLA" : "START WORLD CUP ANALYSIS"}</span>
             </button>
           </div>
 
         </div>
 
         {/* Footer Brand Info */}
-        <div className="border-t border-slate-900/60 py-6 text-center text-xs text-slate-500 relative z-10 w-full bg-slate-950/30">
-          <p>© 2026 FIFA World Cup Analysis Studio. Tüm hakları saklıdır.</p>
+        <div className="border-t border-slate-900/60 py-8 text-center text-[11px] text-slate-500 relative z-10 w-full bg-slate-950/40 px-4">
+          <p className="max-w-3xl mx-auto leading-relaxed">
+            {language === "TR" 
+              ? "Bu uygulama FIFA Maç Raporlarından yayınlanan veriler kullanılarak oluşturulmuştur. Herhangi bir ticari amaç taşımamaktadır; sadece yayınlanan verileri kullanarak farklı taktiksel ve fiziksel analizler gerçekleştirmek amacıyla geliştirilmiş akademik ve bilimsel bir uygulamadır." 
+              : "This application has been created using data published from official FIFA Match Reports. It is purely non-commercial and developed for academic and data-science purposes to perform deeper tactical and physical analyses on top of published reports."}
+          </p>
+          <div className="mt-3.5 flex flex-wrap justify-center items-center gap-2 text-xs font-semibold text-slate-400">
+            <span>© 2026 FIFA World Cup Analysis - VARYANS Studio. All rights reserved.</span>
+            <span>•</span>
+            <span className="text-amber-500 font-bold">Developed by Yiğit Bartık</span>
+          </div>
         </div>
       </div>
     );
@@ -2769,25 +3586,41 @@ export default function App() {
           <div 
             className="flex items-center gap-3 cursor-pointer select-none" 
             onClick={handleExitApp} 
-            title="Giriş / Hoşgeldiniz Ekranına Geri Dön"
+            title={language === "TR" ? "Giriş / Hoşgeldiniz Ekranına Geri Dön" : "Back to Home Screen"}
           >
-            {appLogo ? (
-              <img 
-                src={appLogo} 
-                alt="App Logo" 
-                className="w-11 h-11 rounded-xl object-contain border border-slate-100 shadow-xs shrink-0" 
-                referrerPolicy="no-referrer"
-              />
-            ) : (
-              <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center shadow-xs">
-                <span className="text-white font-bold text-xs italic">PX</span>
+            {/* 1. Permanent Immutable Varyans Gold Crest */}
+            <div className="w-11 h-11 bg-slate-950 rounded-xl flex items-center justify-center border border-amber-500/30 shadow-md shrink-0 select-none overflow-hidden relative">
+              <svg className="w-9 h-9 transform hover:scale-105 transition-all duration-300" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="50" cy="50" r="45" fill="#0d111d" stroke="#f59e0b" strokeWidth="3" />
+                <path d="M35 30 L50 18 L65 30 L65 65 L50 82 L35 65 Z" fill="#1e1b4b" stroke="#f59e0b" strokeWidth="2.5" />
+                <circle cx="50" cy="50" r="12" fill="#020617" stroke="#3b82f6" strokeWidth="2" />
+                <path d="M50 24 L50 76 M38 50 L62 50" stroke="#f59e0b" strokeWidth="1" strokeDasharray="2 2" />
+                <path d="M47 50 L53 50 M50 47 L50 53" stroke="#f59e0b" strokeWidth="2" />
+              </svg>
+            </div>
+            
+            {/* 2. Custom Channel Logo, if uploaded, rendered alongside as cooperative badge */}
+            {appLogo && (
+              <div className="flex items-center gap-1 animate-fade-in shrink-0">
+                <span className="text-slate-300 font-mono text-[9px] font-bold">×</span>
+                <img 
+                  src={appLogo} 
+                  alt="Kurumsal Logo" 
+                  className="w-8 h-8 rounded-lg object-contain border border-slate-200 shadow-3xs shrink-0 bg-white" 
+                  referrerPolicy="no-referrer"
+                />
               </div>
             )}
             <div>
-              <h1 className="font-sans font-semibold text-base tracking-tight flex items-center gap-1.5 leading-tight text-slate-900">
-                <span>FIFA Match PDF <span className="text-indigo-600 font-bold">Xcel</span></span>
+              <h1 className="font-sans font-extrabold text-base tracking-tight flex items-center gap-2 leading-tight text-slate-900">
+                <span className="bg-gradient-to-r from-indigo-800 to-blue-700 bg-clip-text text-transparent">FIFA WORLD CUP ANALYSIS</span>
+                <span className="px-2 py-0.5 bg-indigo-600 text-white text-[10px] font-black rounded-lg uppercase tracking-wider">VARYANS</span>
               </h1>
-              <p className="text-[10px] text-slate-400 font-mono tracking-wide">Giriş / Hoşgeldiniz Ekranına Dönmek İçin Tıklayın</p>
+              <p className="text-[10px] text-slate-400 font-mono tracking-wide flex items-center gap-1.5">
+                <span>{language === "TR" ? "Giriş Ekranına Dön" : "Back to Home Screen"}</span>
+                <span>•</span>
+                <span className="text-indigo-600 font-bold">Developer: Yiğit Bartık</span>
+              </p>
             </div>
           </div>
 
@@ -2855,6 +3688,30 @@ export default function App() {
               </AnimatePresence>
             </div>
 
+            {/* Language Toggle Selector */}
+            <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-3xs shrink-0 select-none">
+              <button
+                onClick={() => setLanguage("TR")}
+                className={`px-2.5 py-1 text-[10.5px] font-extrabold rounded-lg transition-all cursor-pointer ${
+                  language === "TR" 
+                    ? "bg-indigo-600 text-white shadow-xs" 
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                TR
+              </button>
+              <button
+                onClick={() => setLanguage("EN")}
+                className={`px-2.5 py-1 text-[10.5px] font-extrabold rounded-lg transition-all cursor-pointer ${
+                  language === "EN" 
+                    ? "bg-indigo-600 text-white shadow-xs" 
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                EN
+              </button>
+            </div>
+
             {/* Global Theme Switcher Toggler */}
             <button
               onClick={() => {
@@ -2879,16 +3736,89 @@ export default function App() {
 
             {/* Combined Settings & Management Hub Toggle */}
             <button
-              onClick={() => setIsSettingsOpen(true)}
-              className="w-10 h-10 rounded-xl bg-slate-150 hover:bg-slate-200 border border-slate-200 text-slate-700 hover:text-slate-900 flex items-center justify-center transition-all shadow-3xs cursor-pointer select-none shrink-0"
-              title="Operasyonel Kokpit & Ayarlar"
+              onClick={() => {
+                if (isSettingsUnlocked) {
+                  setIsSettingsOpen(true);
+                } else {
+                  setIsPassModalOpen(true);
+                  setPasswordError("");
+                  setSettingsPasswordInput("");
+                }
+              }}
+              className="w-10 h-10 rounded-xl bg-slate-150 hover:bg-slate-200 border border-slate-200 text-slate-700 hover:text-slate-900 flex items-center justify-center transition-all shadow-3xs cursor-pointer select-none shrink-0 relative"
+              title={language === "TR" ? "Operasyonel Kokpit & Ayarlar (Şifreli)" : "Operational Cockpit & Settings (Locked)"}
             >
               <SlidersHorizontal className="w-4 h-4" />
+              {!isSettingsUnlocked && (
+                <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                </span>
+              )}
             </button>
           </div>
 
         </div>
       </nav>
+
+      {/* Dynamic Real-Time Analytical Marquee Ticker */}
+      <div className="w-full bg-slate-900 border-b border-indigo-500/10 text-slate-100 py-2 overflow-hidden shrink-0 select-none relative z-30">
+        <div className="absolute left-0 top-0 bottom-0 w-24 bg-gradient-to-r from-slate-900 to-transparent z-10 pointer-events-none" />
+        <div className="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-slate-900 to-transparent z-10 pointer-events-none" />
+        
+        <div className="flex w-full overflow-hidden">
+          <div className="animate-marquee-scroll whitespace-nowrap flex items-center gap-12">
+            {[
+              { countryKey: "MEXICO", text: "MEXICO", color: "text-emerald-400" },
+              { countryKey: "SOUTH AFRICA", text: "SOUTH AFRICA", color: "text-amber-400" },
+              { countryKey: "TÜRKİYE", text: "TÜRKİYE", color: "text-rose-400" },
+              { countryKey: "BRAZIL", text: "BRAZIL", color: "text-yellow-400" },
+              { countryKey: "ARGENTINA", text: "ARGENTINA", color: "text-sky-300" },
+              { countryKey: "FRANCE", text: "FRANCE", color: "text-blue-400" },
+              { countryKey: "GERMANY", text: "GERMANY", color: "text-slate-300" },
+              { countryKey: "SPAIN", text: "SPAIN", color: "text-red-400" },
+              { countryKey: "ENGLAND", text: "ENGLAND", color: "text-stone-300" },
+              { countryKey: "CROATIA", text: "CROATIA", color: "text-red-500" },
+              { countryKey: "JAPAN", text: "JAPAN", color: "text-indigo-300" },
+              { isSpecial: true, icon: "⚽", text: "VARYANS TACTICAL INTEGRATOR: LIVE", color: "text-emerald-400" },
+              { isSpecial: true, icon: "⚡", text: "xG CALIBRATION: SECURED", color: "text-indigo-400" },
+              { isSpecial: true, icon: "📈", text: "PERFORMANCE TRANSITIONS DNA: CALIBRATED", color: "text-amber-400" },
+              { isSpecial: true, icon: "🔒", text: "ADMIN WORKSPACE ENCRYPTED", color: "text-amber-500" }
+            ].concat([ // Double for seamless loop
+              { countryKey: "MEXICO", text: "MEXICO", color: "text-emerald-400" },
+              { countryKey: "SOUTH AFRICA", text: "SOUTH AFRICA", color: "text-amber-400" },
+              { countryKey: "TÜRKİYE", text: "TÜRKİYE", color: "text-rose-400" },
+              { countryKey: "BRAZIL", text: "BRAZIL", color: "text-yellow-400" },
+              { countryKey: "ARGENTINA", text: "ARGENTINA", color: "text-sky-300" },
+              { countryKey: "FRANCE", text: "FRANCE", color: "text-blue-400" },
+              { countryKey: "GERMANY", text: "GERMANY", color: "text-slate-300" },
+              { countryKey: "SPAIN", text: "SPAIN", color: "text-red-400" },
+              { countryKey: "ENGLAND", text: "ENGLAND", color: "text-stone-300" },
+              { countryKey: "CROATIA", text: "CROATIA", color: "text-red-500" },
+              { countryKey: "JAPAN", text: "JAPAN", color: "text-indigo-300" },
+              { isSpecial: true, icon: "⚽", text: "VARYANS TACTICAL INTEGRATOR: LIVE", color: "text-emerald-400" },
+              { isSpecial: true, icon: "⚡", text: "xG CALIBRATION: SECURED", color: "text-indigo-400" },
+              { isSpecial: true, icon: "📈", text: "PERFORMANCE TRANSITIONS DNA: CALIBRATED", color: "text-amber-400" },
+              { isSpecial: true, icon: "🔒", text: "ADMIN WORKSPACE ENCRYPTED", color: "text-amber-500" }
+            ]).map((item, index) => (
+              <div key={index} className="inline-flex items-center gap-2 text-xs font-mono font-black uppercase tracking-widest">
+                {item.countryKey ? (
+                  <div className="flex items-center gap-1.5">
+                    <MarqueeFlag country={item.countryKey} />
+                    <span className={item.color}>{item.text}</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <span>{item.icon}</span>
+                    <span className={item.color}>{item.text}</span>
+                  </div>
+                )}
+                <span className="text-slate-700 font-normal select-none">|</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
 
       {/* Firestore Quota Warning Banner */}
       {quotaError && !isQuotaDismissed && (
@@ -2952,10 +3882,52 @@ export default function App() {
             </p>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto shrink-0 relative z-10">
+          <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-4 w-full lg:w-auto shrink-0 relative z-10">
+            {/* Group Filter */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[9px] font-mono uppercase text-slate-400 font-semibold tracking-wider">
+                {language === "TR" ? "Grup Filtresi" : "Group Filter"}
+              </label>
+              <select
+                value={globalGroupFilter}
+                onChange={(e) => setGlobalGroupFilter(e.target.value)}
+                className="bg-slate-950 border border-slate-800 hover:border-slate-700 px-3 py-2.5 rounded-xl text-xs font-sans font-semibold text-slate-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer transition-all"
+              >
+                <option value="All">{language === "TR" ? "Tüm Gruplar" : "All Groups"}</option>
+                <option value="Group A">Group A</option>
+                <option value="Group B">Group B</option>
+                <option value="Group C">Group C</option>
+                <option value="Group D">Group D</option>
+                <option value="Group E">Group E</option>
+                <option value="Group F">Group F</option>
+                <option value="Group G">Group G</option>
+                <option value="Group H">Group H</option>
+              </select>
+            </div>
+
+            {/* Matchday Filter */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[9px] font-mono uppercase text-slate-400 font-semibold tracking-wider">
+                {language === "TR" ? "Maç Günü" : "Matchday"}
+              </label>
+              <select
+                value={globalMatchdayFilter}
+                onChange={(e) => setGlobalMatchdayFilter(e.target.value)}
+                className="bg-slate-950 border border-slate-800 hover:border-slate-700 px-3 py-2.5 rounded-xl text-xs font-sans font-semibold text-slate-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer transition-all"
+              >
+                <option value="All">{language === "TR" ? "Tüm Maçlar" : "All Matchdays"}</option>
+                <option value="1">1. Maçlar (Matchday 1)</option>
+                <option value="2">2. Maçlar (Matchday 2)</option>
+                <option value="3">3. Maçlar (Matchday 3)</option>
+                <option value="KO">{language === "TR" ? "Eleme Aşaması" : "Knockout Stage"}</option>
+              </select>
+            </div>
+
             {/* Switchers */}
-            <div className="flex flex-col gap-1.5 shrink-0 flex-1 sm:flex-none">
-              <label className="text-[9px] font-mono uppercase text-slate-400 font-semibold tracking-wider">Select Active Match to Study</label>
+            <div className="flex flex-col gap-1.5 shrink-0 flex-1">
+              <label className="text-[9px] font-mono uppercase text-slate-400 font-semibold tracking-wider">
+                {language === "TR" ? "Seçili Maçı İncele" : "Select Active Match to Study"}
+              </label>
               <div className="flex items-center gap-2">
                 <select
                   value={activeMatchIndex}
@@ -2971,21 +3943,23 @@ export default function App() {
                   {uploadedMatches.length === 0 ? (
                     <option value={0}>🚨 Örnek Veri (Önizleme Modu)</option>
                   ) : (
-                    uploadedMatches.map((m, idx) => (
-                      <option key={idx} value={idx}>
-                        [{m.matchInfo.group || "Match"}] {m.matchInfo.homeTeam} vs {m.matchInfo.awayTeam} ({m.matchInfo.homeScore || 0}-{m.matchInfo.awayScore || 0})
-                      </option>
-                    ))
+                    uploadedMatches.map((m, idx) => {
+                      const mGroup = m.matchInfo.group || "";
+                      const mDay = getMatchdayForMatch(m, uploadedMatches);
+                      
+                      const groupMatches = globalGroupFilter === "All" || mGroup.toUpperCase().includes(globalGroupFilter.toUpperCase());
+                      const dayMatches = globalMatchdayFilter === "All" || mDay === globalMatchdayFilter;
+                      
+                      if (!groupMatches || !dayMatches) return null;
+
+                      return (
+                        <option key={idx} value={idx}>
+                          [{mGroup}] {m.matchInfo.homeTeam} vs {m.matchInfo.awayTeam} ({m.matchInfo.homeScore || 0}-{m.matchInfo.awayScore || 0})
+                        </option>
+                      );
+                    })
                   )}
                 </select>
-                <button
-                  onClick={handleDeleteActiveMatch}
-                  disabled={uploadedMatches.length === 0}
-                  className="bg-red-950/40 hover:bg-red-900 border border-red-750 hover:border-red-600 disabled:opacity-50 disabled:hover:bg-red-950/40 disabled:border-red-900 text-red-100 p-2.5 rounded-xl transition-all cursor-pointer shadow-sm shrink-0 flex items-center justify-center h-[38px] w-[38px] group"
-                  title={uploadedMatches.length === 0 ? "Örnek özet silinemez" : "Seçili analiz raporunu arşivden tamamen sil"}
-                >
-                  <Trash2 className="w-4 h-4 text-red-400 group-hover:text-white transition-colors" />
-                </button>
               </div>
             </div>
 
@@ -3711,6 +4685,72 @@ export default function App() {
           </motion.div>
         )}
 
+        {/* Tab: Rapor & İndirme İstasyonu */}
+        {activeTab === "export_hub" && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <ReportDownloadHub 
+              matchTitle={matchData.matchInfo.title || "Taktiksel Maç Analizi"}
+              homeTeam={matchData.matchInfo.homeTeam || "Ev Sahibi"}
+              awayTeam={matchData.matchInfo.awayTeam || "Misafir"}
+              rawPlayerData={matchData.playersPhysical?.home || []}
+            />
+          </motion.div>
+        )}
+
+        {/* Tab: Takım Birleşik İnfografik Raporu (PDF) */}
+        {activeTab === "team_poster_report" && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <TeamUnifiedPosterReport 
+              allMatches={uploadedMatches.length > 0 ? uploadedMatches : [mexicoSouthAfricaMatchData]} 
+            />
+          </motion.div>
+        )}
+
+        {/* Tab: Tournament Comparison & DNA */}
+        {activeTab === "tournament_comparison" && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <TournamentComparisonView 
+              uploadedMatches={uploadedMatches} 
+              language={language}
+            />
+          </motion.div>
+        )}
+
+        {/* Tab: VARYANS Football Intelligence Pipeline */}
+        {activeTab === "varyans_engine" && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <VaryansIntelligenceEngine 
+              matchData={matchData} 
+              allMatches={uploadedMatches.length > 0 ? uploadedMatches : [mexicoSouthAfricaMatchData]} 
+              onSelectMatch={setActiveMatchIndex} 
+              getTeamFlag={getTeamFlag}
+              squadPhotos={squadPhotos}
+            />
+          </motion.div>
+        )}
+
+        {/* Tab: Football Hackers Lab */}
+        {activeTab === "football_hackers_lab" && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <FootballHackersLab sheets={physicalAnalysisSheets} />
+          </motion.div>
+        )}
+
         {/* Tab 1: Overview and Key Stats */}
         {activeTab === "overview" && (
           <motion.div
@@ -3722,26 +4762,26 @@ export default function App() {
             <div className="lg:col-span-2 bg-white rounded-3xl border border-slate-100 p-6 shadow-xs">
               <h3 className="font-sans font-semibold text-base text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-1.5 mb-6">
                 <SlidersHorizontal className="w-5 h-5 text-indigo-600" />
-                Team Metric Comparisons
+                {language === "TR" ? "Takım Metrik Karşılaştırmaları" : "Team Metric Comparisons"}
               </h3>
 
               <div className="flex flex-col gap-5">
                 {[
-                  { label: "Possession %", home: matchData.keyStats.home.possession, away: matchData.keyStats.away.possession, displayType: "pct" },
-                  { label: "Expected Goals (xG)", home: matchData.keyStats.home.xG, away: matchData.keyStats.away.xG, displayType: "val" },
-                  { label: "Attempts at Goal", home: matchData.keyStats.home.attemptsAtGoal, away: matchData.keyStats.away.attemptsAtGoal, displayType: "raw" },
-                  { label: "Total Passes", home: matchData.keyStats.home.totalPasses, away: matchData.keyStats.away.totalPasses, displayType: "raw" },
-                  { label: "Pass Completion %", home: matchData.keyStats.home.passCompletion, away: matchData.keyStats.away.passCompletion, displayType: "pct" },
-                  { label: "Completed Line Breaks", home: matchData.keyStats.home.completedLineBreaks, away: matchData.keyStats.away.completedLineBreaks, displayType: "val" },
-                  { label: "Defensive Line Breaks", home: matchData.keyStats.home.defensiveLineBreaks, away: matchData.keyStats.away.defensiveLineBreaks, displayType: "val" },
-                  { label: "Receptions in Final Third", home: matchData.keyStats.home.receptionsFinalThird, away: matchData.keyStats.away.receptionsFinalThird, displayType: "val" },
-                  { label: "Crosses Attempted", home: matchData.keyStats.home.crosses, away: matchData.keyStats.away.crosses, displayType: "val" },
-                  { label: "Ball Progressions", home: matchData.keyStats.home.ballProgressions, away: matchData.keyStats.away.ballProgressions, displayType: "val" },
-                  { label: "Defensive Pressures", home: matchData.keyStats.home.defensivePressures, away: matchData.keyStats.away.defensivePressures, displayType: "raw" },
-                  { label: "Forced Turnovers", home: matchData.keyStats.home.forcedTurnovers, away: matchData.keyStats.away.forcedTurnovers, displayType: "val" },
-                  { label: "Second Balls Recovered", home: matchData.keyStats.home.secondBalls, away: matchData.keyStats.away.secondBalls, displayType: "val" },
-                  { label: "Total Distance Covered (km)", home: matchData.keyStats.home.distanceCovered, away: matchData.keyStats.away.distanceCovered, displayType: "val" },
-                  { label: "Zone 4 Low Sprinting (km)", home: matchData.keyStats.home.zone4Sprinting, away: matchData.keyStats.away.zone4Sprinting, displayType: "val" }
+                  { label: language === "TR" ? "Topa Sahip Olma %" : "Possession %", home: matchData.keyStats.home.possession, away: matchData.keyStats.away.possession, displayType: "pct" },
+                  { label: language === "TR" ? "Gol Beklentisi (xG)" : "Expected Goals (xG)", home: matchData.keyStats.home.xG, away: matchData.keyStats.away.xG, displayType: "val" },
+                  { label: language === "TR" ? "Şut Girişimleri" : "Attempts at Goal", home: matchData.keyStats.home.attemptsAtGoal, away: matchData.keyStats.away.attemptsAtGoal, displayType: "raw" },
+                  { label: language === "TR" ? "Toplam Pas" : "Total Passes", home: matchData.keyStats.home.totalPasses, away: matchData.keyStats.away.totalPasses, displayType: "raw" },
+                  { label: language === "TR" ? "Pas İsabet %" : "Pass Completion %", home: matchData.keyStats.home.passCompletion, away: matchData.keyStats.away.passCompletion, displayType: "pct" },
+                  { label: language === "TR" ? "Başarılı Çizgi Kırmalar" : "Completed Line Breaks", home: matchData.keyStats.home.completedLineBreaks, away: matchData.keyStats.away.completedLineBreaks, displayType: "val" },
+                  { label: language === "TR" ? "Defansif Çizgi Kırmalar" : "Defensive Line Breaks", home: matchData.keyStats.home.defensiveLineBreaks, away: matchData.keyStats.away.defensiveLineBreaks, displayType: "val" },
+                  { label: language === "TR" ? "3. Bölgede Top Buluşmaları" : "Receptions in Final Third", home: matchData.keyStats.home.receptionsFinalThird, away: matchData.keyStats.away.receptionsFinalThird, displayType: "val" },
+                  { label: language === "TR" ? "Orta Denemeleri" : "Crosses Attempted", home: matchData.keyStats.home.crosses, away: matchData.keyStats.away.crosses, displayType: "val" },
+                  { label: language === "TR" ? "Top Taşıma / İlerleme" : "Ball Progressions", home: matchData.keyStats.home.ballProgressions, away: matchData.keyStats.away.ballProgressions, displayType: "val" },
+                  { label: language === "TR" ? "Defansif Baskılar" : "Defensive Pressures", home: matchData.keyStats.home.defensivePressures, away: matchData.keyStats.away.defensivePressures, displayType: "raw" },
+                  { label: language === "TR" ? "Kazanılan Toplar (Zorlama)" : "Forced Turnovers", home: matchData.keyStats.home.forcedTurnovers, away: matchData.keyStats.away.forcedTurnovers, displayType: "val" },
+                  { label: language === "TR" ? "Dönen Top Kazanımları" : "Second Balls Recovered", home: matchData.keyStats.home.secondBalls, away: matchData.keyStats.away.secondBalls, displayType: "val" },
+                  { label: language === "TR" ? "Toplam Koşu Mesafesi (km)" : "Total Distance Covered (km)", home: matchData.keyStats.home.distanceCovered, away: matchData.keyStats.away.distanceCovered, displayType: "val" },
+                  { label: language === "TR" ? "Bölge 4 Hafif Sürat Koşusu (km)" : "Zone 4 Low Sprinting (km)", home: matchData.keyStats.home.zone4Sprinting, away: matchData.keyStats.away.zone4Sprinting, displayType: "val" }
                 ].map((stat, sIdx) => {
                   // Percentage bar calculation
                   let homePct = 50;
@@ -3904,6 +4944,151 @@ export default function App() {
           </motion.div>
         )}
 
+        {/* Scout Engine Unified Positional Peer Percentile Analyzer */}
+        {highLevelTab === "scout_engine" && (
+          <div className="mb-6">
+            {!selectedScoutPlayer ? (
+              <div className="bg-gradient-to-r from-indigo-50/50 to-slate-50/50 border border-indigo-100 rounded-3xl p-5 flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-indigo-500/10 text-indigo-600 rounded-2xl">
+                    <Sparkles className="w-5 h-5 animate-pulse" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-sans font-extrabold text-slate-900">
+                      {language === "TR" ? "Pozisyonel Akran Yüzdelik Analizörü" : "Positional Peer Percentile Analyzer"}
+                    </h4>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      {language === "TR" 
+                        ? "Aşağıdaki listelerden herhangi bir oyuncunun satırına tıklayarak, oyuncunun tüm turnuva veritabanındaki akranları (GK, DF, MF, FW) ile yüzdelik kıyaslamasını inceleyin."
+                        : "Click any player row in the tables below to inspect their tournament-wide percentile ranking against other positional peers."}
+                    </p>
+                  </div>
+                </div>
+                <div className="shrink-0 flex items-center gap-2">
+                  <span className="text-[10px] font-mono font-bold text-indigo-600 uppercase bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-100 animate-pulse">
+                    {language === "TR" ? "💡 BİR OYUNCU SEÇİN" : "💡 CHOOSE A PLAYER"}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <motion.div 
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-slate-900 border border-slate-800 text-white rounded-3xl p-6 shadow-lg relative overflow-hidden"
+              >
+                {/* Background Ambient Glow */}
+                <div className="absolute right-0 top-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+                
+                <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative z-10">
+                  {/* Player details */}
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-650 flex items-center justify-center font-bold font-sans text-lg text-white shadow-md">
+                      {selectedScoutPlayer.number || "#"}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-lg font-black tracking-tight">{selectedScoutPlayer.name}</h4>
+                        <span className="bg-indigo-500/15 text-indigo-300 border border-indigo-500/20 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                          {selectedScoutPlayer.position}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1 text-slate-400 text-xs">
+                        <TeamFlag team={selectedScoutPlayer.teamName} getTeamFlag={getTeamFlag} className="w-4.5 h-3 object-cover rounded-xs" />
+                        <span className="font-semibold">{selectedScoutPlayer.teamName}</span>
+                        <span>•</span>
+                        <span className="font-mono text-[10px] text-indigo-400 font-extrabold uppercase bg-indigo-950/40 px-2 py-0.5 rounded border border-indigo-900/30">
+                          {getPositionalGroup(selectedScoutPlayer.position)} PEER GROUP
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Metrics Percentile Grid */}
+                  <div className="flex-1 w-full grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                    {(() => {
+                      const group = getPositionalGroup(selectedScoutPlayer.position);
+                      let metricsToRender: Array<{ label: string; key: string; icon: string; suffix: string }> = [];
+                      
+                      if (group === "FW") {
+                        metricsToRender = [
+                          { label: "Goals / 90", key: "goals", icon: "⚽", suffix: "" },
+                          { label: "Shots / 90", key: "shots", icon: "🎯", suffix: "" },
+                          { label: "Line Breaks / 90", key: "lineBreaksCompleted", icon: "⚡", suffix: "" },
+                          { label: "Sprints / 90", key: "sprints", icon: "🏃", suffix: "" }
+                        ];
+                      } else if (group === "DF") {
+                        metricsToRender = [
+                          { label: "Interceptions / 90", key: "interceptions", icon: "🛡️", suffix: "" },
+                          { label: "Tackles Won / 90", key: "tacklesWon", icon: "⚔️", suffix: "" },
+                          { label: "Regains / 90", key: "possessionRegains", icon: "📦", suffix: "" },
+                          { label: "Sprints / 90", key: "sprints", icon: "🏃", suffix: "" }
+                        ];
+                      } else { // MF or GK/Others
+                        metricsToRender = [
+                          { label: "Passes Comp / 90", key: "passesCompleted", icon: "📐", suffix: "" },
+                          { label: "Line Breaks / 90", key: "lineBreaksCompleted", icon: "⚡", suffix: "" },
+                          { label: "Regains / 90", key: "possessionRegains", icon: "📦", suffix: "" },
+                          { label: "Sprints / 90", key: "sprints", icon: "🏃", suffix: "" }
+                        ];
+                      }
+
+                      return metricsToRender.map(m => {
+                        const { percentile, value, avg } = getScoutPlayerPercentile(selectedScoutPlayer.name, selectedScoutPlayer.position, m.key);
+                        
+                        return (
+                          <div key={m.key} className="bg-slate-950/45 border border-slate-800 rounded-2xl p-3.5 space-y-2">
+                            <div className="flex justify-between items-center text-[10px] font-semibold text-slate-400">
+                              <span className="flex items-center gap-1">
+                                <span>{m.icon}</span>
+                                <span className="uppercase tracking-wider">{m.label}</span>
+                              </span>
+                              <span className="font-mono bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 px-1.5 py-0.2 rounded font-bold">
+                                {value}{m.suffix}
+                              </span>
+                            </div>
+                            
+                            {/* Percentile visual line */}
+                            <div className="space-y-1">
+                              <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden relative">
+                                <motion.div 
+                                  initial={{ width: 0 }}
+                                  animate={{ width: `${percentile}%` }}
+                                  transition={{ duration: 0.8, ease: "easeOut" }}
+                                  className={`h-full rounded-full bg-gradient-to-r ${
+                                    percentile >= 90 ? "from-amber-400 to-yellow-500" :
+                                    percentile >= 75 ? "from-indigo-400 to-indigo-500" :
+                                    percentile >= 50 ? "from-sky-400 to-sky-500" : "from-slate-400 to-slate-500"
+                                  }`}
+                                />
+                              </div>
+                              <div className="flex justify-between items-center text-[9px] font-mono font-bold">
+                                <span className={`${percentile >= 90 ? "text-amber-400" : percentile >= 75 ? "text-indigo-400" : "text-slate-400"}`}>
+                                  {percentile}th Percentile
+                                </span>
+                                <span className="text-slate-500">
+                                  Avg: {avg}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+
+                  {/* Clear Button */}
+                  <button 
+                    onClick={() => setSelectedScoutPlayer(null)}
+                    className="absolute right-4 top-4 text-slate-400 hover:text-white transition duration-200"
+                  >
+                    <span className="text-sm">✕</span>
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </div>
+        )}
+
         {/* Tab 3: Detailed Player In Possession table */}
         {(activeTab === "in_possession" || activeTab === "out_possession") && (
           <motion.div
@@ -4018,7 +5203,7 @@ export default function App() {
                   </thead>
                   <tbody>
                     {filteredInPossPlayers.map((player, idx) => (
-                      <tr key={idx} className="border-b border-light last:border-0 text-xs hover:bg-slate-50 transition font-mono">
+                      <tr key={idx} className={`border-b border-light last:border-0 text-xs hover:bg-slate-50 transition font-mono cursor-pointer ${selectedScoutPlayer?.name === player.name ? "bg-indigo-50/40 border-l-2 border-l-indigo-500" : ""}`} onClick={() => setSelectedScoutPlayer({ name: player.name, position: player.position, teamName: player.teamName })}>
                         <td className="py-2.5 px-4 font-sans font-semibold">
                           <span className={`inline-block py-0.5 px-2 rounded-md text-[10px] uppercase font-semibold tracking-wide ${
                             player.teamName === matchData.matchInfo.homeTeam
@@ -4099,7 +5284,7 @@ export default function App() {
                   </thead>
                   <tbody>
                     {filteredOutPossPlayers.map((player, idx) => (
-                      <tr key={idx} className="border-b border-light last:border-0 text-xs hover:bg-slate-50 transition font-mono">
+                      <tr key={idx} className={`border-b border-light last:border-0 text-xs hover:bg-slate-50 transition font-mono cursor-pointer ${selectedScoutPlayer?.name === player.name ? "bg-indigo-50/40 border-l-2 border-l-indigo-500" : ""}`} onClick={() => setSelectedScoutPlayer({ name: player.name, position: player.position, teamName: player.teamName })}>
                         <td className="py-2.5 px-4 font-sans font-semibold">
                           <span className={`inline-block py-0.5 px-2 rounded-md text-[10px] uppercase font-semibold tracking-wide ${
                             player.teamName === matchData.matchInfo.homeTeam
@@ -4357,28 +5542,60 @@ export default function App() {
               <div className="overflow-x-auto animate-fadeIn">
                 <table className="w-full text-left text-xs font-mono min-w-[1200px]">
                   <thead>
-                    <tr className="text-slate-400 border-b border-slate-100 uppercase text-[10px]">
-                      <th className="py-2">Team</th>
-                      <th className="py-2 text-center w-12">#</th>
-                      <th className="py-2">Player Name</th>
-                      <th className="py-2 text-center">Attempted</th>
-                      <th className="py-2 text-center">Completed</th>
-                      <th className="py-2 text-center bg-indigo-50/25 text-indigo-800">Comp %</th>
-                      <th className="py-2 text-center">U4 Att</th>
-                      <th className="py-2 text-center">U4 Mid</th>
-                      <th className="py-2 text-center">U3 Mid</th>
-                      <th className="py-2 text-center">U2 Def</th>
-                      <th className="py-2 text-center">Through</th>
-                      <th className="py-2 text-center">Around</th>
-                      <th className="py-2 text-center">Over</th>
-                      <th className="py-2 text-center">Pass</th>
-                      <th className="py-2 text-center">Cross</th>
-                      <th className="py-2 text-center text-indigo-600 font-bold">Progression</th>
+                    <tr className="text-slate-400 border-b border-slate-100 uppercase text-[10px] select-none">
+                      <th className="py-2 cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setLineBreaksSortField("team"); setLineBreaksSortAsc(prev => !prev); }}>
+                        Team {lineBreaksSortField === "team" && (lineBreaksSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center w-12 cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setLineBreaksSortField("number"); setLineBreaksSortAsc(prev => !prev); }}>
+                        # {lineBreaksSortField === "number" && (lineBreaksSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setLineBreaksSortField("name"); setLineBreaksSortAsc(prev => !prev); }}>
+                        Player Name {lineBreaksSortField === "name" && (lineBreaksSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setLineBreaksSortField("attempted"); setLineBreaksSortAsc(prev => !prev); }}>
+                        Attempted {lineBreaksSortField === "attempted" && (lineBreaksSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setLineBreaksSortField("completed"); setLineBreaksSortAsc(prev => !prev); }}>
+                        Completed {lineBreaksSortField === "completed" && (lineBreaksSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center bg-indigo-50/25 text-indigo-800 cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setLineBreaksSortField("completionPct"); setLineBreaksSortAsc(prev => !prev); }}>
+                        Comp % {lineBreaksSortField === "completionPct" && (lineBreaksSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setLineBreaksSortField("u4_attLine"); setLineBreaksSortAsc(prev => !prev); }}>
+                        U4 Att {lineBreaksSortField === "u4_attLine" && (lineBreaksSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setLineBreaksSortField("u4_midLine"); setLineBreaksSortAsc(prev => !prev); }}>
+                        U4 Mid {lineBreaksSortField === "u4_midLine" && (lineBreaksSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setLineBreaksSortField("u3_midLine"); setLineBreaksSortAsc(prev => !prev); }}>
+                        U3 Mid {lineBreaksSortField === "u3_midLine" && (lineBreaksSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setLineBreaksSortField("u2_defLine"); setLineBreaksSortAsc(prev => !prev); }}>
+                        U2 Def {lineBreaksSortField === "u2_defLine" && (lineBreaksSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setLineBreaksSortField("through"); setLineBreaksSortAsc(prev => !prev); }}>
+                        Through {lineBreaksSortField === "through" && (lineBreaksSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setLineBreaksSortField("around"); setLineBreaksSortAsc(prev => !prev); }}>
+                        Around {lineBreaksSortField === "around" && (lineBreaksSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setLineBreaksSortField("over"); setLineBreaksSortAsc(prev => !prev); }}>
+                        Over {lineBreaksSortField === "over" && (lineBreaksSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setLineBreaksSortField("pass"); setLineBreaksSortAsc(prev => !prev); }}>
+                        Pass {lineBreaksSortField === "pass" && (lineBreaksSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setLineBreaksSortField("cross"); setLineBreaksSortAsc(prev => !prev); }}>
+                        Cross {lineBreaksSortField === "cross" && (lineBreaksSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center text-indigo-600 font-bold cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setLineBreaksSortField("ballProgression"); setLineBreaksSortAsc(prev => !prev); }}>
+                        Progression {lineBreaksSortField === "ballProgression" && (lineBreaksSortAsc ? "▲" : "▼")}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {(filteredLineBreaksPlayers || []).map((p, idx) => (
-                      <tr key={idx} className="border-b border-slate-50 last:border-0 hover:bg-slate-55 text-slate-600">
+                      <tr key={idx} className="border-b border-slate-50 last:border-0 hover:bg-slate-50 text-slate-600">
                         <td className="py-2.5 font-sans font-semibold">
                           <span className={`inline-block py-0.5 px-1.5 rounded-md text-[9px] uppercase font-semibold ${
                             p.team === matchData.matchInfo.homeTeam ? "bg-slate-900/10 text-slate-800" : "bg-indigo-50 text-indigo-700"
@@ -4388,19 +5605,19 @@ export default function App() {
                         <td className="py-2.5 font-sans font-semibold text-slate-900">
                           {renderPlayerWithPhoto(p.name, p.team)}
                         </td>
-                        <td className="py-2.5 text-center">{p.attempted}</td>
-                        <td className="py-2.5 text-center font-bold text-slate-800">{p.completed}</td>
-                        <td className="py-2.5 text-center font-bold bg-indigo-50/20 text-indigo-750">{p.completionPct}%</td>
-                        <td className="py-2.5 text-center">{p.u4_attLine}</td>
-                        <td className="py-2.5 text-center">{p.u4_midLine}</td>
-                        <td className="py-2.5 text-center">{p.u3_midLine}</td>
-                        <td className="py-2.5 text-center">{p.u2_defLine}</td>
-                        <td className="py-2.5 text-center">{p.through}</td>
-                        <td className="py-2.5 text-center">{p.around}</td>
-                        <td className="py-2.5 text-center">{p.over}</td>
-                        <td className="py-2.5 text-center">{p.pass}</td>
-                        <td className="py-2.5 text-center">{p.cross}</td>
-                        <td className="py-2.5 text-center text-indigo-600 font-bold">{p.ballProgression}</td>
+                        <td className={`py-2.5 text-center transition ${getHeatmapClass(p.attempted, lineBreaksMaxes.attempted)}`}>{p.attempted}</td>
+                        <td className={`py-2.5 text-center font-bold transition ${getHeatmapClass(p.completed, lineBreaksMaxes.completed)}`}>{p.completed}</td>
+                        <td className={`py-2.5 text-center font-bold transition ${getPercentageHeatmapClass(p.completionPct)}`}>{p.completionPct}%</td>
+                        <td className={`py-2.5 text-center transition ${getHeatmapClass(p.u4_attLine, lineBreaksMaxes.u4_attLine)}`}>{p.u4_attLine}</td>
+                        <td className={`py-2.5 text-center transition ${getHeatmapClass(p.u4_midLine, lineBreaksMaxes.u4_midLine)}`}>{p.u4_midLine}</td>
+                        <td className={`py-2.5 text-center transition ${getHeatmapClass(p.u3_midLine, lineBreaksMaxes.u3_midLine)}`}>{p.u3_midLine}</td>
+                        <td className={`py-2.5 text-center transition ${getHeatmapClass(p.u2_defLine, lineBreaksMaxes.u2_defLine)}`}>{p.u2_defLine}</td>
+                        <td className={`py-2.5 text-center transition ${getHeatmapClass(p.through, lineBreaksMaxes.through)}`}>{p.through}</td>
+                        <td className={`py-2.5 text-center transition ${getHeatmapClass(p.around, lineBreaksMaxes.around)}`}>{p.around}</td>
+                        <td className={`py-2.5 text-center transition ${getHeatmapClass(p.over, lineBreaksMaxes.over)}`}>{p.over}</td>
+                        <td className={`py-2.5 text-center transition ${getHeatmapClass(p.pass, lineBreaksMaxes.pass)}`}>{p.pass}</td>
+                        <td className={`py-2.5 text-center transition ${getHeatmapClass(p.cross, lineBreaksMaxes.cross)}`}>{p.cross}</td>
+                        <td className={`py-2.5 text-center text-indigo-600 font-bold transition ${getHeatmapClass(p.ballProgression, lineBreaksMaxes.ballProgression)}`}>{p.ballProgression}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -4466,18 +5683,40 @@ export default function App() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs font-mono min-w-[800px]">
                   <thead>
-                    <tr className="text-slate-400 border-b border-slate-100 uppercase text-[10px]">
-                      <th className="py-2">Team</th>
-                      <th className="py-2 text-center w-12">#</th>
-                      <th className="py-2">Player Name</th>
-                      <th className="py-2 text-center">Inswing</th>
-                      <th className="py-2 text-center">Outswing</th>
-                      <th className="py-2 text-center">Driven</th>
-                      <th className="py-2 text-center">Lofted</th>
-                      <th className="py-2 text-center">Cutback</th>
-                      <th className="py-2 text-center">Push</th>
-                      <th className="py-2 text-center text-indigo-800 bg-indigo-50/30 font-bold">Completed</th>
-                      <th className="py-2 text-center">Total Attempted</th>
+                    <tr className="text-slate-400 border-b border-slate-100 uppercase text-[10px] select-none">
+                      <th className="py-2 cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setCrossesSortField("team"); setCrossesSortAsc(prev => !prev); }}>
+                        Team {crossesSortField === "team" && (crossesSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center w-12 cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setCrossesSortField("number"); setCrossesSortAsc(prev => !prev); }}>
+                        # {crossesSortField === "number" && (crossesSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setCrossesSortField("name"); setCrossesSortAsc(prev => !prev); }}>
+                        Player Name {crossesSortField === "name" && (crossesSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setCrossesSortField("inswing"); setCrossesSortAsc(prev => !prev); }}>
+                        Inswing {crossesSortField === "inswing" && (crossesSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setCrossesSortField("outswing"); setCrossesSortAsc(prev => !prev); }}>
+                        Outswing {crossesSortField === "outswing" && (crossesSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setCrossesSortField("driven"); setCrossesSortAsc(prev => !prev); }}>
+                        Driven {crossesSortField === "driven" && (crossesSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setCrossesSortField("lofted"); setCrossesSortAsc(prev => !prev); }}>
+                        Lofted {crossesSortField === "lofted" && (crossesSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setCrossesSortField("cutback"); setCrossesSortAsc(prev => !prev); }}>
+                        Cutback {crossesSortField === "cutback" && (crossesSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setCrossesSortField("push"); setCrossesSortAsc(prev => !prev); }}>
+                        Push {crossesSortField === "push" && (crossesSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center text-indigo-800 bg-indigo-50/30 font-bold cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setCrossesSortField("crossCompleted"); setCrossesSortAsc(prev => !prev); }}>
+                        Completed {crossesSortField === "crossCompleted" && (crossesSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setCrossesSortField("totalAttempted"); setCrossesSortAsc(prev => !prev); }}>
+                        Total Attempted {crossesSortField === "totalAttempted" && (crossesSortAsc ? "▲" : "▼")}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -4488,14 +5727,14 @@ export default function App() {
                         <td className="py-2 font-sans font-semibold text-slate-800">
                           {renderPlayerWithPhoto(p.name, p.team)}
                         </td>
-                        <td className="py-2 text-center">{p.inswing}</td>
-                        <td className="py-2 text-center">{p.outswing}</td>
-                        <td className="py-2 text-center">{p.driven}</td>
-                        <td className="py-2 text-center">{p.lofted}</td>
-                        <td className="py-2 text-center">{p.cutback}</td>
-                        <td className="py-2 text-center">{p.push}</td>
-                        <td className="py-2 text-center font-bold text-emerald-650 bg-indigo-50/20">{p.crossCompleted}</td>
-                        <td className="py-2 text-center font-bold text-slate-900">{p.totalAttempted}</td>
+                        <td className={`py-2 text-center transition ${getHeatmapClass(p.inswing, crossesMaxes.inswing)}`}>{p.inswing}</td>
+                        <td className={`py-2 text-center transition ${getHeatmapClass(p.outswing, crossesMaxes.outswing)}`}>{p.outswing}</td>
+                        <td className={`py-2 text-center transition ${getHeatmapClass(p.driven, crossesMaxes.driven)}`}>{p.driven}</td>
+                        <td className={`py-2 text-center transition ${getHeatmapClass(p.lofted, crossesMaxes.lofted)}`}>{p.lofted}</td>
+                        <td className={`py-2 text-center transition ${getHeatmapClass(p.cutback, crossesMaxes.cutback)}`}>{p.cutback}</td>
+                        <td className={`py-2 text-center transition ${getHeatmapClass(p.push, crossesMaxes.push)}`}>{p.push}</td>
+                        <td className={`py-2 text-center font-bold text-emerald-650 bg-indigo-50/20 transition ${getHeatmapClass(p.crossCompleted, crossesMaxes.crossCompleted)}`}>{p.crossCompleted}</td>
+                        <td className={`py-2 text-center font-bold text-slate-900 transition ${getHeatmapClass(p.totalAttempted, crossesMaxes.totalAttempted)}`}>{p.totalAttempted}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -4555,92 +5794,74 @@ export default function App() {
             </div>
 
             {/* Key Players individual offering statistics */}
-            {(() => {
-              const rawOfferingList = matchData.offeringToReceive?.playerSummary || [];
-              const existingNames = new Set(rawOfferingList.map(p => p.name.toUpperCase()));
-
-              const homeStarting = matchData.homeTeamLineup?.starting || [];
-              const homeSubs = matchData.homeTeamLineup?.substitutes || [];
-              const awayStarting = matchData.awayTeamLineup?.starting || [];
-              const awaySubs = matchData.awayTeamLineup?.substitutes || [];
-              const allLineupPlayers = [...homeStarting, ...homeSubs, ...awayStarting, ...awaySubs];
-
-              const extraOfferingPlayers: Array<any> = [];
-              allLineupPlayers.forEach(p => {
-                if (!existingNames.has(p.name.toUpperCase())) {
-                  const isHome = homeStarting.some(h => h.name.toUpperCase() === p.name.toUpperCase()) || homeSubs.some(h => h.name.toUpperCase() === p.name.toUpperCase());
-                  extraOfferingPlayers.push({
-                    team: isHome ? matchData.matchInfo.homeTeam : matchData.matchInfo.awayTeam,
-                    number: p.number,
-                    name: p.name,
-                    offersMade: 0,
-                    offersReceived: 0,
-                    offersReceivedPct: "0%",
-                    offersInBehind: 0,
-                    offersInBetween: 0,
-                    offersInFront: 0,
-                    offersWide: 0,
-                    offersFinalThird: 0
-                  });
-                }
-              });
-
-              const completeOfferingList = [...rawOfferingList, ...extraOfferingPlayers];
-
-              return (
-                <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs">
-                  <h3 className="font-sans font-semibold text-sm text-slate-900 border-b border-slate-100 pb-3 mb-4">
-                    Detailed Player Offering to Receive Trajectories Breakdown
-                  </h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs font-mono min-w-[900px]">
-                      <thead>
-                        <tr className="text-slate-400 border-b border-slate-100 uppercase text-[10px]">
-                          <th className="py-2">Team</th>
-                          <th className="py-2 text-center w-12">#</th>
-                          <th className="py-2">Player Name</th>
-                          <th className="py-2 text-center font-bold">Offers Made</th>
-                          <th className="py-2 text-center font-bold">Offers Received</th>
-                          <th className="py-2 text-center text-indigo-750 font-bold bg-indigo-50/20">Received Success %</th>
-                          <th className="py-2 text-center">In Behind</th>
-                          <th className="py-2 text-center">In Between</th>
-                          <th className="py-2 text-center">In Front</th>
-                          <th className="py-2 text-center">Out Wide</th>
-                          <th className="py-2 text-center">Final Third</th>
+            <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs">
+              <h3 className="font-sans font-semibold text-sm text-slate-900 border-b border-slate-100 pb-3 mb-4">
+                Detailed Player Offering to Receive Trajectories Breakdown
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs font-mono min-w-[900px]">
+                  <thead>
+                    <tr className="text-slate-400 border-b border-slate-100 uppercase text-[10px] select-none">
+                      <th className="py-2 cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setOfferingSortField("team"); setOfferingSortAsc(prev => !prev); }}>
+                        Team {offeringSortField === "team" && (offeringSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center w-12 cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setOfferingSortField("number"); setOfferingSortAsc(prev => !prev); }}>
+                        # {offeringSortField === "number" && (offeringSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setOfferingSortField("name"); setOfferingSortAsc(prev => !prev); }}>
+                        Player Name {offeringSortField === "name" && (offeringSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center font-bold cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setOfferingSortField("offersMade"); setOfferingSortAsc(prev => !prev); }}>
+                        Offers Made {offeringSortField === "offersMade" && (offeringSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center font-bold cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setOfferingSortField("offersReceived"); setOfferingSortAsc(prev => !prev); }}>
+                        Offers Received {offeringSortField === "offersReceived" && (offeringSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center text-indigo-750 font-bold bg-indigo-50/20 cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setOfferingSortField("offersReceivedPct"); setOfferingSortAsc(prev => !prev); }}>
+                        Received Success % {offeringSortField === "offersReceivedPct" && (offeringSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setOfferingSortField("offersInBehind"); setOfferingSortAsc(prev => !prev); }}>
+                        In Behind {offeringSortField === "offersInBehind" && (offeringSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setOfferingSortField("offersInBetween"); setOfferingSortAsc(prev => !prev); }}>
+                        In Between {offeringSortField === "offersInBetween" && (offeringSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setOfferingSortField("offersInFront"); setOfferingSortAsc(prev => !prev); }}>
+                        In Front {offeringSortField === "offersInFront" && (offeringSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setOfferingSortField("offersWide"); setOfferingSortAsc(prev => !prev); }}>
+                        Out Wide {offeringSortField === "offersWide" && (offeringSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setOfferingSortField("offersFinalThird"); setOfferingSortAsc(prev => !prev); }}>
+                        Final Third {offeringSortField === "offersFinalThird" && (offeringSortAsc ? "▲" : "▼")}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(filteredOfferingPlayers || []).map((p, idx) => {
+                      const successPercent = parseFloat(String(p.offersReceivedPct).replace("%", "")) || 0;
+                      return (
+                        <tr key={idx} className="border-b border-slate-50 last:border-0 hover:bg-slate-50 text-slate-705">
+                          <td className="py-2.5 font-sans font-semibold text-slate-800">{p.team}</td>
+                          <td className="py-2.5 text-center font-mono text-slate-400">{p.number}</td>
+                          <td className="py-2.5 font-sans font-bold text-slate-900">
+                            {renderPlayerWithPhoto(p.name, p.team)}
+                          </td>
+                          <td className={`py-2.5 text-center font-mono font-bold transition ${getHeatmapClass(p.offersMade, offeringMaxes.offersMade)}`}>{p.offersMade}</td>
+                          <td className={`py-2.5 text-center font-mono transition ${getHeatmapClass(p.offersReceived, offeringMaxes.offersReceived)}`}>{p.offersReceived ?? "0"}</td>
+                          <td className={`py-2.5 text-center font-mono font-bold transition ${getPercentageHeatmapClass(successPercent)}`}>{p.offersReceivedPct}</td>
+                          <td className={`py-2.5 text-center font-mono transition ${getHeatmapClass(p.offersInBehind, offeringMaxes.offersInBehind)}`}>{p.offersInBehind ?? "0"}</td>
+                          <td className={`py-2.5 text-center font-mono transition ${getHeatmapClass(p.offersInBetween, offeringMaxes.offersInBetween)}`}>{p.offersInBetween ?? "0"}</td>
+                          <td className={`py-2.5 text-center font-mono transition ${getHeatmapClass(p.offersInFront, offeringMaxes.offersInFront)}`}>{p.offersInFront ?? "0"}</td>
+                          <td className={`py-2.5 text-center font-mono transition ${getHeatmapClass(p.offersWide, offeringMaxes.offersWide)}`}>{p.offersWide ?? "0"}</td>
+                          <td className={`py-2.5 text-center font-mono transition ${getHeatmapClass(p.offersFinalThird, offeringMaxes.offersFinalThird)}`}>{p.offersFinalThird ?? "0"}</td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {filterLineupList(completeOfferingList).map((p, idx) => {
-                          const playerP = findPlayerPhoto(p.name, squadPhotos);
-                          return (
-                            <tr key={idx} className="border-b border-slate-50 last:border-0 hover:bg-slate-50 text-slate-705">
-                              <td className="py-2.5 font-sans font-semibold text-slate-800">{p.team}</td>
-                              <td className="py-2.5 text-center font-mono text-slate-400">{p.number}</td>
-                              <td className="py-2.5 font-sans font-bold text-slate-900 flex items-center gap-2">
-                                {playerP ? (
-                                  <img src={playerP.base64} alt="" className="w-5 h-5 rounded-full object-cover shrink-0" referrerPolicy="no-referrer" />
-                                ) : (
-                                  <div className="w-5 h-5 rounded-full bg-indigo-50 text-indigo-650 flex items-center justify-center font-bold text-[8px] font-sans border shrink-0">{p.name.substring(0, 2)}</div>
-                                )}
-                                <span>{p.name}</span>
-                              </td>
-                            <td className="py-2.5 text-center font-mono font-bold text-slate-855">{p.offersMade}</td>
-                            <td className="py-3 text-center text-slate-700 font-mono">{p.offersReceived ?? "0"}</td>
-                            <td className="py-2.5 text-center font-mono font-bold text-indigo-700 bg-indigo-50/15">{p.offersReceivedPct}</td>
-                            <td className="py-3 text-center text-slate-500 font-mono">{p.offersInBehind ?? "0"}</td>
-                            <td className="py-3 text-center text-slate-500 font-mono">{p.offersInBetween ?? "0"}</td>
-                            <td className="py-3 text-center text-slate-500 font-mono">{p.offersInFront ?? "0"}</td>
-                            <td className="py-3 text-center text-slate-500 font-mono">{p.offersWide ?? "0"}</td>
-                            <td className="py-3 text-center text-slate-500 font-mono">{p.offersFinalThird ?? "0"}</td>
-                          </tr>
-                        );
-                      })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              );
-            })()}
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </motion.div>
         )}
 
@@ -4703,108 +5924,81 @@ export default function App() {
                 </thead>
                 <tbody>
                   {(matchData.movementToReceive?.topRanked || []).map((e, idx) => {
-                    const playerP = findPlayerPhoto(e.player, squadPhotos);
                     return (
                       <tr key={idx} className="border-b border-slate-50 last:border-0 font-sans py-2.5 hover:bg-slate-50">
                         <td className="font-semibold text-slate-800">{e.team}</td>
                         <td className="text-slate-500 font-mono text-xs">{e.movementType || "Movement"}</td>
-                        <td className="font-bold text-slate-900 flex items-center gap-2">
-                          {playerP ? (
-                            <img src={playerP.base64} alt="" className="w-5 h-5 rounded-full object-cover shrink-0" referrerPolicy="no-referrer" />
-                          ) : (
-                            <div className="w-5 h-5 rounded-full bg-indigo-50 text-indigo-650 flex items-center justify-center font-bold text-[8px] font-sans border shrink-0">{e.player.substring(0,2)}</div>
-                          )}
-                          <span>{e.player}</span>
+                        <td className="font-bold text-slate-900">
+                          {renderPlayerWithPhoto(e.player, e.team)}
                         </td>
-                      <td className="text-center font-mono font-extrabold text-indigo-650">{e.movements} runs</td>
-                    </tr>
-                  );
-                })}
+                        <td className="text-center font-mono font-extrabold text-indigo-650">{e.movements} runs</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
 
             {/* Player details for Movement */}
-            {(() => {
-              const rawMovementList = matchData.movementToReceive?.playerDetails || [];
-              const existingNames = new Set(rawMovementList.map(p => p.name.toUpperCase()));
-
-              const homeStarting = matchData.homeTeamLineup?.starting || [];
-              const homeSubs = matchData.homeTeamLineup?.substitutes || [];
-              const awayStarting = matchData.awayTeamLineup?.starting || [];
-              const awaySubs = matchData.awayTeamLineup?.substitutes || [];
-              const allLineupPlayers = [...homeStarting, ...homeSubs, ...awayStarting, ...awaySubs];
-
-              const extraMovementPlayers: Array<any> = [];
-              allLineupPlayers.forEach(p => {
-                if (!existingNames.has(p.name.toUpperCase())) {
-                  const isHome = homeStarting.some(h => h.name.toUpperCase() === p.name.toUpperCase()) || homeSubs.some(h => h.name.toUpperCase() === p.name.toUpperCase());
-                  extraMovementPlayers.push({
-                    team: isHome ? matchData.matchInfo.homeTeam : matchData.matchInfo.awayTeam,
-                    number: p.number,
-                    name: p.name,
-                    inBehind: 0,
-                    inBetween: 0,
-                    inFront: 0,
-                    outToIn: 0,
-                    inToOut: 0,
-                    total: 0
-                  });
-                }
-              });
-
-              const completeMovementList = [...rawMovementList, ...extraMovementPlayers];
-
-              return (
-                <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs">
-                  <h3 className="font-sans font-semibold text-sm text-slate-900 border-b border-slate-100 pb-3 mb-4">
-                    Detailed Player Movement to Receive Analysis
-                  </h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs font-mono min-w-[800px]">
-                      <thead>
-                        <tr className="text-slate-400 border-b border-slate-100 uppercase text-[10px]">
-                          <th className="py-2">Team</th>
-                          <th className="py-2 text-center w-12">#</th>
-                          <th className="py-2">Player Name</th>
-                          <th className="py-2 text-center">In Front</th>
-                          <th className="py-2 text-center">In Between</th>
-                          <th className="py-2 text-center">Out to In</th>
-                          <th className="py-2 text-center">In to Out</th>
-                          <th className="py-2 text-center text-emerald-650">In Behind</th>
-                          <th className="py-2 text-center font-bold text-indigo-750 bg-indigo-50/20">Total Movements</th>
+            <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs">
+              <h3 className="font-sans font-semibold text-sm text-slate-900 border-b border-slate-100 pb-3 mb-4">
+                Detailed Player Movement to Receive Analysis
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs font-mono min-w-[800px]">
+                  <thead>
+                    <tr className="text-slate-400 border-b border-slate-100 uppercase text-[10px] select-none">
+                      <th className="py-2 cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setMovementSortField("team"); setMovementSortAsc(prev => !prev); }}>
+                        Team {movementSortField === "team" && (movementSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center w-12 cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setMovementSortField("number"); setMovementSortAsc(prev => !prev); }}>
+                        # {movementSortField === "number" && (movementSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setMovementSortField("name"); setMovementSortAsc(prev => !prev); }}>
+                        Player Name {movementSortField === "name" && (movementSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setMovementSortField("inFront"); setMovementSortAsc(prev => !prev); }}>
+                        In Front {movementSortField === "inFront" && (movementSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setMovementSortField("inBetween"); setMovementSortAsc(prev => !prev); }}>
+                        In Between {movementSortField === "inBetween" && (movementSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setMovementSortField("outToIn"); setMovementSortAsc(prev => !prev); }}>
+                        Out to In {movementSortField === "outToIn" && (movementSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setMovementSortField("inToOut"); setMovementSortAsc(prev => !prev); }}>
+                        In to Out {movementSortField === "inToOut" && (movementSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center text-emerald-650 cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setMovementSortField("inBehind"); setMovementSortAsc(prev => !prev); }}>
+                        In Behind {movementSortField === "inBehind" && (movementSortAsc ? "▲" : "▼")}
+                      </th>
+                      <th className="py-2 text-center font-bold text-indigo-750 bg-indigo-50/20 cursor-pointer hover:bg-slate-50 rounded" onClick={() => { setMovementSortField("total"); setMovementSortAsc(prev => !prev); }}>
+                        Total Movements {movementSortField === "total" && (movementSortAsc ? "▲" : "▼")}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(filteredMovementPlayers || []).map((p, idx) => {
+                      return (
+                        <tr key={idx} className="border-b border-slate-50 last:border-0 hover:bg-slate-50 text-slate-705">
+                          <td className="py-2.5 font-sans font-semibold text-slate-800">{p.team}</td>
+                          <td className="py-2.5 text-center font-mono text-slate-400">{p.number}</td>
+                          <td className="py-2.5 font-sans font-bold text-slate-900">
+                            {renderPlayerWithPhoto(p.name, p.team)}
+                          </td>
+                          <td className={`py-2.5 text-center font-mono transition ${getHeatmapClass(p.inFront, movementMaxes.inFront)}`}>{p.inFront}</td>
+                          <td className={`py-2.5 text-center font-mono transition ${getHeatmapClass(p.inBetween, movementMaxes.inBetween)}`}>{p.inBetween}</td>
+                          <td className={`py-2.5 text-center font-mono transition ${getHeatmapClass(p.outToIn, movementMaxes.outToIn)}`}>{p.outToIn}</td>
+                          <td className={`py-2.5 text-center font-mono transition ${getHeatmapClass(p.inToOut, movementMaxes.inToOut)}`}>{p.inToOut}</td>
+                          <td className={`py-2.5 text-center font-mono text-emerald-640 font-bold transition ${getHeatmapClass(p.inBehind, movementMaxes.inBehind)}`}>{p.inBehind}</td>
+                          <td className={`py-2.5 text-center font-mono font-bold text-indigo-700 bg-indigo-50/15 transition ${getHeatmapClass(p.total, movementMaxes.total)}`}>{p.total}</td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {filterLineupList(completeMovementList).map((p, idx) => {
-                          const playerP = findPlayerPhoto(p.name, squadPhotos);
-                          return (
-                            <tr key={idx} className="border-b border-slate-50 last:border-0 hover:bg-slate-50 text-slate-705">
-                              <td className="py-2.5 font-sans font-semibold text-slate-800">{p.team}</td>
-                              <td className="py-2.5 text-center font-mono text-slate-400">{p.number}</td>
-                              <td className="py-2.5 font-sans font-bold text-slate-900 flex items-center gap-2">
-                                {playerP ? (
-                                  <img src={playerP.base64} alt="" className="w-5 h-5 rounded-full object-cover shrink-0" referrerPolicy="no-referrer" />
-                                ) : (
-                                  <div className="w-5 h-5 rounded-full bg-indigo-50 text-indigo-650 flex items-center justify-center font-bold text-[8px] font-sans border shrink-0">{p.name.substring(0, 2)}</div>
-                                )}
-                                <span>{p.name}</span>
-                              </td>
-                            <td className="py-2.5 text-center font-mono">{p.inFront}</td>
-                            <td className="py-2.5 text-center font-mono">{p.inBetween}</td>
-                            <td className="py-2.5 text-center font-mono">{p.outToIn}</td>
-                            <td className="py-2.5 text-center font-mono">{p.inToOut}</td>
-                            <td className="py-2.5 text-center font-mono text-emerald-640 font-bold">{p.inBehind}</td>
-                            <td className="py-2.5 text-center font-mono font-bold text-indigo-700 bg-indigo-50/15">{p.total}</td>
-                          </tr>
-                        );
-                      })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              );
-            })()}
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </motion.div>
         )}
 
@@ -5025,7 +6219,7 @@ export default function App() {
                       </thead>
                       <tbody>
                         {defensivePlayersList.map((p, idx) => (
-                          <tr key={idx} className="border-b border-slate-50 last:border-0 hover:bg-slate-50 text-slate-705 font-medium">
+                          <tr key={idx} className={`border-b border-slate-50 last:border-0 hover:bg-slate-50 text-slate-705 font-medium cursor-pointer ${selectedScoutPlayer?.name === p.name ? "bg-indigo-50/40 border-l-2 border-l-indigo-500" : ""}`} onClick={() => setSelectedScoutPlayer({ name: p.name, position: p.position || "DF", teamName: p.team })}>
                             <td className="py-2.5 font-sans font-semibold text-slate-800">{p.team}</td>
                             <td className="py-2.5 text-center font-mono text-slate-400">{p.number}</td>
                             <td className="py-2.5 font-sans font-semibold text-slate-900">
@@ -5314,7 +6508,7 @@ export default function App() {
                       </thead>
                       <tbody>
                         {pressurePlayersList.map((p, idx) => (
-                          <tr key={idx} className="border-b border-slate-50 last:border-0 hover:bg-slate-50 text-slate-705 font-medium">
+                          <tr key={idx} className={`border-b border-slate-50 last:border-0 hover:bg-slate-50 text-slate-705 font-medium cursor-pointer ${selectedScoutPlayer?.name === p.name ? "bg-indigo-50/40 border-l-2 border-l-indigo-500" : ""}`} onClick={() => setSelectedScoutPlayer({ name: p.name, position: p.position || "DF", teamName: p.team })}>
                             <td className="py-2.5 font-sans font-semibold text-slate-800">{p.team}</td>
                             <td className="py-2.5 text-center font-mono text-slate-400">{p.number}</td>
                             <td className="py-2.5 font-sans font-semibold text-slate-900">
@@ -6060,10 +7254,25 @@ export default function App() {
             clearInitialPlayerKey={() => setInitialPlayerKey("")}
             initialTeamKey={initialTeamKey}
             clearInitialTeamKey={() => setInitialTeamKey("")}
+            language={language}
           />
         )}
 
       </main>
+
+      {/* Global Application Footer Disclaimer & Credits */}
+      <footer className="mt-12 border-t border-slate-200 py-8 text-center text-[11px] text-slate-500 max-w-full xl:max-w-[1650px] mx-auto px-4 sm:px-8 lg:px-10 bg-white/30 backdrop-blur-xs rounded-3xl mb-12">
+        <p className="max-w-4xl mx-auto leading-relaxed">
+          {language === "TR" 
+            ? "Bu uygulama FIFA Maç Raporlarından yayınlanan veriler kullanılarak oluşturulmuştur. Herhangi bir ticari amaç taşımamaktadır; sadece yayınlanan verileri kullanarak farklı taktiksel ve fiziksel analizler gerçekleştirmek amacıyla geliştirilmiş akademik ve bilimsel bir uygulamadır." 
+            : "This application has been created using data published from official FIFA Match Reports. It is purely non-commercial and developed for academic and data-science purposes to perform deeper tactical and physical analyses on top of published reports."}
+        </p>
+        <div className="mt-3 flex flex-wrap justify-center items-center gap-2 text-xs font-semibold text-slate-400">
+          <span>© 2026 FIFA World Cup Analysis - VARYANS Studio. All rights reserved.</span>
+          <span>•</span>
+          <span className="text-indigo-600 font-bold">Developed by Yiğit Bartık</span>
+        </div>
+      </footer>
 
       <ManageSquadPhotosModal
         isOpen={isSquadModalOpen}
@@ -6115,6 +7324,89 @@ export default function App() {
         </div>
       )}
 
+      {/* System Authorization Password Lock Modal */}
+      {isPassModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-6 shadow-2xl relative overflow-hidden">
+            {/* Design top header highlight */}
+            <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-amber-500 to-indigo-600" />
+            
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2.5 bg-amber-500/15 border border-amber-500/30 text-amber-500 rounded-xl shrink-0">
+                <Shield className="w-5 h-5 animate-pulse" />
+              </div>
+              <div>
+                <h3 className="text-xs font-black text-slate-100 uppercase tracking-wider font-mono">
+                  Sistem Yetkilendirmesi
+                </h3>
+                <p className="text-[10px] text-slate-400 font-mono">SECURE ADMIN GATEWAY</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed mb-4">
+              Konfigürasyon, PDF veri yüklemeleri, SQL motoru ve veri sıfırlama işlemlerine erişmek için yönetici şifresini girmelisiniz.
+            </p>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const cleanInput = settingsPasswordInput.trim();
+                if (cleanInput === "1923" || cleanInput.toLowerCase() === "admin" || cleanInput.toLowerCase() === "varyans" || cleanInput.toLowerCase() === "yigit") {
+                  setIsSettingsUnlocked(true);
+                  try {
+                    localStorage.setItem("__varyans_settings_unlocked_session", "true");
+                  } catch(err){}
+                  setIsPassModalOpen(false);
+                  setIsSettingsOpen(true);
+                  setPasswordError("");
+                  triggerToast("Giriş Başarılı! Operasyonel Ayarlar Kokpiti Açıldı.");
+                } else {
+                  setPasswordError("Hatalı Şifre! Lütfen tekrar deneyin.");
+                }
+              }}
+              className="space-y-4"
+            >
+              <div className="space-y-1">
+                <label className="text-[9px] font-mono uppercase text-slate-400">Yönetici Giriş Şifresi</label>
+                <input
+                  type="password"
+                  value={settingsPasswordInput}
+                  onChange={(e) => setSettingsPasswordInput(e.target.value)}
+                  placeholder="••••"
+                  autoFocus
+                  className="w-full bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-indigo-500 px-4 py-2.5 rounded-xl text-center font-mono text-lg tracking-widest text-white shadow-inner focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+                />
+                <span className="text-[9.5px] text-slate-500 block italic leading-normal">
+                  * Bilgi Güvenliği: Yetkisiz kişilerin ayarları bozmasını engeller.
+                </span>
+              </div>
+
+              {passwordError && (
+                <div className="bg-rose-500/15 border border-rose-500/30 text-rose-300 p-2 rounded-xl text-[11px] text-center font-bold">
+                  {passwordError}
+                </div>
+              )}
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsPassModalOpen(false)}
+                  className="flex-1 py-2 border border-slate-800 hover:bg-slate-800 text-slate-400 font-bold rounded-xl text-xs transition cursor-pointer select-none"
+                >
+                  Vazgeç
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 bg-indigo-650 hover:bg-indigo-600 text-white font-bold rounded-xl text-xs transition shadow-md shadow-indigo-950/40 cursor-pointer select-none"
+                >
+                  Kilit Aç
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Dynamic Layered UI Settings Drawer */}
       <AnimatePresence>
         {isSettingsOpen && (
@@ -6146,12 +7438,29 @@ export default function App() {
                   <h2 className="text-base font-extrabold font-sans tracking-tight text-slate-900 dark:text-white">⚙️ Operasyonel Kokpit Ayarları</h2>
                   <p className="text-[10px] text-slate-400 font-mono mt-0.5">BACKGROUND DATA SYNC & VIRTUAL ENGINES</p>
                 </div>
-                <button
-                  onClick={() => setIsSettingsOpen(false)}
-                  className="p-2 hover:bg-slate-100/10 rounded-xl transition cursor-pointer"
-                >
-                  <X className="w-4 h-4 text-slate-400 hover:text-slate-650" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setIsSettingsUnlocked(false);
+                      try {
+                        localStorage.removeItem("__varyans_settings_unlocked_session");
+                      } catch(e){}
+                      setIsSettingsOpen(false);
+                      triggerToast("Ayarlar paneli güvenli bir şekilde kilitlendi!");
+                    }}
+                    className="p-1.5 px-2.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-500 rounded-lg text-[10px] font-black transition flex items-center gap-1 cursor-pointer select-none"
+                    title="Yetkiyi Kaldır & Kilitle"
+                  >
+                    <Shield className="w-3 h-3" />
+                    <span>Paneli Kilitle</span>
+                  </button>
+                  <button
+                    onClick={() => setIsSettingsOpen(false)}
+                    className="p-2 hover:bg-slate-100/10 rounded-xl transition cursor-pointer"
+                  >
+                    <X className="w-4 h-4 text-slate-400 hover:text-slate-650" />
+                  </button>
+                </div>
               </div>
 
               {/* Sub-Tab Navigation inside the Drawer */}

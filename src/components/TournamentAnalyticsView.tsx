@@ -1,7 +1,7 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { motion } from "motion/react";
 import { MatchReport } from "../data/mexico_south_rich_data";
-import { findPlayerPhoto } from "../lib/db";
+import { findPlayerPhoto, cleanPlayerName } from "../lib/db";
 import {
   TrendingUp,
   Award,
@@ -41,7 +41,10 @@ import {
   ReferenceLine,
   LineChart,
   Line,
-  Legend
+  Legend,
+  BarChart,
+  Bar,
+  Cell
 } from "recharts";
 import PlayerProfilesView from "./PlayerProfilesView";
 import TacticalRegressionEngine from "./TacticalRegressionEngine";
@@ -50,6 +53,9 @@ import TacticalPhysicalMatrix from "./TacticalPhysicalMatrix";
 import CustomGroupBuilder from "./CustomGroupBuilder";
 import VaryansImpactRanker from "./VaryansImpactRanker";
 import GuidedChatbotView from "./GuidedChatbotView";
+import { AthleticCampaignReport } from "./AthleticCampaignReport";
+import DescriptiveAnalytics from "./DescriptiveAnalytics";
+import { computePlayerAdvancedStats, computePlayerAdvancedKPIs, computeTeamKPIs } from "../varyans-engine";
 
 export const cleanGroupName = (name: string): string => {
   if (!name) return "Grup Belirtilmedi";
@@ -72,6 +78,7 @@ interface TournamentAnalyticsViewProps {
   clearInitialPlayerKey?: () => void;
   initialTeamKey?: string;
   clearInitialTeamKey?: () => void;
+  language?: "TR" | "EN";
 }
 
 interface TeamAggregate {
@@ -190,8 +197,8 @@ interface TeamFlagProps {
 export function TeamFlag({ 
   team, 
   getTeamFlag, 
-  className = "w-4.5 h-3 object-cover rounded-xs inline-block shrink-0 align-middle border border-slate-200 shadow-3xs", 
-  fallbackTextSize = "text-sm" 
+  className = "w-8 h-5.5 object-cover rounded-sm inline-block shrink-0 align-middle border border-slate-300 shadow-sm", 
+  fallbackTextSize = "text-2xl" 
 }: TeamFlagProps) {
   if (!team) return <span className={`${fallbackTextSize} select-none align-middle`}>🏳️</span>;
   const flag = getTeamFlag ? getTeamFlag(team) : "🏳️";
@@ -425,6 +432,212 @@ export const EFF_PHYSICALS = [
   { value: "zone5", label: "Zone 5 (25+ km/h - Sprint Yoğunluğu) (m)", category: "Zones" }
 ];
 
+export interface KpiMeta {
+  key: string;
+  nameTr: string;
+  nameEn: string;
+  formula: string;
+  components: string;
+  descTr: string;
+  descEn: string;
+  subLabelTr: string;
+  subLabelEn: string;
+  unit?: string;
+}
+
+export const KPI_METRIC_METADATA: Record<string, KpiMeta> = {
+  mLber: {
+    key: "mLber",
+    nameTr: "İlerlemeci Verimlilik Endeksi",
+    nameEn: "Progressive Efficiency Index",
+    formula: "M-LBER = (Line_Breaks_Completed + Ball_Progressions + Step_Ins) / Passes_Attempted",
+    components: "Pay: Hat kıran paslar + Top sürmeyle ilerlemeler + Alana kat etmeler (Step-In)\nPayda: Toplam pas denemeleri",
+    descTr: "Bir oyuncunun paslarında ne kadar verimli bir şekilde rakip hatları kırdığını ve oyunu dikine taşıdığını ölçer. Yüksek değerler, pas kalitesi ve dikine penetrasyon gücünün yüksek olduğunu gösterir.",
+    descEn: "Measures how efficiently a player breaks opposition lines and progresses the ball forward per pass. High values indicate high quality of passing and penetration power.",
+    subLabelTr: "pas başına sızma",
+    subLabelEn: "line break per pass"
+  },
+  mPprr: {
+    key: "mPprr",
+    nameTr: "Saf İlerlemeci Risk Oranı",
+    nameEn: "Pure Progressive Risk Ratio",
+    formula: "M-PPRR = (Line_Breaks_Completed + Ball_Progressions) / (Passes_Attempted - Passes_Completed)",
+    components: "Pay: Hat kıran paslar + Top sürmeyle ilerlemeler\nPayda: Tamamlanamayan (kaybedilen) pas sayısı",
+    descTr: "Oyuncunun aldığı risk ve yaptığı top kayıplarına oranla yarattığı ilerletici hücum katkısını ölçer. Risk/ödül dengesini analiz ederek ne kadar efektif bir hücum lideri olduğunu gösterir.",
+    descEn: "Measures the progressive contribution of a player relative to the risks they take and passes they lose. Analyzes the risk/reward ratio of offensive plays.",
+    subLabelTr: "risk başına ilerleme",
+    subLabelEn: "progressive gain per risk"
+  },
+  mCpi: {
+    key: "mCpi",
+    nameTr: "Merkez Delicilik Endeksi",
+    nameEn: "Central Penetration Index",
+    formula: "M-CPI = (U4_Mid_Line + U3_Mid_Line) / Line_Breaks_Completed",
+    components: "Pay: Merkez koridor (U4) ve iç koridorlardan (U3) atılan paslar\nPayda: Toplam tamamlanan hat kıran paslar",
+    descTr: "Oyuncunun rakip hatları kırarken ne kadar merkez odaklı ve dikey olduğunu ölçer. Merkezden delici pas atan elit oyun kurucuları tespit etmek için kullanılır.",
+    descEn: "Measures how centrally focused and vertical the player is when breaking opposition lines. Used to identify elite playmakers operating in central/half-space areas.",
+    subLabelTr: "merkez sızma oranı",
+    subLabelEn: "central penetration ratio"
+  },
+  mVdr: {
+    key: "mVdr",
+    nameTr: "Dikine Oyun Bağımlılığı",
+    nameEn: "Verticality Dependence Ratio",
+    formula: "M-VDR = Line_Breaks_Completed / Passes_Completed",
+    components: "Pay: Tamamlanan hat kıran paslar\nPayda: Toplam tamamlanan paslar",
+    descTr: "Oyuncunun başarılı paslarının ne kadarının doğrudan hat kırıcı olduğunu ölçer. Pas oyununun dikey karakterini ve yana/geriye oynamak yerine dikine gitme eğilimini gösterir.",
+    descEn: "Measures what percentage of a player's successful passes directly break a line. Shows the vertical focus of their passing style rather than safe sideways or backward options.",
+    subLabelTr: "dikine pas bağımlılığı",
+    subLabelEn: "verticality ratio"
+  },
+  mObai: {
+    key: "mObai",
+    nameTr: "Topla İvmelenme ve Tehdit Endeksi",
+    nameEn: "Ball Acceleration and Threat Index",
+    formula: "M-OBAI = (Ball_Progressions + Take_Ons + Step_Ins) / Offers_Received",
+    components: "Pay: Top sürmeyle ilerlemeler + Birebir çalımlar + Alana kat etmeler (Step-In)\nPayda: Alınan başarılı pas opsiyonları (topsuz buluşmalar)",
+    descTr: "Oyuncunun topsuz alanda pas aldıktan sonra ne kadar hızlı bir şekilde topla ivmelenip hücum tehdidi oluşturduğunu ölçer. Aksiyon/buluşma verimini gösterir.",
+    descEn: "Measures how quickly a player accelerates and creates an offensive threat after receiving the ball. Shows the productivity per pass received.",
+    subLabelTr: "tehdit ivmesi",
+    subLabelEn: "threat acceleration"
+  },
+  mSer: {
+    key: "mSer",
+    nameTr: "Akıllı Alan Sömürü Yüzdesi",
+    nameEn: "Smart Space Exploitation Ratio",
+    formula: "M-SER = ((In_Behind + In_Between) / Total_Movements) * Received_Success_%",
+    components: "Pay/Payda: Savunma arkası (In Behind) ve hatlar arası (In Between) koşuların toplam koşulara oranı\nÇarpan: Pasla buluşma başarı yüzdesi",
+    descTr: "Oyuncunun topsuz koşularının ne kadarının akıllıca (savunma arkası veya hatlar arası) olduğunu ve bu koşuların pasla buluşma yüzdesiyle verimini ölçer.",
+    descEn: "Measures the ratio of smart runs (behind defenses or between lines) over total movements, weighted by the success rate of receiving a pass on those runs.",
+    subLabelTr: "akıllı koşu buluşma %",
+    subLabelEn: "run reception %",
+    unit: "%"
+  },
+  mNamc: {
+    key: "mNamc",
+    nameTr: "Net Hücum Koşusu Dönüşümü",
+    nameEn: "Net Attack Movement Conversion",
+    formula: "M-NAMC = ((Attempts_at_Goal + Crosses_Completed) / (In_Behind + Final_Third_Offers)) * 100",
+    components: "Pay: Şut denemeleri + Başarılı ortalar\nPayda: Savunma arkası koşular + 3. bölgedeki topsuz teklifler",
+    descTr: "Oyuncunun 3. bölgede yaptığı tehlikeli topsuz koşuların ne kadarının somut bir hücum aksiyonuna (şut veya orta) dönüştüğünü yüzde olarak ölçer.",
+    descEn: "Measures the percentage of dangerous third-zone runs that actually convert into concrete attacking actions like goal attempts or completed crosses.",
+    subLabelTr: "hücum aksiyonu dönüşümü %",
+    subLabelEn: "run conversion %",
+    unit: "%"
+  },
+  mDwic: {
+    key: "mDwic",
+    nameTr: "Dinamik Kanat İzolasyon Katsayısı",
+    nameEn: "Dynamic Wing Isolation Coefficient",
+    formula: "M-DWIC = (Take_Ons + Crosses_Completed) / (Out_to_In + In_to_Out)",
+    components: "Pay: Birebir çalımlar + Başarılı ortalar\nPayda: Dıştan içe ve içten dışa yapılan topsuz koşular",
+    descTr: "Özellikle kanat oyuncularının topsuz kanat hareketlerine kıyasla ne kadar birebir çalım ve başarılı orta ürettiğini ölçer. Kanat izolasyon gücünü yansıtır.",
+    descEn: "Measures the ratio of take-ons and successful crosses over lateral off-ball movements, highlighting the isolating threat and cross delivery rate of wingers.",
+    subLabelTr: "izolasyon katsayısı",
+    subLabelEn: "isolation coefficient"
+  },
+  mWcp: {
+    key: "mWcp",
+    nameTr: "Kenar Koridor Penetrasyon Oranı",
+    nameEn: "Wing Corridor Penetration Ratio",
+    formula: "M-WCP = (Crosses_Completed + By_Cross + Take_Ons) / (Out_to_In + In_to_Out)",
+    components: "Pay: Başarılı ortalar + Orta pozisyonu oluşturan aksiyonlar + Birebir çalımlar\nPayda: Kanat bölgesindeki yön değiştiren topsuz koşular",
+    descTr: "Kanat koridorunun ne derece verimli kullanıldığını, yapılan topsuz koşu hacmine karşılık ne kadarlık bir çizgi penetrasyonu ve orta çıktısı sağlandığını ölçer.",
+    descEn: "Evaluates the efficiency of wing play, matching the volume of horizontal/vertical wing movements against successful crosses and bypass take-ons.",
+    subLabelTr: "kanat penetrasyonu",
+    subLabelEn: "corridor penetration"
+  },
+  mPoc: {
+    key: "mPoc",
+    nameTr: "Fiziksel Çıktı Dönüşüm Oranı",
+    nameEn: "Physical Output Conversion Ratio",
+    formula: "M-POC = (Passes_Attempted + Total_Movements + Defensive_Duels) / ((Zone_4_m + Zone_5_m) / 1000)",
+    components: "Pay: Pas denemeleri + Toplam topsuz koşular + Savunma ikili mücadeleleri\nPayda: Yüksek şiddetli koşu mesafesi (Zone 4 + Zone 5 km cinsinden)",
+    descTr: "Oyuncunun kat ettiği her yüksek şiddetli (sprint ve yüksek hız) kilometre başına takıma sunduğu toplam faydalı futbol aksiyonunu ölçer. Enerji verimliliğini gösterir.",
+    descEn: "Measures the total of football actions (passes, movements, duels) produced by a player per kilometer covered in high-speed zones (Zone 4 & 5). Reflects energetic efficiency.",
+    subLabelTr: "km başına aksiyon",
+    subLabelEn: "actions per high speed km"
+  },
+  mPyps: {
+    key: "mPyps",
+    nameTr: "Sprint Başına Pres Verimliliği",
+    nameEn: "Pressing Efficiency Per Sprint",
+    formula: "M-PYPS = (Direct_Pressing + Pushing_On_into_Pressing) / Sprint_Count",
+    components: "Pay: Doğrudan yapılan pres + Pres alanına öne çıkarak katılım\nPayda: Toplam sprint sayısı",
+    descTr: "Oyuncunun attığı sprintlerin ne kadarının aktif pres aksiyonuyla sonuçlandığını gösterir. Atılan yüksek eforların savunma baskısına dönüşüm oranını ölçer.",
+    descEn: "Measures what fraction of a player's sprints culminate in active pressing work. Reflects the defensive conversion of high-intensity physical efforts.",
+    subLabelTr: "sprint başına pres",
+    subLabelEn: "presses per sprint"
+  },
+  mPeai: {
+    key: "mPeai",
+    nameTr: "Bireysel Pres Verimliliği ve Agresyon",
+    nameEn: "Individual Pressing Efficiency and Aggression",
+    formula: "M-PEAI = (Pushing_On_into_Pressing + Tackles_Won) / (Direct_Pressing + Indirect_Pressing)",
+    components: "Pay: Prese öne fırlayarak katılım + Kazanılan ikili mücadeleler\nPayda: Toplam doğrudan ve dolaylı pres aksiyonları",
+    descTr: "Pres yaparken oyuncunun ne kadar agresif, top kazanmaya odaklı ve başarılı olduğunu ölçer. Pasif pres yerine topu almaya giden yırtıcı oyuncuları analiz eder.",
+    descEn: "Measures how aggressive and recovery-oriented a player is during pressing phases. Highlights active ball-winners over passive spacing pressers.",
+    subLabelTr: "pres agresyonu katsayısı",
+    subLabelEn: "pressing aggression"
+  },
+  mFrds: {
+    key: "mFrds",
+    nameTr: "Kusursuz Geçiş Savunması Skoru",
+    nameEn: "Flawless Transition Defense Score",
+    formula: "M-FRDS = Possession_Regains / (Possession_Interrupted_Actions + Direct_Pressing)",
+    components: "Pay: Top kazanımları (Possession Regains)\nPayda: Top kayıplarından sonra yapılan kesintiler + Doğrudan yapılan presler",
+    descTr: "Top rakibe geçtiği anda oyuncunun geçiş savunmasında ne derece hızlı reaksiyon verip topu geri kazandığını ölçer. Karşı pres (gegenpress) kalitesini gösterir.",
+    descEn: "Measures how quickly and effectively a player reacts to transition defensively, immediately reclaiming possession following a turnover.",
+    subLabelTr: "geçiş reaksiyon skoru",
+    subLabelEn: "gegenpressing score"
+  },
+  mSbdq: {
+    key: "mSbdq",
+    nameTr: "İkinci Top Hakimiyeti Katsayısı",
+    nameEn: "Second Ball Dominance Quotient",
+    formula: "M-SBDQ = ((Loose_Ball_Receptions + Possession_Contests_Won) / (Tackles_Won + Interceptions + Loose_Ball_Receptions)) * 100",
+    components: "Pay: Sahipsiz top kazanımları + Top kapma mücadele kazanımları\nPayda: Mücadeleler + Pas arası + Sahipsiz top toplama",
+    descTr: "Kaotik anlarda ve sahipsiz toplarda oyuncunun reaksiyon hızını ve ikincil topları toplamadaki başarısını ölçer. Orta saha dinamizminin kalbidir.",
+    descEn: "Measures reaction speed and capacity to collect second balls and secure loose ball states in chaotic phases. The heart of midfield dynamism.",
+    subLabelTr: "ikinci top kazanım %",
+    subLabelEn: "second ball recovery %",
+    unit: "%"
+  },
+  mCcc: {
+    key: "mCcc",
+    nameTr: "Kaos Kontrol Katsayısı",
+    nameEn: "Chaos Control Coefficient",
+    formula: "M-CCC = (Loose_Ball_Receptions + Possession_Contests_Won) / (Total_Distance_Covered_m / 1000)",
+    components: "Pay: Sahipsiz top kazanımları + Mücadele kazanımları\nPayda: Toplam kat edilen mesafe (km cinsinden)",
+    descTr: "Oyuncunun koştuğu mesafe başına ne kadar sahipsiz top toplayıp kaos durumunu kontrol altına aldığını ölçer. Pozisyon bilgisi ve sezgisel gücü yansıtır.",
+    descEn: "Measures how many loose ball states and duel wins a player converts per kilometer run. Reflects positional intelligence and anticipating abilities.",
+    subLabelTr: "kaos kontrol skoru",
+    subLabelEn: "chaos control score"
+  },
+  mLldr: {
+    key: "mLldr",
+    nameTr: "Son Çizgi Savunma Kararlılığı",
+    nameEn: "Last Line Defense Resilience",
+    formula: "M-LLDR = (Blocks_Defended + Key_Clearances) / (Interceptions + Tackles_Won)",
+    components: "Pay: Şut/pas engelleme (Blocks) + Kritik uzaklaştırmalar (Key Clearances)\nPayda: Top kapma ve pas arası toplamı",
+    descTr: "Özellikle stoperlerin ve son hat savunucularının, kaleye giden şutları engelleme ve tehlikeyi uzaklaştırmadaki cansiperane direncini ölçer.",
+    descEn: "Evaluates the critical blocks and last-ditch clearances performed by deep defenders, relative to standard interceptions or tackling attempts.",
+    subLabelTr: "blok/uzaklaştırma oranı",
+    subLabelEn: "blocks/clearances ratio"
+  },
+  mPdi: {
+    key: "mPdi",
+    nameTr: "Proaktif Savunma İnisiyatifi",
+    nameEn: "Proactive Defense Initiative",
+    formula: "M-PDI = (Pushing_On_Actions + Interceptions) / (Blocks_Defended + Key_Clearances)",
+    components: "Pay: Öne fırlayarak rakibi bozma + Pas arası (Interceptions)\nPayda: Pasif engellemeler + Uzaklaştırmalar",
+    descTr: "Savunmacının geride beklemek yerine, öne çıkarak proaktif bir şekilde rakibi karşılayıp pas arası yapma ve oyunu önde kesme cesaretini ölçer.",
+    descEn: "Measures a defender's tendency to step out and intercept the ball aggressively, rather than dropping deep to perform passive blocks and clearances.",
+    subLabelTr: "proaktif müdahale oranı",
+    subLabelEn: "proactive interceptions ratio"
+  }
+};
+
 export default function TournamentAnalyticsView({
   uploadedMatches,
   setActiveMatchIndex,
@@ -434,12 +647,301 @@ export default function TournamentAnalyticsView({
   initialPlayerKey,
   clearInitialPlayerKey,
   initialTeamKey,
-  clearInitialTeamKey
+  clearInitialTeamKey,
+  language = "TR"
 }: TournamentAnalyticsViewProps) {
-  const [subTab, setSubTab] = useState<"tournament" | "group" | "team" | "player" | "macroTrends" | "customGroup" | "vesRanker" | "tournamentSummary" | "guidedChatbot" | "formationCost">("tournament");
+  const [subTab, setSubTab] = useState<"tournament" | "group" | "team" | "player" | "macroTrends" | "customGroup" | "vesRanker" | "tournamentSummary" | "guidedChatbot" | "formationCost" | "athleticReport" | "varyans_kpi" | "descriptiveAnalytics">("tournament");
+  const [activeCategory, setActiveCategory] = useState<"overview" | "tactics" | "players" | "ai">("overview");
+  const [varyansGroup, setVaryansGroup] = useState<string>("All");
+  const [varyansTeam, setVaryansTeam] = useState<string>("All");
+  const [varyansMatch, setVaryansMatch] = useState<string>("All");
+  const [varyansPosition, setVaryansPosition] = useState<string>("All");
+  const [varyansKpiLevel, setVaryansKpiLevel] = useState<"player" | "team">("player");
+  const [playerVsTeamMode, setPlayerVsTeamMode] = useState<"player" | "compare">("player");
+
+  // New States for Varyans Analytics Center
+  const [cat1Metric, setCat1Metric] = useState<string>("mLber");
+  const [cat2Metric, setCat2Metric] = useState<string>("mSer");
+  const [cat3Metric, setCat3Metric] = useState<string>("mSbdq");
+  const [cat4Metric, setCat4Metric] = useState<string>("mPoc");
+
+  const [cat1ViewMode, setCat1ViewMode] = useState<"raw" | "breakdown">("raw");
+  const [cat2ViewMode, setCat2ViewMode] = useState<"raw" | "breakdown">("raw");
+  const [cat3ViewMode, setCat3ViewMode] = useState<"raw" | "breakdown">("raw");
+  const [cat4ViewMode, setCat4ViewMode] = useState<"raw" | "breakdown">("raw");
+
+  const [cat1Limit, setCat1Limit] = useState<number>(3);
+  const [cat2Limit, setCat2Limit] = useState<number>(3);
+  const [cat3Limit, setCat3Limit] = useState<number>(3);
+  const [cat4Limit, setCat4Limit] = useState<number>(3);
+
+  const translate = React.useCallback((tr: string, en: string) => {
+    return language === "TR" ? tr : en;
+  }, [language]);
+
+  // Synchronize activeCategory when subTab changes
+  React.useEffect(() => {
+    if (["tournament", "tournamentSummary", "group"].includes(subTab)) {
+      setActiveCategory("overview");
+    } else if (["team", "customGroup", "formationCost"].includes(subTab)) {
+      setActiveCategory("tactics");
+    } else if (["player", "vesRanker", "athleticReport"].includes(subTab)) {
+      setActiveCategory("players");
+    } else if (["guidedChatbot", "macroTrends"].includes(subTab)) {
+      setActiveCategory("ai");
+    }
+  }, [subTab]);
+
   const [selectedPlayerKey, setSelectedPlayerKey] = useState<string>("");
   const defaultTeam = uploadedMatches[0]?.matchInfo.homeTeam || "Mexico";
   const [selectedTeam, setSelectedTeam] = useState<string>(defaultTeam);
+
+  const renderVaryansKpiCard = (categoryNum: number) => {
+    let title = "";
+    let icon: React.ReactNode = null;
+    let color: "emerald" | "indigo" | "rose" | "amber" = "emerald";
+    let metrics: string[] = [];
+    let metricState = "";
+    let setMetricState: React.Dispatch<React.SetStateAction<string>> = () => {};
+    let viewMode: "raw" | "breakdown" = "raw";
+    let setViewMode: React.Dispatch<React.SetStateAction<"raw" | "breakdown">> = () => {};
+    let limit = 3;
+    let setLimit: React.Dispatch<React.SetStateAction<number>> = () => {};
+
+    if (categoryNum === 1) {
+      title = translate("İLERLEME VE DELİCİLİK LİDERLERİ", "PROGRESSION & PENETRATION LEADERS");
+      icon = <TrendingUp className="w-4 h-4" />;
+      color = "emerald";
+      metrics = ["mLber", "mPprr", "mCpi", "mVdr"];
+      metricState = cat1Metric;
+      setMetricState = setCat1Metric;
+      viewMode = cat1ViewMode;
+      setViewMode = setCat1ViewMode;
+      limit = cat1Limit;
+      setLimit = setCat1Limit;
+    } else if (categoryNum === 2) {
+      title = translate("TOPSUZ OYUN VE ALAN SÖMÜRÜSÜ", "OFF-BALL SPACE EXPLOITATION");
+      icon = <Compass className="w-4 h-4" />;
+      color = "indigo";
+      metrics = ["mObai", "mSer", "mNamc", "mDwic", "mWcp"];
+      metricState = cat2Metric;
+      setMetricState = setCat2Metric;
+      viewMode = cat2ViewMode;
+      setViewMode = setCat2ViewMode;
+      limit = cat2Limit;
+      setLimit = setCat2Limit;
+    } else if (categoryNum === 3) {
+      title = translate("AGRESİF SAVUNMA VE DÜELLO LİDERLERİ", "DEFENSIVE DUEL LEADERS");
+      icon = <Shield className="w-4 h-4" />;
+      color = "rose";
+      metrics = ["mSbdq", "mCcc", "mLldr", "mPdi"];
+      metricState = cat3Metric;
+      setMetricState = setCat3Metric;
+      viewMode = cat3ViewMode;
+      setViewMode = setCat3ViewMode;
+      limit = cat3Limit;
+      setLimit = setCat3Limit;
+    } else {
+      title = translate("FİZİKSEL EFOR VE ÇIKTI DÖNÜŞÜMÜ", "PHYSICAL OUTPUT & EFFORT LEADERS");
+      icon = <Activity className="w-4 h-4" />;
+      color = "amber";
+      metrics = ["mPoc", "mPyps", "mPeai", "mFrds"];
+      metricState = cat4Metric;
+      setMetricState = setCat4Metric;
+      viewMode = cat4ViewMode;
+      setViewMode = setCat4ViewMode;
+      limit = cat4Limit;
+      setLimit = setCat4Limit;
+    }
+
+    const meta = KPI_METRIC_METADATA[metricState];
+    const hasPct = meta?.unit === "%";
+    const textCol = color === "amber" ? "text-amber-600" : `text-${color}-600`;
+    const bgColLight = color === "emerald" ? "bg-emerald-50/50" : color === "indigo" ? "bg-indigo-50/50" : color === "rose" ? "bg-rose-50/50" : "bg-amber-50/50";
+    const borderColLight = color === "emerald" ? "border-emerald-100" : color === "indigo" ? "border-indigo-100" : color === "rose" ? "border-rose-100" : "border-amber-100";
+    const activeBg = color === "amber" ? "bg-amber-500 text-white" : `bg-${color}-600 text-white`;
+
+    return (
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-2xs group relative overflow-hidden transition-all duration-300 hover:shadow-md hover:border-slate-300 varyans-intelligence-engine-card flex flex-col justify-between">
+        <div>
+          {/* Card Header with Category Title and Metric Selector Dropdown */}
+          <div className="flex justify-between items-center border-b border-slate-100 pb-2.5 mb-3.5">
+            <span className={`text-xs font-bold ${textCol} font-mono tracking-wider flex items-center gap-1.5`}>
+              {icon} {title}
+            </span>
+            <select
+              value={metricState}
+              onChange={(e) => setMetricState(e.target.value)}
+              className={`bg-white border border-slate-200 text-slate-800 text-xs font-bold py-1 px-2 rounded-lg shadow-2xs focus:ring-2 focus:ring-${color}-500 outline-none cursor-pointer max-w-[150px] truncate`}
+            >
+              {metrics.map(key => {
+                const metricMeta = KPI_METRIC_METADATA[key];
+                return (
+                  <option key={key} value={key}>
+                    {metricMeta ? (language === "TR" ? metricMeta.nameTr : metricMeta.nameEn) : key} ({key.toUpperCase()})
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          {/* Interactive Mode Toggle Switch */}
+          <div className="flex bg-slate-100 p-0.5 rounded-xl border border-slate-200/50 mb-4">
+            <button
+              onClick={() => setViewMode("raw")}
+              className={`flex-1 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer text-center ${
+                viewMode === "raw" ? `${activeBg} shadow-3xs font-extrabold` : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              📊 {translate("Ham Skor", "Raw Metric")}
+            </button>
+            <button
+              onClick={() => setViewMode("breakdown")}
+              className={`flex-1 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer text-center ${
+                viewMode === "breakdown" ? `${activeBg} shadow-3xs font-extrabold` : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              🔬 {translate("KPI Bileşenleri", "KPI Breakdown")}
+            </button>
+          </div>
+
+          {/* Body Content based on View Mode */}
+          {viewMode === "raw" ? (
+            <div className="space-y-3">
+              {(() => {
+                const sorted = [...varyansPlayersStats]
+                  .filter(p => (p as any)[metricState] !== null && (p as any)[metricState] !== undefined)
+                  .sort((a, b) => (b as any)[metricState] - (a as any)[metricState]);
+                
+                const sliced = limit === -1 ? sorted : sorted.slice(0, limit);
+
+                if (sliced.length === 0) {
+                  return (
+                    <p className="text-xs text-slate-400 italic py-4 text-center">
+                      {translate("Bu grupta yeterli veri bulunamadı.", "Not enough data in this group.")}
+                    </p>
+                  );
+                }
+
+                return sliced.map((p, idx) => {
+                  const photo = findPlayerPhoto(p.name, squadPhotos);
+                  return (
+                    <div key={idx} className="flex items-center justify-between bg-slate-500/5 p-3 rounded-xl border border-slate-100 hover:border-slate-200 transition-all">
+                      <div className="flex items-center gap-3">
+                        <div className="relative">
+                          {photo ? (
+                            <img src={photo.base64} className="w-11 h-11 rounded-xl object-cover border border-slate-200 shadow-inner" referrerPolicy="no-referrer" />
+                          ) : (
+                            <div className="w-11 h-11 rounded-xl bg-slate-200 border border-slate-300 flex items-center justify-center text-slate-500 font-bold text-xs">
+                              {p.name.substring(0, 2).toUpperCase()}
+                            </div>
+                          )}
+                          <span className={`absolute -top-1.5 -left-1.5 w-5 h-5 bg-${color === "amber" ? "amber" : color}-500 text-white text-[10px] font-extrabold rounded-full flex items-center justify-center shadow-md`}>
+                            {idx + 1}
+                          </span>
+                        </div>
+
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                            {p.name} <TeamFlag team={p.team} getTeamFlag={getTeamFlag} className="w-4 h-2.5 object-cover rounded-3xs shrink-0 border border-slate-200 shadow-3xs" fallbackTextSize="text-[10px]" />
+                          </h4>
+                          <p className="text-[10px] text-slate-500 font-medium">
+                            {p.team} • {p.position}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="text-right flex flex-col items-end">
+                        <span className={`text-xs font-extrabold ${textCol} font-mono block`}>
+                          {hasPct ? "%" : ""}{(p as any)[metricState]}
+                        </span>
+                        {playerVsTeamMode === "compare" && (() => {
+                          const teamAvgObj = teamAdvAverages[p.team];
+                          if (!teamAvgObj) return null;
+                          const teamVal = teamAvgObj[metricState];
+                          const diff = (p as any)[metricState] - teamVal;
+                          return (
+                            <span className={`text-[10px] font-mono font-bold block ${diff >= 0 ? "text-emerald-500" : "text-rose-500"}`}>
+                              {diff >= 0 ? "▲" : "▼"} {diff >= 0 ? "+" : ""}{hasPct ? `${diff.toFixed(1)}%` : diff.toFixed(2)}
+                            </span>
+                          );
+                        })()}
+                        <span className="text-[9px] text-slate-400 block">
+                          {language === "TR" ? meta?.subLabelTr : meta?.subLabelEn}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+
+              {/* Limit Controller */}
+              <div className="flex items-center justify-between pt-3 border-t border-slate-100 mt-2">
+                <span className="text-[10px] text-slate-500 font-bold font-mono">
+                  {translate("Sıralı Limit:", "Display Limit:")}
+                </span>
+                <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                  {[3, 5, 10, -1].map((cnt) => (
+                    <button
+                      key={cnt}
+                      onClick={() => setLimit(cnt)}
+                      className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-all cursor-pointer ${
+                        limit === cnt ? `${activeBg} shadow-3xs font-extrabold` : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      {cnt === -1 ? translate("Hepsi", "All") : cnt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Verbal Explanation */}
+              <div className={`${bgColLight} border ${borderColLight} p-3.5 rounded-xl`}>
+                <span className={`font-extrabold ${textCol} block uppercase tracking-wider text-[9px] mb-1.5`}>
+                  {translate("SÖZLÜ KPI TANIMI / NEDİR?", "VERBAL KPI DEFINITION / WHAT IS IT?")}
+                </span>
+                <p className="text-[11px] text-slate-700 leading-relaxed font-sans">
+                  {language === "TR" ? meta?.descTr : meta?.descEn}
+                </p>
+              </div>
+
+              {/* Mathematical Formula */}
+              <div>
+                <span className={`font-extrabold ${textCol} block uppercase tracking-wider text-[9px] mb-1.5`}>
+                  {translate("MATEMATİKSEL FORMÜL", "MATHEMATICAL FORMULA")}
+                </span>
+                <code className={`font-mono text-[10px] ${textCol} block leading-relaxed bg-slate-50 p-2.5 rounded-xl border border-slate-200/60 shadow-3xs overflow-x-auto whitespace-pre-wrap`}>
+                  {meta?.formula}
+                </code>
+              </div>
+
+              {/* Formula Components Detail */}
+              <div>
+                <span className={`font-extrabold ${textCol} block uppercase tracking-wider text-[9px] mb-1.5`}>
+                  {translate("MATEMATİKSEL BİLEŞENLER VE METRİKLER", "MATHEMATICAL COMPONENTS & METRICS")}
+                </span>
+                <p className="text-[10px] text-slate-600 font-mono leading-relaxed whitespace-pre-line bg-slate-50 p-2.5 rounded-xl border border-slate-200/60">
+                  {meta?.components}
+                </p>
+              </div>
+
+              {/* Global Average */}
+              <div className="flex justify-between items-center pt-2.5 border-t border-slate-100">
+                <span className="font-bold text-slate-700 text-[10px]">
+                  {translate("Aşama Genel Ortalaması:", "Stage Global Average:")}
+                </span>
+                <span className={`font-mono font-extrabold ${textCol} text-xs bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200/60`}>
+                  {hasPct ? "%" : ""}{varyansGlobalAverages[metricState] || 0}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   React.useEffect(() => {
     if (initialPlayerKey) {
@@ -472,7 +974,7 @@ export default function TournamentAnalyticsView({
   const [macroPossessionMax, setMacroPossessionMax] = useState<number>(100);
   const [macroPlaymakerName, setMacroPlaymakerName] = useState<string>("HAKAN ÇALHANOĞLU");
   const [macroIntentTeam, setMacroIntentTeam] = useState<string>("All");
-  const [macroTrendsSubTab, setMacroTrendsSubTab] = useState<"exploratory" | "regression" | "benchmarks" | "matrix">("exploratory");
+  const [macroTrendsSubTab, setMacroTrendsSubTab] = useState<"exploratory" | "regression" | "benchmarks" | "matrix" | "predictability">("exploratory");
   const [tacticalXMetric, setTacticalXMetric] = useState<string>("zone4");
   const [tacticalYMetric, setTacticalYMetric] = useState<string>("lineBreaks");
   const [tacticalFormationFilter, setTacticalFormationFilter] = useState<string>("All");
@@ -502,8 +1004,6 @@ export default function TournamentAnalyticsView({
     return {
       "Mexico": "4-3-3",
       "South Africa": "4-3-3",
-      "Italy": "3-5-2",
-      "Japan": "4-2-3-1",
     };
   });
 
@@ -515,6 +1015,45 @@ export default function TournamentAnalyticsView({
 
   const [possessionStyle, setPossessionStyle] = useState<"in" | "out">("in");
   const [anomalyHighlight, setAnomalyHighlight] = useState<string>("");
+  
+  // Custom added states for user requests
+  const [activeReportChartTab, setActiveReportChartTab] = useState<"hsr_sprints" | "line_breaks" | "crosses">("hsr_sprints");
+  const [playerLabSearch, setPlayerLabSearch] = useState<string>("");
+  const [playerLabTeam, setPlayerLabTeam] = useState<string>("all");
+  const [playerLabPos, setPlayerLabPos] = useState<string>("all");
+  const [playerLabSortField, setPlayerLabSortField] = useState<string>("totalDistance");
+  const [playerLabSortAsc, setPlayerLabSortAsc] = useState<boolean>(false);
+  const [explainAnomalies, setExplainAnomalies] = useState<boolean>(true);
+
+  // Automatically detect and set formations from uploaded matches
+  useEffect(() => {
+    if (uploadedMatches && uploadedMatches.length > 0) {
+      setTeamFormations(prev => {
+        const updated = { ...prev };
+        let changed = false;
+        uploadedMatches.forEach(m => {
+          const home = m.matchInfo?.homeTeam;
+          const homeForm = m.matchInfo?.homeFormation;
+          const away = m.matchInfo?.awayTeam;
+          const awayForm = m.matchInfo?.awayFormation;
+          
+          if (home && homeForm && !updated[home]) {
+            updated[home] = homeForm;
+            changed = true;
+          }
+          if (away && awayForm && !updated[away]) {
+            updated[away] = awayForm;
+            changed = true;
+          }
+        });
+        if (changed) {
+          localStorage.setItem("__team_assigned_formations_v2", JSON.stringify(updated));
+          return updated;
+        }
+        return prev;
+      });
+    }
+  }, [uploadedMatches]);
 
   const tournamentAnomalies = useMemo(() => {
     const uniqueTeams = Array.from(new Set(uploadedMatches.flatMap(m => [m.matchInfo.homeTeam, m.matchInfo.awayTeam])));
@@ -649,6 +1188,88 @@ export default function TournamentAnalyticsView({
       };
     }).sort((a, b) => b.zScore - a.zScore);
   }, [uploadedMatches]);
+
+  const teamComparisonStats = useMemo(() => {
+    const uniqueTeams = Array.from(new Set(uploadedMatches.flatMap(m => [m.matchInfo.homeTeam, m.matchInfo.awayTeam])));
+    return uniqueTeams.map(teamName => {
+      let totalGoals = 0;
+      let totalSprints = 0;
+      let totalHsr = 0;
+      let playerCount = 0;
+      let matchCount = 0;
+      
+      let lineBreaksAtt = 0;
+      let lineBreaksComp = 0;
+      let crossesAtt = 0;
+      let crossesComp = 0;
+      let offersReceived = 0;
+
+      uploadedMatches.forEach(m => {
+        const isHome = m.matchInfo.homeTeam === teamName;
+        const isAway = m.matchInfo.awayTeam === teamName;
+        if (isHome || isAway) {
+          matchCount++;
+          if (isHome) {
+            totalGoals += Number(m.matchInfo.homeScore || 0);
+          } else {
+            totalGoals += Number(m.matchInfo.awayScore || 0);
+          }
+
+          // Physical stats
+          const phys = m.playersPhysical?.[isHome ? "home" : "away"] || [];
+          phys.forEach((p: any) => {
+            totalSprints += Number(p.sprints || 0);
+            totalHsr += Number(p.highSpeedRuns || 0);
+            playerCount++;
+          });
+
+          // Line breaks
+          const lbList = m.lineBreaks?.playerSummary || [];
+          lbList.forEach((p: any) => {
+            if (p.team === teamName) {
+              lineBreaksAtt += Number(p.attempted || 0);
+              lineBreaksComp += Number(p.completed || 0);
+            }
+          });
+
+          // Crosses
+          const crList = m.crosses?.playerSummary || [];
+          crList.forEach((p: any) => {
+            if (p.team === teamName) {
+              crossesAtt += Number(p.totalAttempted || 0);
+              crossesComp += Number(p.crossCompleted || 0);
+            }
+          });
+
+          // Offering
+          const offList = m.offeringToReceive?.playerSummary || [];
+          offList.forEach((p: any) => {
+            if (p.team === teamName) {
+              offersReceived += Number(p.offersReceived || 0);
+            }
+          });
+        }
+      });
+
+      const avgSprints = matchCount > 0 && playerCount > 0 ? Number((totalSprints / matchCount).toFixed(1)) : 0;
+      const avgHsr = matchCount > 0 && playerCount > 0 ? Math.round(totalHsr / matchCount) : 0;
+
+      return {
+        team: teamName,
+        goals: totalGoals,
+        avgSprints,
+        avgHsr,
+        lineBreaksAttempted: lineBreaksAtt,
+        lineBreaksCompleted: lineBreaksComp,
+        crossesAttempted: crossesAtt,
+        crossesCompleted: crossesComp,
+        offersReceived,
+        matchCount
+      };
+    });
+  }, [uploadedMatches]);
+
+
 
   const tournamentDnaInnovationRankings = useMemo(() => {
     const uniqueTeams = Array.from(new Set(uploadedMatches.flatMap(m => [m.matchInfo.homeTeam, m.matchInfo.awayTeam])));
@@ -914,8 +1535,349 @@ export default function TournamentAnalyticsView({
         list.add(cleanGroupName(m.matchInfo.group));
       }
     });
-    return ["All", ...Array.from(list)];
+    return ["All", ...Array.from(list).sort((a, b) => a.localeCompare(b))];
   }, [uploadedMatches]);
+
+  const filteredVaryansMatches = useMemo(() => {
+    let list = uploadedMatches;
+    if (varyansGroup !== "All") {
+      list = list.filter(m => m.matchInfo?.group && cleanGroupName(m.matchInfo.group) === varyansGroup);
+    }
+    if (varyansTeam !== "All") {
+      list = list.filter(m => m.matchInfo?.homeTeam === varyansTeam || m.matchInfo?.awayTeam === varyansTeam);
+    }
+    if (varyansMatch !== "All") {
+      list = list.filter(m => {
+        const matchKey = `${m.matchInfo?.homeTeam} vs ${m.matchInfo?.awayTeam}`;
+        return matchKey === varyansMatch;
+      });
+    }
+    return list;
+  }, [uploadedMatches, varyansGroup, varyansTeam, varyansMatch]);
+
+  // Dynamically compute the list of teams for the selected group
+  const varyansTeamsList = useMemo(() => {
+    let matchesForTeams = uploadedMatches;
+    if (varyansGroup !== "All") {
+      matchesForTeams = matchesForTeams.filter(m => m.matchInfo?.group && cleanGroupName(m.matchInfo.group) === varyansGroup);
+    }
+    const teams = new Set<string>();
+    matchesForTeams.forEach(m => {
+      if (m.matchInfo?.homeTeam) teams.add(m.matchInfo.homeTeam);
+      if (m.matchInfo?.awayTeam) teams.add(m.matchInfo.awayTeam);
+    });
+    return ["All", ...Array.from(teams).sort()];
+  }, [uploadedMatches, varyansGroup]);
+
+  // Dynamically compute the list of matches for the selected group & team
+  const varyansMatchesList = useMemo(() => {
+    let list = uploadedMatches;
+    if (varyansGroup !== "All") {
+      list = list.filter(m => m.matchInfo?.group && cleanGroupName(m.matchInfo.group) === varyansGroup);
+    }
+    if (varyansTeam !== "All") {
+      list = list.filter(m => m.matchInfo?.homeTeam === varyansTeam || m.matchInfo?.awayTeam === varyansTeam);
+    }
+    return ["All", ...list.map(m => `${m.matchInfo?.homeTeam} vs ${m.matchInfo?.awayTeam}`)];
+  }, [uploadedMatches, varyansGroup, varyansTeam]);
+
+  // Reset match filter if it is no longer valid
+  React.useEffect(() => {
+    if (varyansMatch !== "All" && !varyansMatchesList.includes(varyansMatch)) {
+      setVaryansMatch("All");
+    }
+  }, [varyansMatchesList, varyansMatch]);
+
+  const matchPosition = (pPos: string | undefined | null, filter: string) => {
+    if (!filter || filter === "All" || filter === "ALL") return true;
+    if (!pPos) return false;
+    const pos = pPos.toUpperCase();
+    if (filter === "GK") return pos.includes("GK");
+    if (filter === "DF") return pos.includes("DF") || pos.includes("CB") || pos.includes("LB") || pos.includes("RB") || pos.includes("WB");
+    if (filter === "MF") return pos.includes("MF") || pos.includes("CM") || pos.includes("DM") || pos.includes("AM") || pos.includes("RM") || pos.includes("LM");
+    if (filter === "FW") return pos.includes("FW") || pos.includes("ST") || pos.includes("CF") || pos.includes("LW") || pos.includes("RW") || pos.includes("ATT") || pos.includes("FC");
+    return false;
+  };
+
+  const varyansPlayersStats = useMemo(() => {
+    const statsMap: Record<string, {
+      name: string;
+      team: string;
+      position: string;
+      mLber: number[];
+      mPprr: number[];
+      mCpi: number[];
+      mVdr: number[];
+      mObai: number[];
+      mSer: number[];
+      mNamc: number[];
+      mDwic: number[];
+      mWcp: number[];
+      mPoc: number[];
+      mPyps: number[];
+      mPeai: number[];
+      mFrds: number[];
+      mSbdq: number[];
+      mCcc: number[];
+      mLldr: number[];
+      mPdi: number[];
+    }> = {};
+
+    filteredVaryansMatches.forEach(match => {
+      const matchStats = computePlayerAdvancedStats(match);
+      matchStats.forEach(p => {
+        const cleaned = cleanPlayerName(p.name);
+        if (!cleaned || cleaned.length < 2) return;
+        const key = `${cleaned}_(${p.team})`;
+        if (!statsMap[key]) {
+          statsMap[key] = {
+            name: cleaned,
+            team: p.team,
+            position: p.position || "MF",
+            mLber: [],
+            mPprr: [],
+            mCpi: [],
+            mVdr: [],
+            mObai: [],
+            mSer: [],
+            mNamc: [],
+            mDwic: [],
+            mWcp: [],
+            mPoc: [],
+            mPyps: [],
+            mPeai: [],
+            mFrds: [],
+            mSbdq: [],
+            mCcc: [],
+            mLldr: [],
+            mPdi: []
+          };
+        }
+        if (p.mLber !== null && p.mLber !== undefined) statsMap[key].mLber.push(p.mLber);
+        if (p.mPprr !== null && p.mPprr !== undefined) statsMap[key].mPprr.push(p.mPprr);
+        if (p.mCpi !== null && p.mCpi !== undefined) statsMap[key].mCpi.push(p.mCpi);
+        if (p.mVdr !== null && p.mVdr !== undefined) statsMap[key].mVdr.push(p.mVdr);
+        if (p.mObai !== null && p.mObai !== undefined) statsMap[key].mObai.push(p.mObai);
+        if (p.mSer !== null && p.mSer !== undefined) statsMap[key].mSer.push(p.mSer);
+        if (p.mNamc !== null && p.mNamc !== undefined) statsMap[key].mNamc.push(p.mNamc);
+        if (p.mDwic !== null && p.mDwic !== undefined) statsMap[key].mDwic.push(p.mDwic);
+        if (p.mWcp !== null && p.mWcp !== undefined) statsMap[key].mWcp.push(p.mWcp);
+        if (p.mPoc !== null && p.mPoc !== undefined) statsMap[key].mPoc.push(p.mPoc);
+        if (p.mPyps !== null && p.mPyps !== undefined) statsMap[key].mPyps.push(p.mPyps);
+        if (p.mPeai !== null && p.mPeai !== undefined) statsMap[key].mPeai.push(p.mPeai);
+        if (p.mFrds !== null && p.mFrds !== undefined) statsMap[key].mFrds.push(p.mFrds);
+        if (p.mSbdq !== null && p.mSbdq !== undefined) statsMap[key].mSbdq.push(p.mSbdq);
+        if (p.mCcc !== null && p.mCcc !== undefined) statsMap[key].mCcc.push(p.mCcc);
+        if (p.mLldr !== null && p.mLldr !== undefined) statsMap[key].mLldr.push(p.mLldr);
+        if (p.mPdi !== null && p.mPdi !== undefined) statsMap[key].mPdi.push(p.mPdi);
+      });
+    });
+
+    const avg = (arr: number[]) => arr.length === 0 ? 0 : Number((arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(2));
+
+    const results = Object.values(statsMap)
+      .filter(p => p.mLber.length > 0 || p.mSer.length > 0 || p.mSbdq.length > 0 || p.mPoc.length > 0)
+      .map(p => ({
+        name: p.name,
+        team: p.team,
+        position: p.position,
+      mLber: avg(p.mLber),
+      mPprr: avg(p.mPprr),
+      mCpi: avg(p.mCpi),
+      mVdr: avg(p.mVdr),
+      mObai: avg(p.mObai),
+      mSer: avg(p.mSer),
+      mNamc: avg(p.mNamc),
+      mDwic: avg(p.mDwic),
+      mWcp: avg(p.mWcp),
+      mPoc: avg(p.mPoc),
+      mPyps: avg(p.mPyps),
+      mPeai: avg(p.mPeai),
+      mFrds: avg(p.mFrds),
+      mSbdq: avg(p.mSbdq),
+      mCcc: avg(p.mCcc),
+      mLldr: avg(p.mLldr),
+      mPdi: avg(p.mPdi)
+    }));
+
+    return results.filter(p => {
+      const matchTeam = varyansTeam === "All" || p.team === varyansTeam;
+      const matchPos = matchPosition(p.position, varyansPosition);
+      return matchTeam && matchPos;
+    });
+  }, [filteredVaryansMatches, varyansTeam, varyansPosition]);
+
+  const teamAdvAverages = useMemo(() => {
+    const keys = [
+      "mLber", "mPprr", "mCpi", "mVdr", 
+      "mObai", "mSer", "mNamc", "mDwic", "mWcp", 
+      "mPoc", "mPyps", "mPeai", "mFrds", 
+      "mSbdq", "mCcc", "mLldr", "mPdi"
+    ];
+
+    const teamSums: Record<string, any> = {};
+
+    varyansPlayersStats.forEach(p => {
+      if (!p.team) return;
+      if (!teamSums[p.team]) {
+        const init: any = { count: 0 };
+        keys.forEach(k => { init[k] = 0; });
+        teamSums[p.team] = init;
+      }
+      const t = teamSums[p.team];
+      t.count += 1;
+      keys.forEach(k => {
+        t[k] += (p as any)[k] || 0;
+      });
+    });
+
+    const averages: Record<string, Record<string, number>> = {};
+    Object.entries(teamSums).forEach(([team, data]) => {
+      averages[team] = {};
+      keys.forEach(k => {
+        averages[team][k] = data.count > 0 ? Number((data[k] / data.count).toFixed(2)) : 0;
+      });
+    });
+
+    return averages;
+  }, [varyansPlayersStats]);
+
+  const varyansTeamStats = useMemo(() => {
+    let totalLineBreakEff = 0, count = 0;
+    let totalVerticality = 0;
+    let totalWidthUsage = 0;
+    let totalCentrality = 0;
+    let totalPressEff = 0;
+    let totalHighPressEff = 0;
+    let totalPhysIntensity = 0;
+    let totalSprintDensity = 0;
+
+    filteredVaryansMatches.forEach(m => {
+      const homeKpi = computeTeamKPIs(m, false);
+      const awayKpi = computeTeamKPIs(m, true);
+      
+      totalLineBreakEff += (homeKpi.lineBreakEfficiency + awayKpi.lineBreakEfficiency);
+      totalVerticality += (homeKpi.verticalityIndex + awayKpi.verticalityIndex);
+      totalWidthUsage += (homeKpi.widthUsageIndex + awayKpi.widthUsageIndex);
+      totalCentrality += (homeKpi.centralityIndex + awayKpi.centralityIndex);
+      totalPressEff += (homeKpi.pressEfficiency + awayKpi.pressEfficiency);
+      totalHighPressEff += (homeKpi.highPressEfficiency + awayKpi.highPressEfficiency);
+      totalPhysIntensity += (homeKpi.physicalIntensityIndex + awayKpi.physicalIntensityIndex);
+      totalSprintDensity += (homeKpi.sprintDensity + awayKpi.sprintDensity);
+      
+      count += 2;
+    });
+
+    if (count === 0) return null;
+
+    return {
+      lineBreakEfficiency: Number((totalLineBreakEff / count).toFixed(1)),
+      verticalityIndex: Number((totalVerticality / count).toFixed(1)),
+      widthUsageIndex: Number((totalWidthUsage / count).toFixed(1)),
+      centralityIndex: Number((totalCentrality / count).toFixed(1)),
+      pressEfficiency: Number((totalPressEff / count).toFixed(1)),
+      highPressEfficiency: Number((totalHighPressEff / count).toFixed(1)),
+      physicalIntensityIndex: Number((totalPhysIntensity / count).toFixed(1)),
+      sprintDensity: Number((totalSprintDensity / count).toFixed(1))
+    };
+  }, [filteredVaryansMatches]);
+
+  const varyansGlobalAverages = useMemo(() => {
+    let matchesForGlobal = uploadedMatches;
+    if (varyansGroup !== "All") {
+      matchesForGlobal = matchesForGlobal.filter(m => m.matchInfo?.group && cleanGroupName(m.matchInfo.group) === varyansGroup);
+    }
+    
+    const sums: Record<string, number> = {};
+    const counts: Record<string, number> = {};
+    
+    const keys = [
+      "mLber", "mPprr", "mCpi", "mVdr", 
+      "mObai", "mSer", "mNamc", "mDwic", "mWcp", 
+      "mPoc", "mPyps", "mPeai", "mFrds", 
+      "mSbdq", "mCcc", "mLldr", "mPdi"
+    ];
+    
+    keys.forEach(k => {
+      sums[k] = 0;
+      counts[k] = 0;
+    });
+
+    matchesForGlobal.forEach(match => {
+      const matchStats = computePlayerAdvancedStats(match);
+      matchStats.forEach(p => {
+        keys.forEach(k => {
+          const val = (p as any)[k];
+          if (val !== null && val !== undefined) {
+            sums[k] += val;
+            counts[k]++;
+          }
+        });
+      });
+    });
+
+    const results: Record<string, number> = {};
+    keys.forEach(k => {
+      const count = counts[k];
+      const sum = sums[k];
+      results[k] = count > 0 ? Number((sum / count).toFixed(2)) : 0;
+    });
+    
+    return results;
+  }, [uploadedMatches, varyansGroup]);
+
+  const varyansTeamGlobalAverages = useMemo(() => {
+    let matchesForGlobal = uploadedMatches;
+    if (varyansGroup !== "All") {
+      matchesForGlobal = matchesForGlobal.filter(m => m.matchInfo?.group && cleanGroupName(m.matchInfo.group) === varyansGroup);
+    }
+    let totalLineBreakEff = 0, count = 0;
+    let totalVerticality = 0;
+    let totalWidthUsage = 0;
+    let totalCentrality = 0;
+    let totalPressEff = 0;
+    let totalHighPressEff = 0;
+    let totalPhysIntensity = 0;
+    let totalSprintDensity = 0;
+
+    matchesForGlobal.forEach(m => {
+      const homeKpi = computeTeamKPIs(m, false);
+      const awayKpi = computeTeamKPIs(m, true);
+      
+      totalLineBreakEff += (homeKpi.lineBreakEfficiency + awayKpi.lineBreakEfficiency);
+      totalVerticality += (homeKpi.verticalityIndex + awayKpi.verticalityIndex);
+      totalWidthUsage += (homeKpi.widthUsageIndex + awayKpi.widthUsageIndex);
+      totalCentrality += (homeKpi.centralityIndex + awayKpi.centralityIndex);
+      totalPressEff += (homeKpi.pressEfficiency + awayKpi.pressEfficiency);
+      totalHighPressEff += (homeKpi.highPressEfficiency + awayKpi.highPressEfficiency);
+      totalPhysIntensity += (homeKpi.physicalIntensityIndex + awayKpi.physicalIntensityIndex);
+      totalSprintDensity += (homeKpi.sprintDensity + awayKpi.sprintDensity);
+      
+      count += 2;
+    });
+
+    if (count === 0) return {
+      lineBreakEfficiency: 0,
+      verticalityIndex: 0,
+      widthUsageIndex: 0,
+      centralityIndex: 0,
+      pressEfficiency: 0,
+      highPressEfficiency: 0,
+      physicalIntensityIndex: 0,
+      sprintDensity: 0
+    };
+
+    return {
+      lineBreakEfficiency: Number((totalLineBreakEff / count).toFixed(1)),
+      verticalityIndex: Number((totalVerticality / count).toFixed(1)),
+      widthUsageIndex: Number((totalWidthUsage / count).toFixed(1)),
+      centralityIndex: Number((totalCentrality / count).toFixed(1)),
+      pressEfficiency: Number((totalPressEff / count).toFixed(1)),
+      highPressEfficiency: Number((totalHighPressEff / count).toFixed(1)),
+      physicalIntensityIndex: Number((totalPhysIntensity / count).toFixed(1)),
+      sprintDensity: Number((totalSprintDensity / count).toFixed(1))
+    };
+  }, [uploadedMatches, varyansGroup]);
 
   // Macro Trends matching calculations
   const matchingTeamsData = useMemo(() => {
@@ -1458,11 +2420,56 @@ export default function TournamentAnalyticsView({
         return playersMap[key];
       };
 
+      // Track players who actually participated in this match
+      const playedPlayersMap: { [key: string]: { name: string, team: string } } = {};
+      const registerPlayed = (name: string, teamName: string) => {
+        if (!name || name.length < 2) return;
+        const key = `${name.toUpperCase().trim()}_(${teamName.toUpperCase().trim()})`;
+        playedPlayersMap[key] = { name, team: teamName };
+      };
+
+      // Populate playedPlayersMap from active arrays
+      (m.playersInPossession?.home || []).forEach(p => {
+        if (Number(p.passesAttempted || 0) > 0 || Number(p.attemptsAtGoal || 0) > 0) {
+          registerPlayed(p.name, home);
+        }
+      });
+      (m.playersInPossession?.away || []).forEach(p => {
+        if (Number(p.passesAttempted || 0) > 0 || Number(p.attemptsAtGoal || 0) > 0) {
+          registerPlayed(p.name, away);
+        }
+      });
+      (m.playersOutOfPossession?.home || []).forEach(p => {
+        if (Number(p.blocks || 0) + Number(p.interceptions || 0) + Number(p.possessionRegains || 0) + Number(p.clearances || 0) > 0) {
+          registerPlayed(p.name, home);
+        }
+      });
+      (m.playersOutOfPossession?.away || []).forEach(p => {
+        if (Number(p.blocks || 0) + Number(p.interceptions || 0) + Number(p.possessionRegains || 0) + Number(p.clearances || 0) > 0) {
+          registerPlayed(p.name, away);
+        }
+      });
+      (m.playersPhysical?.home || []).forEach(p => {
+        if (Number(p.totalDistance || 0) > 100) {
+          registerPlayed(p.name, home);
+        }
+      });
+      (m.playersPhysical?.away || []).forEach(p => {
+        if (Number(p.totalDistance || 0) > 100) {
+          registerPlayed(p.name, away);
+        }
+      });
+
+      // Initialize and increment gp for each played player
+      Object.entries(playedPlayersMap).forEach(([key, pInfo]) => {
+        const agg = getOrInitActivePlayer(pInfo.name, pInfo.team);
+        agg.gp += 1;
+      });
+
       // Process In Possession lists
       const processPlayerPossessionList = (list: any[], teamName: string) => {
         (list || []).forEach(p => {
           const agg = getOrInitActivePlayer(p.name, teamName);
-          agg.gp += 1;
           agg.goals += Number(p.goals || 0);
           agg.passesAttempted += Number(p.passesAttempted || 0);
           agg.passesCompleted += Number(p.passesCompleted || 0);
@@ -1555,16 +2562,58 @@ export default function TournamentAnalyticsView({
       p.passesCompletionPct = p.passesAttempted > 0 ? Math.round((p.passesCompleted / p.passesAttempted) * 100) : 0;
     });
 
-    // Filter out any player entries containing base64 images under the name attribute coming from PDF extractor artifacts
-    const cleanResults = res.filter(p => {
-      if (!p.name) return false;
-      const uName = String(p.name).toLowerCase().trim();
-      const isBase64 = uName.includes("data:") || uName.includes("base64") || uName.length > 40 || uName.startsWith("ivbor") || uName.includes(";base64,");
-      return !isBase64;
+    // Clean base64 artifacts from player names coming from PDF extractor artifacts, keeping valid players
+    const cleanResults: any[] = [];
+    res.forEach(p => {
+      if (!p.name) return;
+      if (p.gp === 0) return; // Exclude players who haven't played in any match
+      let name = String(p.name).trim();
+      
+      // Clean base64 strings if present inside the name
+      const b64Markers = ["data:image", ";base64,", "base64"];
+      for (const marker of b64Markers) {
+        const idx = name.toLowerCase().indexOf(marker);
+        if (idx !== -1) {
+          name = name.substring(0, idx).trim();
+        }
+      }
+      
+      const uNameLower = name.toLowerCase();
+      const isPureBase64 = uNameLower.startsWith("ivbor") || (uNameLower.length > 50 && !uNameLower.includes(" "));
+      
+      if (!isPureBase64 && name.length >= 2) {
+        cleanResults.push({
+          ...p,
+          name: name.replace(/^[\s\-_,.]+|[\s\-_,.]+$/g, "").trim()
+        });
+      }
     });
 
     return cleanResults;
   }, [uploadedMatches]);
+
+  // Individual Player Metrics Lab filtering and sorting memo
+  const filteredAndSortedLabPlayers = useMemo(() => {
+    return aggregatedPlayers.filter(p => {
+      const matchSearch = p.name.toLowerCase().includes(playerLabSearch.toLowerCase());
+      const matchTeam = playerLabTeam === "all" || p.team === playerLabTeam;
+      const matchPos = playerLabPos === "all" || p.position.toUpperCase().includes(playerLabPos.toUpperCase());
+      return matchSearch && matchTeam && matchPos;
+    }).sort((a, b) => {
+      let valA = (a as any)[playerLabSortField] ?? 0;
+      let valB = (b as any)[playerLabSortField] ?? 0;
+      
+      // Handle special calculation or nested values if needed
+      if (playerLabSortField === "passesCompletionPct") {
+        valA = a.passesAttempted > 0 ? (a.passesCompleted / a.passesAttempted) * 100 : 0;
+        valB = b.passesAttempted > 0 ? (b.passesCompleted / b.passesAttempted) * 100 : 0;
+      }
+      
+      if (valA < valB) return playerLabSortAsc ? -1 : 1;
+      if (valA > valB) return playerLabSortAsc ? 1 : -1;
+      return 0;
+    });
+  }, [aggregatedPlayers, playerLabSearch, playerLabTeam, playerLabPos, playerLabSortField, playerLabSortAsc]);
 
   const compositePlayerData = useMemo(() => {
     let maxDist = 1;
@@ -2093,126 +3142,297 @@ export default function TournamentAnalyticsView({
       </div>
 
       {/* Platform Level Navigation Tab Bar */}
-      <div className="flex flex-wrap border-b border-slate-200 pb-3 gap-2 md:gap-4 items-center shrink-0">
-        <button
-          onClick={() => setSubTab("tournament")}
-          className={`pb-2 px-3 font-sans text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border-b-2 cursor-pointer transition-all ${
-            subTab === "tournament"
-              ? "border-indigo-600 text-indigo-750 font-extrabold"
-              : "border-transparent text-slate-400 hover:text-slate-700"
-          }`}
-        >
-          <Trophy className="w-4 h-4 text-amber-500" />
-          <span>🏆 Seviye 1: Turnuva</span>
-        </button>
-        <div className="text-slate-300 text-xs select-none">/</div>
-        <button
-          onClick={() => setSubTab("tournamentSummary")}
-          className={`pb-2 px-3 font-sans text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border-b-2 cursor-pointer transition-all ${
-            subTab === "tournamentSummary"
-              ? "border-indigo-600 text-indigo-750 font-extrabold"
-              : "border-transparent text-slate-400 hover:text-slate-700"
-          }`}
-        >
-          <Sparkles className="w-4 h-4 text-violet-500 animate-pulse" />
-          <span>🤖 Seviye 1.5: AI Turnuva Raporu</span>
-        </button>
-        <div className="text-slate-300 text-xs select-none">/</div>
-        <button
-          onClick={() => setSubTab("group")}
-          className={`pb-2 px-3 font-sans text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border-b-2 cursor-pointer transition-all ${
-            subTab === "group"
-              ? "border-indigo-600 text-indigo-750 font-extrabold"
-              : "border-transparent text-slate-400 hover:text-slate-700"
-          }`}
-        >
-          <FolderDot className="w-4 h-4 text-indigo-505" />
-          <span>📊 Seviye 2: Gruplar & Puan</span>
-        </button>
-        <div className="text-slate-300 text-xs select-none">/</div>
-        <button
-          onClick={() => setSubTab("team")}
-          className={`pb-2 px-3 font-sans text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border-b-2 cursor-pointer transition-all ${
-            subTab === "team"
-              ? "border-indigo-600 text-indigo-750 font-extrabold"
-              : "border-transparent text-slate-400 hover:text-slate-700"
-          }`}
-        >
-          <Shield className="w-4 h-4 text-emerald-500" />
-          <span>🛡️ Seviye 3: Takım Seçimi</span>
-        </button>
-        <div className="text-slate-300 text-xs select-none">/</div>
-        <button
-          onClick={() => setSubTab("player")}
-          className={`pb-2 px-3 font-sans text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border-b-2 cursor-pointer transition-all ${
-            subTab === "player"
-              ? "border-indigo-600 text-indigo-750 font-extrabold"
-              : "border-transparent text-slate-400 hover:text-slate-700"
-          }`}
-        >
-          <User className="w-4 h-4 text-rose-500" />
-          <span>⚡ Seviye 4: Oyuncu Detay</span>
-        </button>
-        <div className="text-slate-300 text-xs select-none">/</div>
-        <button
-          onClick={() => setSubTab("customGroup")}
-          className={`pb-2 px-3 font-sans text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border-b-2 cursor-pointer transition-all ${
-            subTab === "customGroup"
-              ? "border-indigo-600 text-indigo-750 font-extrabold"
-              : "border-transparent text-slate-400 hover:text-slate-700"
-          }`}
-        >
-          <ArrowRightLeft className="w-4 h-4 text-sky-500" />
-          <span>🧱 Seviye 4.5: Özel Blok Kıyaslama</span>
-        </button>
-        <div className="text-slate-300 text-xs select-none">/</div>
-        <button
-          onClick={() => setSubTab("vesRanker")}
-          className={`pb-2 px-3 font-sans text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border-b-2 cursor-pointer transition-all ${
-            subTab === "vesRanker"
-              ? "border-indigo-600 text-indigo-750 font-extrabold"
-              : "border-transparent text-slate-400 hover:text-slate-700"
-          }`}
-        >
-          <Award className="w-4 h-4 text-pink-500 animate-pulse" />
-          <span>🔮 Seviye 4.8: Varyans Etki Skoru (VES)</span>
-        </button>
-        <div className="text-slate-300 text-xs select-none">/</div>
-        <button
-          onClick={() => setSubTab("macroTrends")}
-          className={`pb-2 px-3 font-sans text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border-b-2 cursor-pointer transition-all ${
-            subTab === "macroTrends"
-              ? "border-indigo-600 text-indigo-750 font-extrabold"
-              : "border-transparent text-slate-400 hover:text-slate-700"
-          }`}
-        >
-          <Zap className="w-4 h-4 text-indigo-600" />
-          <span>🧠 Seviye 5: Makro Trend & Karar Motoru</span>
-        </button>
-        <div className="text-slate-300 text-xs select-none">/</div>
-        <button
-          onClick={() => setSubTab("formationCost")}
-          className={`pb-2 px-3 font-sans text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border-b-2 cursor-pointer transition-all ${
-            subTab === "formationCost"
-              ? "border-indigo-600 text-indigo-750 font-extrabold"
-              : "border-transparent text-slate-400 hover:text-slate-700"
-          }`}
-        >
-          <Flame className="w-4 h-4 text-orange-500 animate-pulse" />
-          <span>📊 Seviye 4.9: Formasyon Fiziksel Maliyet</span>
-        </button>
-        <div className="text-slate-300 text-xs select-none">/</div>
-        <button
-          onClick={() => setSubTab("guidedChatbot")}
-          className={`pb-2 px-3 font-sans text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border-b-2 cursor-pointer transition-all ${
-            subTab === "guidedChatbot"
-              ? "border-indigo-600 text-indigo-750 font-extrabold"
-              : "border-transparent text-slate-400 hover:text-slate-700"
-          }`}
-        >
-          <Sparkles className="w-4 h-4 text-indigo-600 animate-pulse" />
-          <span>🤖 Akıllı Taktiksel Rehber & Chatbot</span>
-        </button>
+      <div className="flex flex-col gap-5 bg-slate-50 p-4 rounded-3xl border border-slate-200/60 shadow-xs shrink-0 mb-6">
+        {/* Category Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-200 pb-3">
+          <div>
+            <h2 className="text-base font-extrabold text-slate-800 tracking-tight">
+              {translate("Analiz Kategorileri", "Analysis Categories")}
+            </h2>
+            <p className="text-[11px] text-slate-500 font-medium">
+              {translate("Lütfen odaklanmak istediğiniz ana analiz boyutunu seçin", "Please select the main analysis dimension you wish to focus on")}
+            </p>
+          </div>
+          <div className="bg-amber-500/15 border border-amber-500/25 px-2.5 py-1 rounded-full text-[10px] font-mono text-amber-600 font-bold tracking-wider uppercase select-none">
+            {translate("VARYANS MOTORU", "VARYANS ENGINE")}
+          </div>
+        </div>
+
+        {/* 4 Main Beautiful Category Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          {/* Card 1: Overview */}
+          <button
+            onClick={() => {
+              setActiveCategory("overview");
+              setSubTab("tournament");
+            }}
+            className={`p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-3 relative overflow-hidden group ${
+              activeCategory === "overview"
+                ? "bg-white border-indigo-600 shadow-sm ring-1 ring-indigo-600/30"
+                : "bg-white border-slate-200 hover:border-slate-350 hover:shadow-2xs"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className={`p-2 rounded-xl ${activeCategory === "overview" ? "bg-indigo-50 text-indigo-600" : "bg-slate-100 text-slate-600"}`}>
+                <Trophy className="w-5 h-5" />
+              </div>
+              <span className="text-[9px] font-mono font-bold uppercase text-slate-400">{translate("SEVİYE 1", "LEVEL 1")}</span>
+            </div>
+            <div>
+              <h3 className="font-sans font-bold text-xs text-slate-800 uppercase tracking-tight">{translate("Genel Özet & Puan", "Overview & Standings")}</h3>
+              <p className="text-[10px] text-slate-400 mt-1 leading-snug">{translate("Turnuva durumları, AI raporu ve grup puanları", "Tournament summaries, AI report & standings")}</p>
+            </div>
+          </button>
+
+          {/* Card 2: Tactics */}
+          <button
+            onClick={() => {
+              setActiveCategory("tactics");
+              setSubTab("team");
+            }}
+            className={`p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-3 relative overflow-hidden group ${
+              activeCategory === "tactics"
+                ? "bg-white border-indigo-600 shadow-sm ring-1 ring-indigo-600/30"
+                : "bg-white border-slate-200 hover:border-slate-350 hover:shadow-2xs"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className={`p-2 rounded-xl ${activeCategory === "tactics" ? "bg-indigo-50 text-indigo-600" : "bg-slate-100 text-slate-600"}`}>
+                <Shield className="w-5 h-5" />
+              </div>
+              <span className="text-[9px] font-mono font-bold uppercase text-slate-400">{translate("SEVİYE 2", "LEVEL 2")}</span>
+            </div>
+            <div>
+              <h3 className="font-sans font-bold text-xs text-slate-800 uppercase tracking-tight">{translate("Taktik & Formasyon", "Tactics & Formations")}</h3>
+              <p className="text-[10px] text-slate-400 mt-1 leading-snug">{translate("Takım taktikleri, formasyon analizleri ve maliyetler", "Team tactics, formation costs & comparisons")}</p>
+            </div>
+          </button>
+
+          {/* Card 3: Players */}
+          <button
+            onClick={() => {
+              setActiveCategory("players");
+              setSubTab("player");
+            }}
+            className={`p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-3 relative overflow-hidden group ${
+              activeCategory === "players"
+                ? "bg-white border-indigo-600 shadow-sm ring-1 ring-indigo-600/30"
+                : "bg-white border-slate-200 hover:border-slate-350 hover:shadow-2xs"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className={`p-2 rounded-xl ${activeCategory === "players" ? "bg-indigo-50 text-indigo-600" : "bg-slate-100 text-slate-600"}`}>
+                <User className="w-5 h-5" />
+              </div>
+              <span className="text-[9px] font-mono font-bold uppercase text-slate-400">{translate("SEVİYE 3", "LEVEL 3")}</span>
+            </div>
+            <div>
+              <h3 className="font-sans font-bold text-xs text-slate-800 uppercase tracking-tight">{translate("Oyuncular & VES", "Players & VES Score")}</h3>
+              <p className="text-[10px] text-slate-400 mt-1 leading-snug">{translate("Oyuncu verileri, fiziksel metrikler ve VES etki skorları", "Individual data, physical metrics & VES impact scores")}</p>
+            </div>
+          </button>
+
+          {/* Card 4: AI & Intelligence */}
+          <button
+            onClick={() => {
+              setActiveCategory("ai");
+              setSubTab("guidedChatbot");
+            }}
+            className={`p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-3 relative overflow-hidden group ${
+              activeCategory === "ai"
+                ? "bg-white border-indigo-600 shadow-sm ring-1 ring-indigo-600/30"
+                : "bg-white border-slate-200 hover:border-slate-350 hover:shadow-2xs"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className={`p-2 rounded-xl ${activeCategory === "ai" ? "bg-indigo-50 text-indigo-600" : "bg-slate-100 text-slate-600"}`}>
+                <Sparkles className="w-5 h-5 animate-pulse" />
+              </div>
+              <span className="text-[9px] font-mono font-bold uppercase text-slate-400">{translate("SEVİYE 4", "LEVEL 4")}</span>
+            </div>
+            <div>
+              <h3 className="font-sans font-bold text-xs text-slate-800 uppercase tracking-tight">{translate("Yapay Zeka & Trend", "AI Hub & Intelligence")}</h3>
+              <p className="text-[10px] text-slate-400 mt-1 leading-snug">{translate("Akıllı Chatbot, taktiksel rehber ve karar motoru", "AI Smart Chatbot, physical trends & decisions")}</p>
+            </div>
+          </button>
+        </div>
+
+        {/* Dynamic Nested Sub-tab Pills depending on activeCategory */}
+        <div className="bg-white/80 p-1.5 rounded-2xl border border-slate-200 flex flex-wrap gap-1.5 items-center">
+          {activeCategory === "overview" && (
+            <>
+              <button
+                onClick={() => setSubTab("tournament")}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
+                  subTab === "tournament"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <Trophy className="w-3.5 h-3.5" />
+                <span>{translate("Turnuva Genel Görünüm", "Tournament Overview")}</span>
+              </button>
+              <button
+                onClick={() => setSubTab("tournamentSummary")}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
+                  subTab === "tournamentSummary"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-violet-500" />
+                <span>{translate("AI Turnuva Raporu", "AI Tournament Report")}</span>
+              </button>
+              <button
+                onClick={() => setSubTab("group")}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
+                  subTab === "group"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <FolderDot className="w-3.5 h-3.5" />
+                <span>{translate("Grup Puan Durumları", "Group Standings")}</span>
+              </button>
+              <button
+                onClick={() => setSubTab("varyans_kpi")}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
+                  subTab === "varyans_kpi"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <Award className="w-3.5 h-3.5 text-emerald-500" />
+                <span>{translate("🏆 VARYANS Analiz Merkezi", "🏆 VARYANS Analysis Center")}</span>
+              </button>
+            </>
+          )}
+
+          {activeCategory === "tactics" && (
+            <>
+              <button
+                onClick={() => setSubTab("team")}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
+                  subTab === "team"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <Shield className="w-3.5 h-3.5" />
+                <span>{translate("Takım Taktik Analizi", "Team Tactical Analysis")}</span>
+              </button>
+              <button
+                onClick={() => setSubTab("formationCost")}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
+                  subTab === "formationCost"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <Flame className="w-3.5 h-3.5 text-orange-500" />
+                <span>{translate("Formasyon Fiziksel Maliyet", "Formation Physical Cost")}</span>
+              </button>
+              <button
+                onClick={() => setSubTab("customGroup")}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
+                  subTab === "customGroup"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <ArrowRightLeft className="w-3.5 h-3.5" />
+                <span>{translate("Özel Blok Kıyaslama", "Custom Comparison Block")}</span>
+              </button>
+              <button
+                onClick={() => setSubTab("descriptiveAnalytics")}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
+                  subTab === "descriptiveAnalytics"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <BarChart3 className="w-3.5 h-3.5 text-amber-500" />
+                <span>{translate("Betimsel Taktik & xG Analizi", "Descriptive Tactics & xG")}</span>
+              </button>
+            </>
+          )}
+
+          {activeCategory === "players" && (
+            <>
+              <button
+                onClick={() => setSubTab("player")}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
+                  subTab === "player"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <User className="w-3.5 h-3.5" />
+                <span>{translate("Oyuncu Bireysel Detay", "Player Individual Details")}</span>
+              </button>
+              <button
+                onClick={() => setSubTab("vesRanker")}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
+                  subTab === "vesRanker"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <Award className="w-3.5 h-3.5 text-pink-500" />
+                <span>{translate("Varyans Etki Skoru (VES)", "Variance Impact Score (VES)")}</span>
+              </button>
+              <button
+                onClick={() => setSubTab("athleticReport")}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
+                  subTab === "athleticReport"
+                    ? "bg-indigo-600 text-white shadow-xs animate-pulse"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <Activity className="w-3.5 h-3.5 text-rose-500" />
+                <span>{translate("🏃‍♂️ Atletik Performans Raporu", "🏃‍♂️ Athletic Performance Report")}</span>
+              </button>
+              <button
+                onClick={() => setSubTab("varyans_kpi")}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
+                  subTab === "varyans_kpi"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <Award className="w-3.5 h-3.5 text-emerald-500" />
+                <span>{translate("🏆 VARYANS Analiz Merkezi", "🏆 VARYANS Analysis Center")}</span>
+              </button>
+            </>
+          )}
+
+          {activeCategory === "ai" && (
+            <>
+              <button
+                onClick={() => setSubTab("guidedChatbot")}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
+                  subTab === "guidedChatbot"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                <span>{translate("Akıllı Taktiksel Rehber & Chatbot", "Tactical AI Guide & Chatbot")}</span>
+              </button>
+              <button
+                onClick={() => setSubTab("macroTrends")}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
+                  subTab === "macroTrends"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5 text-amber-500" />
+                <span>{translate("Makro Trend & Karar Motoru", "Macro Decision Engine")}</span>
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {subTab === "tournamentSummary" && (
@@ -2352,6 +3572,124 @@ export default function TournamentAnalyticsView({
             </div>
 
           </div>
+
+          {/* Takım Performans Kıyaslama Grafik Laboratuvarı (New full-width Section) */}
+          <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-xs flex flex-col gap-6 mt-2">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 pb-4">
+              <div>
+                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400">GÖRSEL ANALİZ LABORATUVARI</span>
+                <h4 className="text-base font-sans font-extrabold text-slate-900 mt-0.5">📊 Takımların Karşılaştırmalı Performans & Koşu Dağılımları</h4>
+                <p className="text-xs text-slate-400 font-sans mt-0.5">
+                  Tüm turnuva takımlarının taktiksel aksiyon, fiziksel yıpranma ve hücum verimlilik metriklerini yan yana kıyaslayın.
+                </p>
+              </div>
+
+              {/* Chart Tabs Toggle */}
+              <div className="flex flex-wrap bg-slate-100 p-1 rounded-2xl border border-slate-200">
+                <button 
+                  onClick={() => setActiveReportChartTab("hsr_sprints")}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    activeReportChartTab === "hsr_sprints" 
+                      ? "bg-white text-indigo-750 shadow-sm font-extrabold" 
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  <Activity className="w-3.5 h-3.5 text-indigo-505" />
+                  Koşular (HSR & Sprints)
+                </button>
+                <button 
+                  onClick={() => setActiveReportChartTab("line_breaks")}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    activeReportChartTab === "line_breaks" 
+                      ? "bg-white text-indigo-750 shadow-sm font-extrabold" 
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  <Zap className="w-3.5 h-3.5 text-amber-500" />
+                  Hat Kıran Paslar (Attempted vs Completed)
+                </button>
+                <button 
+                  onClick={() => setActiveReportChartTab("crosses")}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    activeReportChartTab === "crosses" 
+                      ? "bg-white text-indigo-750 shadow-sm font-extrabold" 
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  <Shuffle className="w-3.5 h-3.5 text-rose-500" />
+                  Ortalar (Attempted vs Completed)
+                </button>
+              </div>
+            </div>
+
+            {/* Render Selected Chart */}
+            <div className="h-[320px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart 
+                  data={teamComparisonStats}
+                  margin={{ top: 20, right: 30, left: 10, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                  <XAxis 
+                    dataKey="team" 
+                    stroke="#64748b" 
+                    fontSize={11} 
+                    fontWeight={600}
+                    tickLine={false} 
+                  />
+                  <YAxis stroke="#64748b" fontSize={11} tickLine={false} />
+                  <RechartsTooltip 
+                    contentStyle={{ backgroundColor: "#0f172a", borderRadius: "12px", border: "none", color: "#fff", fontSize: "12px" }} 
+                    itemStyle={{ color: "#cbd5e1" }}
+                    labelStyle={{ fontWeight: "bold", color: "#38bdf8" }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: "11px", fontWeight: "bold", paddingTop: "10px" }} />
+                  
+                  {activeReportChartTab === "hsr_sprints" && [
+                    <Bar key="avgHsr" dataKey="avgHsr" name="Ortalama HSR (m)" fill="#6366f1" radius={[4, 4, 0, 0]} />,
+                    <Bar key="avgSprints" dataKey="avgSprints" name="Ortalama Sprint (x10)" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                  ]}
+
+                  {activeReportChartTab === "line_breaks" && [
+                    <Bar key="lineBreaksAttempted" dataKey="lineBreaksAttempted" name="Denetlenen Hat Kıran Pas" fill="#94a3b8" radius={[4, 4, 0, 0]} />,
+                    <Bar key="lineBreaksCompleted" dataKey="lineBreaksCompleted" name="Başarılı Hat Kıran Pas" fill="#10b981" radius={[4, 4, 0, 0]} />
+                  ]}
+
+                  {activeReportChartTab === "crosses" && [
+                    <Bar key="crossesAttempted" dataKey="crossesAttempted" name="Toplam Orta Girişimi" fill="#f43f5e" radius={[4, 4, 0, 0]} />,
+                    <Bar key="crossesCompleted" dataKey="crossesCompleted" name="İsabetli Orta" fill="#06b6d4" radius={[4, 4, 0, 0]} />
+                  ]}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Informational narrative box below chart */}
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-xs text-slate-650 leading-relaxed space-y-2">
+              <strong className="text-slate-800 font-sans block uppercase text-[10px] tracking-wider font-extrabold text-indigo-900">
+                💡 Grafik Analiz Çıkarımları ve Taktiksel Yorum
+              </strong>
+              {activeReportChartTab === "hsr_sprints" && (
+                <p>
+                  Yüksek Hızda Koşular (HSR) ve Sprint hacimleri, modern futbolun counter-press reaksiyon hızını belirleyen ana parametrelerdir. 
+                  Bu grafikte takımların mevkisel yük dağılımlarının ortalamaları gösterilmektedir. 
+                  Yüksek HSR değerine sahip takımlar üçüncü bölgede daha agresif bir baskı kurarken, sprint sayılarındaki üstünlük geçiş oyunlarında dikey hücum tehdidinin yüksek olduğunu gösterir.
+                </p>
+              )}
+              {activeReportChartTab === "line_breaks" && (
+                <p>
+                  Hat kıran paslar (Line Breaks), rakibin defansif bloklarını delerek hücum yaratıcılığını simgeleyen en kritik pas metriğidir. 
+                  Teşebbüs edilen pas sayısı takımların dikey oyun arzusunu gösterirken, tamamlanan (başarılı) hat kıran pas miktarı ise teknik kaliteyi ve hatlar arasındaki boşlukları değerlendirme becerisini belgeler.
+                </p>
+              )}
+              {activeReportChartTab === "crosses" && (
+                <p>
+                  Açık oyun ortaları (Crosses) ceza sahasına yerleşme ve kanat organizasyonlarının verimini gösterir. 
+                  İsabet oranı yüksek takımlar, kanat beklerinin geniş koridorları verimli kullandığını ve hücum oyuncularının ceza sahası içerisindeki doğru konumlandığını doğrular.
+                </p>
+              )}
+            </div>
+          </div>
+
         </div>
       )}
 
@@ -2424,18 +3762,18 @@ export default function TournamentAnalyticsView({
 
                     return (
                       <tr key={idx} className="hover:bg-indigo-50/20 transition-all">
-                        <td className="py-3.5 font-bold text-slate-905 flex items-center gap-2">
-                          <span className="w-5 text-slate-400 font-mono font-medium text-[10px]">{idx + 1}.</span>
+                        <td className="py-3.5 font-bold text-slate-905 flex items-center gap-2.5">
+                          <span className="w-5 text-slate-400 font-mono font-bold text-xs">{idx + 1}.</span>
                           <span 
                             onClick={() => {
                               setSelectedTeam(t.team);
                               setSubTab("team");
                             }}
-                            className="cursor-pointer hover:text-indigo-600 hover:underline inline-flex items-center gap-1.5 group"
+                            className="cursor-pointer hover:text-indigo-600 hover:underline inline-flex items-center gap-2 group"
                             title={`${t.team} Detaylarını İncele`}
                           >
-                            <TeamFlag team={t.team} getTeamFlag={getTeamFlag} className="w-5.5 h-3.5 object-cover rounded-3xs shrink-0 border border-slate-200" fallbackTextSize="text-lg" />
-                            <span>{t.team}</span>
+                            <TeamFlag team={t.team} getTeamFlag={getTeamFlag} className="w-8 h-5 object-cover rounded-sm shrink-0 border border-slate-200 shadow-xs" fallbackTextSize="text-lg" />
+                            <span className="font-extrabold text-sm">{t.team}</span>
                             <span className="text-[9px] font-mono bg-indigo-50 text-indigo-600 py-0.5 px-1.5 rounded-sm shrink-0 opacity-0 group-hover:opacity-100 transition">
                               Seviye 3 ➡️
                             </span>
@@ -2766,10 +4104,10 @@ export default function TournamentAnalyticsView({
             <span className="p-1.5 bg-orange-50 text-orange-600 rounded-lg">
               <Award className="w-4 h-4" />
             </span>
-            Tournament Player Leaderboards (Tournament-Wide)
+            {translate("Turnuva Oyuncu Lider Tabloları", "Tournament Player Leaderboards")}
           </h3>
-          <p className="text-[11px] text-slate-400 mt-0.5">
-            Leaderboard tallies calculated dynamically by traversing statistics across all uploaded match files.
+          <p className="text-[11px] text-slate-400 mt-0.5 font-sans">
+            {translate("Tüm yüklenen maç dosyalarındaki istatistikler taranarak dinamik olarak hesaplanan lider tabloları.", "Leaderboard tallies calculated dynamically by traversing statistics across all uploaded match files.")}
           </p>
         </div>
 
@@ -2778,44 +4116,44 @@ export default function TournamentAnalyticsView({
           <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-4 flex flex-col gap-3">
             <h4 className="text-xs font-sans font-bold text-slate-800 flex items-center gap-1.5 uppercase tracking-wide">
               <CircleDot className="w-4 h-4 text-orange-500 shrink-0" />
-              Tournament Top Scorers
+              {translate("Turnuva Gol Krallığı", "Tournament Top Scorers")}
             </h4>
             <div className="flex flex-col gap-2 mt-1">
               {topScorers.slice(0, 5).map((p, idx) => {
                 const pPhoto = findPlayerPhoto(p.name, squadPhotos);
                 const pFlag = getTeamFlag ? getTeamFlag(p.team) : "";
                 return (
-                  <div key={idx} className="flex justify-between items-center text-xs bg-white p-2.5 rounded-xl border border-slate-50 shadow-2xs">
-                    <div className="min-w-0 flex items-center gap-2">
-                      <span className="font-mono text-[10px] text-slate-400 font-bold">{idx + 1}.</span>
+                  <div key={idx} className="flex justify-between items-center text-xs bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs">
+                    <div className="min-w-0 flex items-center gap-3">
+                      <span className="font-mono text-xs text-slate-400 font-bold">{idx + 1}.</span>
                       {pPhoto ? (
                         <img
                           src={pPhoto.base64}
                           alt=""
-                          className="w-7 h-7 rounded-full object-cover shrink-0 border border-slate-205 shadow-2xs"
+                          className="w-11 h-11 rounded-full object-cover shrink-0 border-2 border-indigo-100 shadow-sm"
                           referrerPolicy="no-referrer"
                         />
                       ) : (
-                        <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 border border-slate-200 flex items-center justify-center text-[10px] uppercase font-bold shrink-0 font-sans">
+                        <div className="w-11 h-11 rounded-full bg-slate-100 text-slate-500 border border-slate-200 flex items-center justify-center text-xs uppercase font-bold shrink-0 font-sans">
                           {p.name.substring(0, 2)}
                         </div>
                       )}
                       <div className="truncate">
-                        <strong className="text-slate-850 block truncate font-bold font-sans text-xs">{p.name}</strong>
-                        <span className="text-[9.5px] text-slate-400 truncate flex items-center gap-1 font-sans">
-                          <TeamFlag team={p.team} getTeamFlag={getTeamFlag} className="w-4 h-2.5 object-cover rounded-3xs shrink-0 border border-slate-200" fallbackTextSize="text-[10px]" />
+                        <strong className="text-slate-800 block truncate font-extrabold font-sans text-xs">{p.name}</strong>
+                        <span className="text-[10px] text-slate-400 truncate flex items-center gap-1 mt-0.5 font-sans">
+                          <TeamFlag team={p.team} getTeamFlag={getTeamFlag} className="w-5.5 h-3.5 object-cover rounded-xs shrink-0 border border-slate-200" fallbackTextSize="text-xs" />
                           <span>{p.team}</span>
                         </span>
                       </div>
                     </div>
-                    <strong className="font-mono bg-orange-50 text-orange-700 py-0.5 px-2 rounded-md font-bold text-xs shrink-0">
-                      {p.goals} goals
+                    <strong className="font-mono bg-orange-50 text-orange-700 py-1 px-2 rounded-md font-bold text-xs shrink-0">
+                      {p.goals} {translate("gol", "goals")}
                     </strong>
                   </div>
                 );
               })}
               {topScorers.length === 0 && (
-                <span className="text-center py-4 text-[11px] text-slate-400">No goals scored yet.</span>
+                <span className="text-center py-4 text-[11px] text-slate-400">{translate("Henüz gol atılmadı.", "No goals scored yet.")}</span>
               )}
             </div>
           </div>
@@ -2824,44 +4162,44 @@ export default function TournamentAnalyticsView({
           <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-4 flex flex-col gap-3">
             <h4 className="text-xs font-sans font-bold text-slate-800 flex items-center gap-1.5 uppercase tracking-wide">
               <TrendingUp className="w-4 h-4 text-indigo-600 shrink-0" />
-              Completed Line Breaks
+              {translate("Tamamlanan Hat Kıran Paslar", "Completed Line Breaks")}
             </h4>
             <div className="flex flex-col gap-2 mt-1">
               {topLineBreakers.slice(0, 5).map((p, idx) => {
                 const pPhoto = findPlayerPhoto(p.name, squadPhotos);
                 const pFlag = getTeamFlag ? getTeamFlag(p.team) : "";
                 return (
-                  <div key={idx} className="flex justify-between items-center text-xs bg-white p-2.5 rounded-xl border border-slate-50 shadow-2xs">
-                    <div className="min-w-0 flex items-center gap-2">
-                      <span className="font-mono text-[10px] text-slate-400 font-bold">{idx + 1}.</span>
+                  <div key={idx} className="flex justify-between items-center text-xs bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs">
+                    <div className="min-w-0 flex items-center gap-3">
+                      <span className="font-mono text-xs text-slate-400 font-bold">{idx + 1}.</span>
                       {pPhoto ? (
                         <img
                           src={pPhoto.base64}
                           alt=""
-                          className="w-7 h-7 rounded-full object-cover shrink-0 border border-slate-205 shadow-2xs"
+                          className="w-11 h-11 rounded-full object-cover shrink-0 border-2 border-indigo-100 shadow-sm"
                           referrerPolicy="no-referrer"
                         />
                       ) : (
-                        <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 border border-slate-200 flex items-center justify-center text-[10px] uppercase font-bold shrink-0 font-sans">
+                        <div className="w-11 h-11 rounded-full bg-slate-100 text-slate-500 border border-slate-200 flex items-center justify-center text-xs uppercase font-bold shrink-0 font-sans">
                           {p.name.substring(0, 2)}
                         </div>
                       )}
                       <div className="truncate">
-                        <strong className="text-slate-850 block truncate font-bold font-sans text-xs">{p.name}</strong>
-                        <span className="text-[9.5px] text-slate-400 truncate flex items-center gap-1 font-sans">
-                          <TeamFlag team={p.team} getTeamFlag={getTeamFlag} className="w-4 h-2.5 object-cover rounded-3xs shrink-0 border border-slate-200" fallbackTextSize="text-[10px]" />
+                        <strong className="text-slate-800 block truncate font-extrabold font-sans text-xs">{p.name}</strong>
+                        <span className="text-[10px] text-slate-400 truncate flex items-center gap-1 mt-0.5 font-sans">
+                          <TeamFlag team={p.team} getTeamFlag={getTeamFlag} className="w-5.5 h-3.5 object-cover rounded-xs shrink-0 border border-slate-200" fallbackTextSize="text-xs" />
                           <span>{p.team}</span>
                         </span>
                       </div>
                     </div>
-                    <strong className="font-mono bg-indigo-50 text-indigo-700 py-0.5 px-2 rounded-md font-bold text-xs shrink-0">
-                      {p.lineBreaksCompleted} bounds
+                    <strong className="font-mono bg-indigo-50 text-indigo-700 py-1 px-2 rounded-md font-bold text-xs shrink-0">
+                      {p.lineBreaksCompleted} {translate("pas", "breaks")}
                     </strong>
                   </div>
                 );
               })}
               {topLineBreakers.length === 0 && (
-                <span className="text-center py-4 text-[11px] text-slate-400">No line breaks recorded.</span>
+                <span className="text-center py-4 text-[11px] text-slate-400">{translate("Hat kıran pas kaydedilmedi.", "No line breaks recorded.")}</span>
               )}
             </div>
           </div>
@@ -2870,44 +4208,44 @@ export default function TournamentAnalyticsView({
           <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-4 flex flex-col gap-3">
             <h4 className="text-xs font-sans font-bold text-slate-800 flex items-center gap-1.5 uppercase tracking-wide">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              Ball Regains Leaders
+              {translate("Top Kazanma Liderleri", "Ball Regains Leaders")}
             </h4>
             <div className="flex flex-col gap-2 mt-1">
               {topRegainers.slice(0, 5).map((p, idx) => {
                 const pPhoto = findPlayerPhoto(p.name, squadPhotos);
                 const pFlag = getTeamFlag ? getTeamFlag(p.team) : "";
                 return (
-                  <div key={idx} className="flex justify-between items-center text-xs bg-white p-2.5 rounded-xl border border-slate-50 shadow-2xs">
-                    <div className="min-w-0 flex items-center gap-2">
-                      <span className="font-mono text-[10px] text-slate-400 font-bold">{idx + 1}.</span>
+                  <div key={idx} className="flex justify-between items-center text-xs bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs">
+                    <div className="min-w-0 flex items-center gap-3">
+                      <span className="font-mono text-xs text-slate-400 font-bold">{idx + 1}.</span>
                       {pPhoto ? (
                         <img
                           src={pPhoto.base64}
                           alt=""
-                          className="w-7 h-7 rounded-full object-cover shrink-0 border border-slate-205 shadow-2xs"
+                          className="w-11 h-11 rounded-full object-cover shrink-0 border-2 border-indigo-100 shadow-sm"
                           referrerPolicy="no-referrer"
                         />
                       ) : (
-                        <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 border border-slate-200 flex items-center justify-center text-[10px] uppercase font-bold shrink-0 font-sans">
+                        <div className="w-11 h-11 rounded-full bg-slate-100 text-slate-500 border border-slate-200 flex items-center justify-center text-xs uppercase font-bold shrink-0 font-sans">
                           {p.name.substring(0, 2)}
                         </div>
                       )}
                       <div className="truncate">
-                        <strong className="text-slate-850 block truncate font-bold font-sans text-xs">{p.name}</strong>
-                        <span className="text-[9.5px] text-slate-400 truncate flex items-center gap-1 font-sans">
-                          <TeamFlag team={p.team} getTeamFlag={getTeamFlag} className="w-4 h-2.5 object-cover rounded-3xs shrink-0 border border-slate-200" fallbackTextSize="text-[10px]" />
+                        <strong className="text-slate-800 block truncate font-extrabold font-sans text-xs">{p.name}</strong>
+                        <span className="text-[10px] text-slate-400 truncate flex items-center gap-1 mt-0.5 font-sans">
+                          <TeamFlag team={p.team} getTeamFlag={getTeamFlag} className="w-5.5 h-3.5 object-cover rounded-xs shrink-0 border border-slate-200" fallbackTextSize="text-xs" />
                           <span>{p.team}</span>
                         </span>
                       </div>
                     </div>
-                    <strong className="font-mono bg-emerald-50 text-emerald-700 py-0.5 px-2 rounded-md font-bold text-xs shrink-0">
-                      {p.regains} regains
+                    <strong className="font-mono bg-emerald-50 text-emerald-700 py-1 px-2 rounded-md font-bold text-xs shrink-0">
+                      {p.regains} {translate("kazanma", "regains")}
                     </strong>
                   </div>
                 );
               })}
               {topRegainers.length === 0 && (
-                <span className="text-center py-4 text-[11px] text-slate-400">No regains recorded.</span>
+                <span className="text-center py-4 text-[11px] text-slate-400">{translate("Top kazanma kaydedilmedi.", "No regains recorded.")}</span>
               )}
             </div>
           </div>
@@ -2916,44 +4254,44 @@ export default function TournamentAnalyticsView({
           <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-4 flex flex-col gap-3">
             <h4 className="text-xs font-sans font-bold text-slate-800 flex items-center gap-1.5 uppercase tracking-wide">
               <Activity className="w-4 h-4 text-violet-600 shrink-0" />
-              Pass Completion Leaders
+              {translate("Pas İsabet Liderleri", "Pass Completion Leaders")}
             </h4>
             <div className="flex flex-col gap-2 mt-1">
               {topPassOrchestrators.slice(0, 5).map((p, idx) => {
                 const pPhoto = findPlayerPhoto(p.name, squadPhotos);
                 const pFlag = getTeamFlag ? getTeamFlag(p.team) : "";
                 return (
-                  <div key={idx} className="flex justify-between items-center text-xs bg-white p-2.5 rounded-xl border border-slate-50 shadow-2xs">
-                    <div className="min-w-0 flex items-center gap-2">
-                      <span className="font-mono text-[10px] text-slate-400 font-bold">{idx + 1}.</span>
+                  <div key={idx} className="flex justify-between items-center text-xs bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs">
+                    <div className="min-w-0 flex items-center gap-3">
+                      <span className="font-mono text-xs text-slate-400 font-bold">{idx + 1}.</span>
                       {pPhoto ? (
                         <img
                           src={pPhoto.base64}
                           alt=""
-                          className="w-7 h-7 rounded-full object-cover shrink-0 border border-slate-205 shadow-2xs"
+                          className="w-11 h-11 rounded-full object-cover shrink-0 border-2 border-indigo-100 shadow-sm"
                           referrerPolicy="no-referrer"
                         />
                       ) : (
-                        <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 border border-slate-200 flex items-center justify-center text-[10px] uppercase font-bold shrink-0 font-sans">
+                        <div className="w-11 h-11 rounded-full bg-slate-100 text-slate-500 border border-slate-200 flex items-center justify-center text-xs uppercase font-bold shrink-0 font-sans">
                           {p.name.substring(0, 2)}
                         </div>
                       )}
                       <div className="truncate">
-                        <strong className="text-slate-850 block truncate font-bold font-sans text-xs">{p.name}</strong>
-                        <span className="text-[9.5px] text-slate-400 truncate flex items-center gap-1 font-sans">
-                          <TeamFlag team={p.team} getTeamFlag={getTeamFlag} className="w-4 h-2.5 object-cover rounded-3xs shrink-0 border border-slate-200" fallbackTextSize="text-[10px]" />
+                        <strong className="text-slate-800 block truncate font-extrabold font-sans text-xs">{p.name}</strong>
+                        <span className="text-[10px] text-slate-400 truncate flex items-center gap-1 mt-0.5 font-sans">
+                          <TeamFlag team={p.team} getTeamFlag={getTeamFlag} className="w-5.5 h-3.5 object-cover rounded-xs shrink-0 border border-slate-200" fallbackTextSize="text-xs" />
                           <span>{p.team}</span>
                         </span>
                       </div>
                     </div>
-                    <strong className="font-mono bg-violet-50 text-violet-700 py-0.5 px-2 rounded-md font-bold text-xs shrink-0">
+                    <strong className="font-mono bg-violet-50 text-violet-700 py-1 px-2 rounded-md font-bold text-xs shrink-0">
                       {p.passesCompleted}/{p.passesAttempted}
                     </strong>
                   </div>
                 );
               })}
               {topPassOrchestrators.length === 0 && (
-                <span className="text-center py-4 text-[11px] text-slate-400">No passes recorded.</span>
+                <span className="text-center py-4 text-[11px] text-slate-400">{translate("Pas kaydedilmedi.", "No passes recorded.")}</span>
               )}
             </div>
           </div>
@@ -2964,37 +4302,67 @@ export default function TournamentAnalyticsView({
 
   {subTab === "tournament" && (
     <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+      {/* NEW PROMINENT SHORTCUT BANNER FOR DESCRIPTIVE ANALYTICS */}
+      <div className="xl:col-span-12 bg-gradient-to-r from-amber-500/10 via-indigo-500/10 to-emerald-500/10 border border-indigo-100 dark:border-indigo-950 rounded-3xl p-5 shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-amber-500/15 text-amber-600 dark:text-amber-400 rounded-2xl border border-amber-500/20">
+            <BarChart3 className="w-6 h-6 animate-pulse" />
+          </div>
+          <div>
+            <h4 className="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
+              {translate("✨ Yeni Bölüm: Betimsel Taktik & xG Analiz Portalı", "✨ New Section: Descriptive Tactics & xG Analysis Portal")}
+              <span className="bg-indigo-600 text-white text-[9px] font-mono font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Level 4</span>
+            </h4>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
+              {translate(
+                "Oynanan tüm formasyonların kazanma, berabere kalma ve kaybetme süreçlerindeki stilleri, takım boyları ve fiziksel/sürat dökümleriyle birlikte yüksek xG'den düşük xG'ye maç performans kataloğunu inceleyin.",
+                "Explore how formations perform across wins, draws, and losses, analyzing their style DNA, team block length, physical speed variables, and the custom xG ledger ordered high-to-low."
+              )}
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => {
+            setActiveCategory("tactics");
+            setSubTab("descriptiveAnalytics");
+          }}
+          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-2xl flex items-center gap-2 shadow-xs transition-all shrink-0 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+        >
+          <span>{translate("Hemen Analize Git ➔", "Go to Analysis Now ➔")}</span>
+        </button>
+      </div>
+
       {/* 12-Column Spanning Top Section for Tournament Anomalies and Tournament DNA Innovation Index */}
-      <div className="xl:col-span-12 flex flex-col lg:flex-row gap-6">
+      <div className="xl:col-span-12 grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         {/* Tournament Anomalies Overlay Card */}
-        <div className="flex-1 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 border border-indigo-900 rounded-3xl p-6 shadow-2xl text-white relative overflow-hidden">
+        <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 border border-indigo-900 rounded-3xl p-6 shadow-2xl text-white relative overflow-hidden min-h-[580px] flex flex-col justify-between">
           <div className="absolute right-0 top-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none -mr-16 -mt-16"></div>
           <div className="absolute left-1/3 bottom-0 w-64 h-64 bg-amber-500/5 rounded-full blur-3xl pointer-events-none"></div>
           
-          <div className="relative z-10 space-y-5">
-            <div className="flex items-center justify-between border-b border-indigo-900/60 pb-3.5">
+          <div className="relative z-10 space-y-4 flex flex-col justify-between h-full">
+            <div className="flex items-center justify-between border-b border-indigo-900/60 pb-3">
               <div className="flex items-center gap-2.5">
-                <div className="p-1.5 bg-indigo-500/20 text-indigo-300 rounded-xl border border-indigo-500/30">
-                  <Activity className="w-5 h-5 text-indigo-400" />
+                <div className="p-2 bg-indigo-500/20 text-indigo-300 rounded-xl border border-indigo-500/30">
+                  <Activity className="w-6 h-6 text-indigo-400" />
                 </div>
                 <div>
                   <h4 className="text-sm font-black uppercase tracking-wider text-slate-100 flex items-center gap-2">
-                    📊 Turnuva Anomalileri (Tournament Anomalies Visualizer)
+                    {translate("📊 Turnuva Anomalileri", "📊 Tournament Anomalies")}
                   </h4>
-                  <p className="text-[10px] text-slate-400 font-sans mt-0.5">
-                    Fiziksel yoğunluk (Z-GPIS) ile yorgunluk direncinin (Z-Fatigue) karşılaştırmalı radar sapma analizi
+                  <p className="text-[10px] text-slate-400 font-sans mt-0.5 font-sans">
+                    {translate("Fiziksel yoğunluk (Z-GPIS) ile yorgunluk direncinin (Z-Fatigue) karşılaştırmalı radar sapma analizi", "Comparative radar deviation analysis of physical intensity (Z-GPIS) and fatigue resistance (Z-Fatigue)")}
                   </p>
                 </div>
               </div>
-              <span className="px-2.5 py-1 bg-amber-500/20 border border-amber-400/30 rounded-full text-amber-300 text-[9px] font-mono font-bold uppercase tracking-wider animate-pulse">
-                Canlı Anomali Radarı
+              <span className="px-2.5 py-1 bg-amber-500/20 border border-amber-400/30 rounded-full text-amber-300 text-[10px] font-mono font-bold uppercase tracking-wider animate-pulse">
+                {translate("Canlı Anomali Radarı", "Live Anomaly Radar")}
               </span>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
-              {/* List of anomalies (7 cols) */}
-              <div className="lg:col-span-7 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center flex-1 py-1">
+              {/* List of anomalies (7 cols) - scrollable to prevent overflow */}
+              <div className="md:col-span-7 space-y-2.5 max-h-[350px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-indigo-500/30 scrollbar-track-transparent">
                 {tournamentAnomalies.map((anom) => {
                   const isActive = anomalyHighlight === anom.team || (!anomalyHighlight && anom.isEliteMotorAnomaly);
                   
@@ -3002,7 +4370,7 @@ export default function TournamentAnalyticsView({
                     <div 
                       key={anom.team} 
                       onClick={() => setAnomalyHighlight(anom.team)}
-                      className={`cursor-pointer p-4 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-all border ${
+                      className={`cursor-pointer p-3.5 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 transition-all border ${
                         isActive 
                           ? "bg-gradient-to-r from-slate-900/90 to-indigo-950/70 border-amber-500/60 shadow-md shadow-amber-500/5" 
                           : "bg-slate-950/30 border-indigo-950 hover:bg-slate-900/40 hover:border-indigo-900/50"
@@ -3010,43 +4378,44 @@ export default function TournamentAnalyticsView({
                     >
                       <div className="space-y-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-black text-slate-100 flex items-center gap-1.5">
-                            <TeamFlag team={anom.team} getTeamFlag={getTeamFlag} className="w-5 h-3.5 object-cover rounded-xs" fallbackTextSize="text-sm" /> {anom.team}
+                          <span className="text-base font-black text-slate-100 flex items-center gap-2">
+                            <TeamFlag team={anom.team} getTeamFlag={getTeamFlag} className="w-8 h-5 object-cover rounded-sm shrink-0 shadow-md border border-slate-700/50" fallbackTextSize="text-xl" />
+                            <span>{anom.team}</span>
                           </span>
                           
                           {anom.isEliteMotorAnomaly ? (
-                            <span className="text-[8.5px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full animate-pulse shadow-xs shadow-amber-500/20">
-                              ⚡ ELITE MOTOR ANOMALY
+                            <span className="text-[9px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full animate-pulse shadow-xs shadow-amber-500/20">
+                              ⚡ {translate("ELİT MOTOR ANOMALİSİ", "ELITE MOTOR ANOMALY")}
                             </span>
                           ) : (
-                            <span className={`text-[8.5px] font-mono font-bold px-1.5 py-0.5 rounded-full ${
+                            <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-full ${
                               anom.zScore > 0.4 
                                 ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/25" 
                                 : "bg-rose-500/15 text-rose-300 border border-rose-500/25"
                             }`}>
-                              Z-Skor: {anom.zScore > 0 ? `+${anom.zScore}` : anom.zScore}
+                              {translate("Z-Skor", "Z-Score")}: {anom.zScore > 0 ? `+${anom.zScore}` : anom.zScore}
                             </span>
                           )}
                         </div>
-                        <p className="text-[11px] text-slate-350 leading-relaxed text-justify max-w-md">
+                        <p className="text-xs text-slate-300 leading-relaxed text-justify max-w-md">
                           {anom.team.toLowerCase().includes("mexico") || anom.team.toLowerCase().includes("meksika")
-                            ? "Meksika, yüksek counter-press yoğunluğuna (%8) rağmen son derece düşük yorgunluk indeksine sahip bir pozitif anomali olarak öne çıkıyor."
+                            ? translate("Meksika, yüksek counter-press yoğunluğuna (%8) rağmen son derece düşük yorgunluk indeksine sahip bir pozitif anomali olarak öne çıkıyor.", "Mexico stands out as a positive anomaly with high counter-press intensity (8%) but an extremely low fatigue index.")
                             : anom.team.toLowerCase().includes("south africa") || anom.team.toLowerCase().includes("güney afrika")
-                              ? "Güney Afrika, Iqraam Rayners'ın 410.4m Zone 5 sprint mesafesiyle dikey oyunda muazzam bir efor sarf ediyor, ancak taktiksel çöküş riski barındırıyor."
-                              : anom.description
+                              ? translate("Güney Afrika, Iqraam Rayners'ın 410.4m Zone 5 sprint mesafesiyle dikey oyunda muazzam bir efor sarf ediyor, ancak taktiksel çöküş riski barındırıyor.", "South Africa exerts immense effort in vertical play with Iqraam Rayners covering 410.4m in Zone 5 sprints, but carries tactical collapse risks.")
+                              : translate(anom.description, anom.description)
                           }
                         </p>
                       </div>
 
                       <div className="shrink-0 flex items-center gap-2 bg-slate-900/90 p-2.5 rounded-xl border border-indigo-950">
                         <div className="text-right">
-                          <span className="text-[8.5px] text-slate-400 font-mono font-bold uppercase block">HSR (m)</span>
-                          <strong className="text-[10.5px] font-mono font-bold text-indigo-300">{anom.avgHsr * 10}m</strong>
+                          <span className="text-[8.5px] text-slate-400 font-mono font-bold uppercase block">HSR</span>
+                          <strong className="text-xs font-mono font-black text-indigo-300">{(anom.avgHsr * 10).toLocaleString()}m</strong>
                         </div>
                         <div className="h-6 w-[1px] bg-indigo-900/40 mx-1"></div>
                         <div>
                           <span className="text-[8.5px] text-slate-400 font-mono font-bold uppercase block">Pres%</span>
-                          <strong className="text-[10.5px] font-mono font-bold text-amber-400">%{anom.counterPressPct}</strong>
+                          <strong className="text-xs font-mono font-black text-amber-400">%{anom.counterPressPct}</strong>
                         </div>
                       </div>
                     </div>
@@ -3055,7 +4424,7 @@ export default function TournamentAnalyticsView({
               </div>
 
               {/* Gold Radar Chart Area (5 cols) */}
-              <div className="lg:col-span-5 bg-slate-950/60 border border-indigo-900/60 rounded-2xl p-4 flex flex-col items-center justify-center min-h-[280px] relative">
+              <div className="md:col-span-5 bg-slate-950/60 border border-indigo-900/60 rounded-2xl p-4 flex flex-col items-center justify-center min-h-[280px] relative">
                 {(() => {
                   const highlightedTeam = anomalyHighlight 
                     ? tournamentAnomalies.find(a => a.team === anomalyHighlight) 
@@ -3065,9 +4434,15 @@ export default function TournamentAnalyticsView({
 
                   // Define radar geometry
                   const center = 100;
-                  const radius = 65;
+                  const radius = 60;
                   const angles = [0, 72, 144, 216, 288];
-                  const labels = ["GPIS (Yoğunluk)", "Direnç", "Sürat HSR", "Sprint", "Efor"];
+                  const labels = [
+                    translate("GPIS (Yoğunluk)", "GPIS (Intensity)"), 
+                    translate("Direnç", "Resistance"), 
+                    translate("Sürat HSR", "Speed HSR"), 
+                    translate("Sprint", "Sprint"), 
+                    translate("Efor", "Effort")
+                  ];
                   
                   // Values projected to 0-1 range
                   const valGPIS = Math.min(1.0, highlightedTeam.counterPressPct / 10);
@@ -3093,13 +4468,16 @@ export default function TournamentAnalyticsView({
                   return (
                     <div className="w-full flex flex-col items-center gap-3">
                       <div className="text-center">
-                        <span className="text-[9px] text-slate-400 font-mono font-bold uppercase tracking-wider">Altın Sapma Profil Analizi</span>
+                        <span className="text-[9px] text-slate-400 font-mono font-bold uppercase tracking-wider">
+                          {translate("Altın Sapma Profil Analizi", "Golden Deviation Profile")}
+                        </span>
                         <h5 className="text-xs font-black text-amber-400 uppercase tracking-wide flex items-center gap-1.5 justify-center mt-0.5">
-                          <TeamFlag team={highlightedTeam.team} getTeamFlag={getTeamFlag} className="w-5 h-3.5 object-cover rounded-xs" fallbackTextSize="text-xs" /> {highlightedTeam.team}
+                          <TeamFlag team={highlightedTeam.team} getTeamFlag={getTeamFlag} className="w-6 h-4 object-cover rounded-xs" fallbackTextSize="text-sm" /> 
+                          <span>{highlightedTeam.team}</span>
                         </h5>
                       </div>
 
-                      <svg width="200" height="200" className="overflow-visible select-none drop-shadow-[0_0_12px_rgba(245,158,11,0.25)]">
+                      <svg width="190" height="190" className="overflow-visible select-none drop-shadow-[0_0_12px_rgba(245,158,11,0.25)]">
                         {/* Grid lines (circular outer / concentric rings) */}
                         {[0.25, 0.5, 0.75, 1.0].map((scale, sIdx) => (
                           <circle 
@@ -3135,7 +4513,7 @@ export default function TournamentAnalyticsView({
                         {/* Labels */}
                         {angles.map((angle, i) => {
                           const rad = (angle - 90) * Math.PI / 180;
-                          const labelOffset = radius + 15;
+                          const labelOffset = radius + 14;
                           const labelX = center + labelOffset * Math.cos(rad);
                           const labelY = center + labelOffset * Math.sin(rad);
                           let textAnchor = "middle";
@@ -3158,8 +4536,13 @@ export default function TournamentAnalyticsView({
                           );
                         })}
 
-                        {/* Filled Area - Gold Variance highlight */}
-                        <polygon 
+                         {/* Filled Area - Gold Variance highlight */}
+                        <motion.polygon 
+                          key={highlightedTeam.team}
+                          initial={{ scale: 0.1, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          transition={{ type: "spring", stiffness: 80, damping: 15 }}
+                          style={{ transformOrigin: "100px 100px" }}
                           points={polyString} 
                           fill="url(#goldGradient)" 
                           stroke="#f59e0b" 
@@ -3169,8 +4552,11 @@ export default function TournamentAnalyticsView({
 
                         {/* Markers */}
                         {points.map((p, i) => (
-                          <circle 
-                            key={i} 
+                          <motion.circle 
+                            key={`${highlightedTeam.team}-${i}`}
+                            initial={{ scale: 0, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            transition={{ type: "spring", stiffness: 100, damping: 12, delay: i * 0.05 }}
                             cx={p.x} 
                             cy={p.y} 
                             r="3.5" 
@@ -3191,13 +4577,13 @@ export default function TournamentAnalyticsView({
 
                       <div className="text-[10px] text-slate-400 text-center font-sans max-w-[220px]">
                         {highlightedTeam.isEliteMotorAnomaly ? (
-                          <span className="text-amber-300 font-bold block">🔥 Sınırsız Efor / Düşük Aşınma Profili</span>
+                          <span className="text-amber-300 font-bold block font-sans">🔥 {translate("Sınırsız Efor / Düşük Aşınma Profili", "Unlimited Effort / Low wear Profile")}</span>
                         ) : highlightedTeam.zScore > 0 ? (
-                          <span className="text-emerald-300 font-bold block">📈 Standart Üstü Fiziksel Kapasite</span>
+                          <span className="text-emerald-300 font-bold block font-sans">📈 {translate("Standart Üstü Fiziksel Kapasite", "Above Standard Physical Capacity")}</span>
                         ) : (
-                          <span className="text-rose-300 font-bold block">⚠️ Aşırı Taktiksel Yıpranma Riski</span>
+                          <span className="text-rose-300 font-bold block font-sans">⚠️ {translate("Aşırı Taktiksel Yıpranma Riski", "Extreme Tactical Wear Risk")}</span>
                         )}
-                        <span className="text-[9px] block text-slate-500 mt-1">
+                        <span className="text-[9px] block text-slate-500 mt-1 font-mono">
                           Z-GPIS: {highlightedTeam.zGpis > 0 ? `+${highlightedTeam.zGpis}` : highlightedTeam.zGpis} • Z-Fatigue: {highlightedTeam.zFatigue > 0 ? `+${highlightedTeam.zFatigue}` : highlightedTeam.zFatigue}
                         </span>
                       </div>
@@ -3206,32 +4592,94 @@ export default function TournamentAnalyticsView({
                 })()}
               </div>
             </div>
+
+            {/* Matematiksel Metodoloji ve Formül Açıklamaları (Mathematical Explanations Panel) */}
+            <div className="border-t border-indigo-900/40 pt-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <button 
+                  onClick={() => setExplainAnomalies(!explainAnomalies)}
+                  className="flex items-center gap-2 text-xs font-bold text-indigo-300 hover:text-white transition-colors cursor-pointer select-none font-sans"
+                >
+                  <span className="p-1 bg-indigo-500/10 rounded-lg text-indigo-400">🧮</span>
+                  <span>{explainAnomalies ? translate("Metodolojiyi Gizle", "Hide Methodology") : translate("Metodolojiyi ve Formülleri Göster", "Show Methodology & Formulas")}</span>
+                </button>
+                <span className="text-[9px] text-slate-500 font-mono">Model: Gaussian Normalization & Z-Score Matrix</span>
+              </div>
+
+              {explainAnomalies && (
+                <motion.div 
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="bg-slate-950/50 border border-indigo-950 rounded-2xl p-3.5 text-xs font-sans space-y-2.5 text-slate-300 overflow-hidden"
+                >
+                  <p className="text-[10px] text-slate-400 leading-relaxed font-sans">
+                    {translate(
+                      "Turnuva anomalilerini tespit etmek için fiziksel efor, pres yoğunluğu ve yorgunluk direncini birleştiren çoklu parametrik istatistik modelleri (Z-Score Normalization) kullanmaktayız. Turnuva genelindeki ortalama (μ) ve standart sapma (σ) her veri girişinde dinamik olarak yeniden hesaplanır.",
+                      "To detect tournament anomalies, we utilize multi-parametric statistical models (Z-Score Normalization) combining physical effort, press intensity, and fatigue resistance. Tournament mean (μ) and standard deviation (σ) are dynamically recalculated upon each data entry."
+                    )}
+                  </p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="bg-slate-900/80 p-2.5 rounded-xl border border-indigo-900/30 space-y-1">
+                      <h6 className="font-bold text-indigo-300 text-[9px] uppercase tracking-wider font-sans">{translate("1. Gegenpressing Yoğunluk Skoru (GPIS)", "1. Gegenpressing Intensity Score (GPIS)")}</h6>
+                      <div className="bg-slate-950 px-2 py-1 rounded-lg border border-indigo-950 text-center font-mono text-[10px] text-indigo-200">
+                        GPIS = Reaksiyon_Pres_% × (Avg_FW_Zone5_Koşu / 100)
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-900/80 p-2.5 rounded-xl border border-indigo-900/30 space-y-1">
+                      <h6 className="font-bold text-amber-300 text-[9px] uppercase tracking-wider font-sans">{translate("2. Fiziksel Efor & Verimlilik Oranı (R)", "2. Physical Effort & Efficiency Ratio (R)")}</h6>
+                      <div className="bg-slate-950 px-2 py-1 rounded-lg border border-indigo-950 text-center font-mono text-[10px] text-amber-200">
+                        R = [(Avg_Sprints × 4.5) + (Avg_HSR / 50)] × Pres_% / Fatigue_Factor
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-900/80 p-2.5 rounded-xl border border-indigo-900/30 space-y-1">
+                      <h6 className="font-bold text-emerald-300 text-[9px] uppercase tracking-wider font-sans">{translate("3. Standardize Normal Dağılım (Z-Skor)", "3. Standard Normal Distribution (Z-Score)")}</h6>
+                      <div className="bg-slate-950 px-2 py-1 rounded-lg border border-indigo-950 text-center font-mono text-[10px] text-emerald-200">
+                        Z = (X - μ) / σ
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-900/80 p-2.5 rounded-xl border border-indigo-900/30 space-y-1">
+                      <h6 className="font-bold text-rose-300 text-[9px] uppercase tracking-wider font-sans">{translate("4. Elit Motor Anomalisi Kriteri", "4. Elite Motor Anomaly Criteria")}</h6>
+                      <div className="bg-slate-950 px-2 py-1 rounded-lg border border-indigo-950 text-center font-mono text-[10px] text-rose-200">
+                        Z_GPIS &gt; 0.8  &&  Z_Fatigue &lt; -0.5
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </div>
           </div>
         </div>
 
         {/* Tournament DNA Innovation Index Card */}
-        <div className="w-full lg:w-[420px] bg-white border border-slate-200 rounded-3xl p-6 shadow-xs flex flex-col justify-between">
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-              <div className="p-1.5 bg-rose-50 text-rose-600 rounded-xl">
-                <Flame className="w-5 h-5 text-rose-500 animate-pulse" />
+        <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 border border-indigo-900 rounded-3xl p-6 shadow-2xl text-white relative overflow-hidden min-h-[580px] flex flex-col justify-between">
+          <div className="absolute right-0 top-0 w-80 h-80 bg-rose-500/10 rounded-full blur-3xl pointer-events-none -mr-16 -mt-16 animate-pulse"></div>
+          <div className="absolute left-1/3 bottom-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none"></div>
+
+          <div className="relative z-10 space-y-4 flex flex-col justify-between h-full w-full">
+            <div className="flex items-center gap-2.5 border-b border-indigo-900/60 pb-3">
+              <div className="p-2 bg-rose-500/20 text-rose-300 rounded-xl border border-rose-500/30">
+                <Flame className="w-6 h-6 text-rose-400 animate-pulse" />
               </div>
               <div>
-                <h4 className="text-sm font-extrabold text-slate-900 uppercase flex items-center gap-1.5">
-                  🧬 Tournament DNA Innovation Index
+                <h4 className="text-sm font-black uppercase tracking-wider text-slate-100 flex items-center gap-1.5">
+                  🧬 {translate("Turnuva DNA İnovasyon Endeksi", "Tournament DNA Innovation Index")}
                 </h4>
-                <p className="text-[10px] text-slate-400">
-                  Taktiksel karmaşıklık, ön alan presi ve dikey savunma boyu sıralaması
+                <p className="text-[10px] text-slate-400 mt-0.5 font-sans">
+                  {translate("Taktiksel karmaşıklık, ön alan presi ve dikey savunma boyu sıralaması", "Tactical complexity, high block press, and vertical defense height rankings")}
                 </p>
               </div>
             </div>
 
-            <div className="space-y-3.5">
+            <div className="space-y-3.5 flex-1 overflow-y-auto pr-1 max-h-[380px] py-1 scrollbar-thin scrollbar-thumb-indigo-500/30 scrollbar-track-transparent">
               {tournamentDnaInnovationRankings.map((ranking, idx) => {
                 const isComplex = ranking.gegenpressingIntensity > 4.5 && ranking.verticalCost > 8.0;
                 
                 // Construct beautiful SVG sparkline path
-                // Trend has 3 points. Let's map them to 0-45 width, 0-15 height
                 const trendPoints = ranking.trend;
                 const minVal = Math.min(...trendPoints) * 0.95;
                 const maxVal = Math.max(...trendPoints) * 1.05;
@@ -3245,21 +4693,27 @@ export default function TournamentAnalyticsView({
                 const pathD = `M ${coords.join(" L ")}`;
 
                 return (
-                  <div key={ranking.team} className="flex items-center justify-between gap-3 p-2.5 hover:bg-slate-50 rounded-2xl transition-all border border-slate-50 hover:border-slate-100">
+                  <div key={ranking.team} className="flex items-center justify-between gap-3 p-3 hover:bg-slate-900/50 rounded-2xl transition-all border border-slate-900/40 hover:border-indigo-900/50">
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="w-5.5 h-5.5 rounded-full bg-slate-100 text-[10px] font-mono font-bold flex items-center justify-center text-slate-500 shrink-0">
+                      <span className="w-7 h-7 rounded-full bg-slate-900 text-xs font-mono font-black flex items-center justify-center text-slate-300 shrink-0 border border-slate-800">
                         #{idx + 1}
                       </span>
                       <div className="min-w-0">
-                        <strong className="text-xs text-slate-800 truncate flex items-center gap-1.5">
-                          <TeamFlag team={ranking.team} getTeamFlag={getTeamFlag} className="w-4.5 h-3 object-cover rounded-xs" fallbackTextSize="text-xs" /> {ranking.team}
+                        <strong className="text-sm font-black text-slate-100 truncate flex items-center gap-2 font-sans">
+                          <TeamFlag team={ranking.team} getTeamFlag={getTeamFlag} className="w-8 h-5 object-cover rounded-sm shrink-0 shadow-md border border-slate-700/50" fallbackTextSize="text-xl" /> 
+                          <span>{ranking.team}</span>
                         </strong>
-                        <span className={`inline-block text-[8px] font-bold px-1.5 py-0.5 rounded-sm mt-0.5 uppercase tracking-wider ${
+                        <span className={`inline-block text-[8.5px] font-mono font-black px-2 py-0.5 rounded-sm mt-1 uppercase tracking-wider ${
                           isComplex 
-                            ? "bg-purple-100 text-purple-700 border border-purple-200" 
-                            : "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                            ? "bg-purple-900/40 text-purple-200 border border-purple-800/50" 
+                            : "bg-emerald-900/40 text-emerald-200 border border-emerald-800/50"
                         }`}>
-                          {ranking.category}
+                          {ranking.category.includes("Taktiksel Komplekslik") 
+                            ? translate("Taktiksel Komplekslik (Yüksek Risk)", "Tactical Complexity (High Risk)") 
+                            : ranking.category.includes("Verimli Pragmatizm")
+                              ? translate("Verimli Pragmatizm", "Efficient Pragmatism")
+                              : translate("Dengeli Hücum", "Balanced Offense")
+                          }
                         </span>
                       </div>
                     </div>
@@ -3267,43 +4721,42 @@ export default function TournamentAnalyticsView({
                     {/* Sparkline & Score */}
                     <div className="flex items-center gap-3 shrink-0">
                       {/* Mini Sparkline */}
-                      <div className="w-12 h-6" title="Son 3 Maç İnovasyon Trendi">
+                      <div className="w-12 h-6" title={translate("Son 3 Maç İnovasyon Trendi", "Last 3 Matches Innovation Trend")}>
                         <svg className="w-full h-full overflow-visible" viewBox="0 0 50 20">
                           <path 
                             d={pathD} 
                             fill="none" 
-                            stroke={isComplex ? "#8b5cf6" : "#10b981"} 
+                            stroke={isComplex ? "#c084fc" : "#34d399"} 
                             strokeWidth="2.5" 
                             strokeLinecap="round" 
                             strokeLinejoin="round"
                           />
-                          {/* Pulse dot at the end */}
                           <circle 
                             cx={45} 
                             cy={18 - ((trendPoints[2] - minVal) / range) * 12} 
                             r="2.5" 
-                            fill={isComplex ? "#8b5cf6" : "#10b981"} 
+                            fill={isComplex ? "#c084fc" : "#34d399"} 
                             className="animate-pulse"
                           />
                         </svg>
                       </div>
 
-                      <div className="text-right shrink-0 min-w-[50px]">
-                        <span className="text-xs font-mono font-extrabold text-indigo-600 block">
+                      <div className="text-right shrink-0 min-w-[55px]">
+                        <span className="text-sm font-mono font-black text-indigo-400 block">
                           {ranking.innovationIndex}
                         </span>
-                        <span className="text-[8px] text-slate-400 font-mono uppercase tracking-wider block">İndeks</span>
+                        <span className="text-[8.5px] text-slate-400 font-mono uppercase tracking-wider block">{translate("İndeks", "Index")}</span>
                       </div>
                     </div>
                   </div>
                 );
               })}
             </div>
-          </div>
 
-          <div className="border-t border-slate-100 pt-3.5 mt-4 text-[9px] text-slate-500 flex items-center gap-1.5 font-mono">
-            <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-            <span>Formül: GPIS × 1.2 - VCI × 0.8</span>
+            <div className="border-t border-indigo-900/40 pt-3.5 mt-4 text-[9px] text-slate-500 flex items-center gap-1.5 font-mono">
+              <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span>{translate("Formül: GPIS × 1.2 - VCI × 0.8", "Formula: GPIS × 1.2 - VCI × 0.8")}</span>
+            </div>
           </div>
         </div>
 
@@ -3710,11 +5163,416 @@ export default function TournamentAnalyticsView({
     />
   )}
 
+  {subTab === "descriptiveAnalytics" && (
+    <DescriptiveAnalytics
+      uploadedMatches={uploadedMatches}
+      language={language}
+      getTeamFlag={getTeamFlag}
+    />
+  )}
+
   {subTab === "vesRanker" && (
     <VaryansImpactRanker
       aggregatedPlayers={aggregatedPlayers}
       getTeamFlag={getTeamFlag}
     />
+  )}
+
+  {subTab === "athleticReport" && (
+    <AthleticCampaignReport
+      uploadedMatches={uploadedMatches}
+      getTeamFlag={getTeamFlag}
+      squadPhotos={squadPhotos}
+      language={language}
+      onPlayerClick={(playerName, teamName) => {
+        setSelectedPlayerKey(`${playerName}_(${teamName})`);
+        setSubTab("player");
+      }}
+      onTeamClick={(teamName) => {
+        setSelectedTeam(teamName);
+        setSubTab("team");
+      }}
+    />
+  )}
+
+  {subTab === "varyans_kpi" && (
+    <div className="bg-slate-50 border border-slate-200 p-6 rounded-3xl space-y-6 shadow-xs animate-fade-in text-slate-800">
+      {/* Header and Stage Filter Selector */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-slate-200">
+        <div>
+          <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+            <Award className="w-6 h-6 text-indigo-600" /> VARYANS Analiz Merkezi
+          </h3>
+          <p className="text-xs text-slate-500">
+            {translate(
+              "Seçilen turnuva aşamasına veya gruplara göre derinlemesine taktiksel DNA ve görsel KPI değişim analizi.",
+              "In-depth tactical DNA and visual KPI change analysis by selected tournament stage or groups."
+            )}
+          </p>
+        </div>
+        
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-600 font-mono">
+              {translate("Aşama / Grup:", "Stage / Group:")}
+            </span>
+            <select
+              value={varyansGroup}
+              onChange={(e) => setVaryansGroup(e.target.value)}
+              className="bg-white border border-slate-300 text-slate-800 text-xs font-bold py-1.5 px-3 rounded-xl shadow-xs focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer"
+            >
+              {groupsList.map(grp => (
+                <option key={grp} value={grp}>
+                  {grp === "All" ? translate("Tüm Turnuva", "Full Tournament") : grp}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-600 font-mono">
+              {translate("Takım:", "Team:")}
+            </span>
+            <select
+              value={varyansTeam}
+              onChange={(e) => setVaryansTeam(e.target.value)}
+              className="bg-white border border-slate-300 text-slate-800 text-xs font-bold py-1.5 px-3 rounded-xl shadow-xs focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer"
+            >
+              {varyansTeamsList.map(team => (
+                <option key={team} value={team}>
+                  {team === "All" ? translate("Tüm Takımlar", "All Teams") : team}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-600 font-mono">
+              {translate("Maç:", "Match:")}
+            </span>
+            <select
+              value={varyansMatch}
+              onChange={(e) => setVaryansMatch(e.target.value)}
+              className="bg-white border border-slate-300 text-slate-800 text-xs font-bold py-1.5 px-3 rounded-xl shadow-xs focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer max-w-[180px] truncate"
+            >
+              {varyansMatchesList.map(m => (
+                <option key={m} value={m}>
+                  {m === "All" ? translate("Tüm Maçlar", "All Matches") : m}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-600 font-mono">
+              {translate("Pozisyon:", "Position:")}
+            </span>
+            <select
+              value={varyansPosition}
+              onChange={(e) => setVaryansPosition(e.target.value)}
+              className="bg-white border border-slate-300 text-slate-800 text-xs font-bold py-1.5 px-3 rounded-xl shadow-xs focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer"
+            >
+              <option value="All">{translate("Tüm Pozisyonlar", "All Positions")}</option>
+              <option value="GK">{translate("GK - Kaleci", "GK - Goalkeeper")}</option>
+              <option value="DF">{translate("DF - Savunma", "DF - Defender")}</option>
+              <option value="MF">{translate("MF - Orta Saha", "MF - Midfielder")}</option>
+              <option value="FW">{translate("FW - Forvet", "FW - Forward")}</option>
+            </select>
+          </div>
+
+          <div className="flex bg-slate-200/60 p-1 rounded-xl border border-slate-300/40">
+            <button
+              onClick={() => setVaryansKpiLevel("player")}
+              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                varyansKpiLevel === "player"
+                  ? "bg-white text-slate-900 shadow-xs font-extrabold"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              👤 {translate("Oyuncu Seviyesi", "Player Level")}
+            </button>
+            <button
+              onClick={() => setVaryansKpiLevel("team")}
+              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                varyansKpiLevel === "team"
+                  ? "bg-white text-slate-900 shadow-xs font-extrabold"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              🛡️ {translate("Takım Seviyesi", "Team Level")}
+            </button>
+          </div>
+
+          {varyansKpiLevel === "player" && (
+            <div className="flex bg-indigo-50 p-1 rounded-xl border border-indigo-200/60">
+              <button
+                onClick={() => setPlayerVsTeamMode("player")}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  playerVsTeamMode === "player"
+                    ? "bg-indigo-600 text-white shadow-xs font-extrabold"
+                    : "text-indigo-600/70 hover:text-indigo-600"
+                }`}
+              >
+                👤 {translate("Sadece Oyuncu", "Player Only")}
+              </button>
+              <button
+                onClick={() => setPlayerVsTeamMode("compare")}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  playerVsTeamMode === "compare"
+                    ? "bg-indigo-600 text-white shadow-xs font-extrabold"
+                    : "text-indigo-600/70 hover:text-indigo-600"
+                }`}
+              >
+                ⚔️ {translate("Oyuncu vs Takım", "Player vs Team")}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {varyansKpiLevel === "player" ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {renderVaryansKpiCard(1)}
+          {renderVaryansKpiCard(2)}
+          {renderVaryansKpiCard(3)}
+          {renderVaryansKpiCard(4)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Team Category 1: Progression */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-2xs group relative overflow-hidden transition-all duration-300 hover:shadow-md hover:border-slate-300 varyans-intelligence-engine-card flex flex-col justify-between">
+            <div>
+              <span className="text-xs font-bold text-emerald-600 font-mono tracking-wider border-b border-slate-100 pb-2.5 block flex items-center gap-1.5 mb-4">
+                <TrendingUp className="w-4 h-4" /> {translate("TAKIM OYUN KURULUMU ORTALAMALARI", "TEAM PROGRESSION AVERAGES")}
+              </span>
+              
+              {varyansTeamStats ? (
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex justify-between text-xs text-slate-600 mb-1 font-mono">
+                      <span>{translate("Hat Kırma Verimi (Line Break Pct)", "Line Break Pct")}</span>
+                      <span className="font-bold text-slate-800">%{varyansTeamStats.lineBreakEfficiency}</span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                      <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${Math.min(varyansTeamStats.lineBreakEfficiency, 100)}%` }} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between text-xs text-slate-600 mb-1 font-mono">
+                      <span>{translate("Dikeylik Endeksi (Verticality Index)", "Verticality Index")}</span>
+                      <span className="font-bold text-slate-800">%{varyansTeamStats.verticalityIndex}</span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                      <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${Math.min(varyansTeamStats.verticalityIndex, 100)}%` }} />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400 italic py-4 text-center">{translate("Bu grup için veri hesaplanamadı.", "No data calculated for this group.")}</p>
+              )}
+            </div>
+
+            {/* Expandable Info Section on Hover */}
+            <div className="mt-4 pt-3 border-t border-slate-100 overflow-hidden max-h-0 group-hover:max-h-40 transition-all duration-500 ease-in-out">
+              <div className="text-[11px] space-y-2 text-slate-600 bg-emerald-50/40 p-3 rounded-xl border border-emerald-100/50">
+                <div>
+                  <span className="font-extrabold text-emerald-700 block uppercase tracking-wider text-[9px] mb-0.5">
+                    {translate("TAKIMSAL FORMÜLLER", "TEAM FORMULAS")}
+                  </span>
+                  <div className="font-mono text-[9px] text-slate-700 space-y-1 bg-white p-1.5 rounded border border-slate-200/60 shadow-3xs">
+                    <div className="leading-normal">LineBreakPct = (Successful_Line_Breaks / Total_Line_Breaks_Attempted) * 100</div>
+                    <div className="leading-normal">VerticalityIndex = (Forward_Passes / Total_Passes) * 100</div>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center pt-1 border-t border-slate-100">
+                  <span className="font-bold text-slate-700 text-[10px]">
+                    {translate("Aşama Hat Kırma / Dikeylik Ortalaması:", "Stage Line Break / Verticality Average:")}
+                  </span>
+                  <span className="font-mono font-extrabold text-emerald-600 text-[10px] bg-emerald-100/40 px-2 py-0.5 rounded-md">
+                    %{varyansTeamGlobalAverages.lineBreakEfficiency} / %{varyansTeamGlobalAverages.verticalityIndex}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Team Category 2: Off-ball */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-2xs group relative overflow-hidden transition-all duration-300 hover:shadow-md hover:border-slate-300 varyans-intelligence-engine-card flex flex-col justify-between">
+            <div>
+              <span className="text-xs font-bold text-indigo-600 font-mono tracking-wider border-b border-slate-100 pb-2.5 block flex items-center gap-1.5 mb-4">
+                <Compass className="w-4 h-4" /> {translate("TAKIM ALAN VE GENİŞLİK KULLANIMI", "TEAM SPACE & WIDTH USAGE")}
+              </span>
+              
+              {varyansTeamStats ? (
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex justify-between text-xs text-slate-600 mb-1 font-mono">
+                      <span>{translate("Kanat Kullanım Derecesi (Width Usage)", "Width Usage Pct")}</span>
+                      <span className="font-bold text-slate-800">%{varyansTeamStats.widthUsageIndex}</span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                      <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${Math.min(varyansTeamStats.widthUsageIndex, 100)}%` }} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between text-xs text-slate-600 mb-1 font-mono">
+                      <span>{translate("Merkez Hücum Eğilimi (Centrality Index)", "Centrality Index")}</span>
+                      <span className="font-bold text-slate-800">%{varyansTeamStats.centralityIndex}</span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                      <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${Math.min(varyansTeamStats.centralityIndex, 100)}%` }} />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400 italic py-4 text-center">{translate("Bu grup için veri hesaplanamadı.", "No data calculated for this group.")}</p>
+              )}
+            </div>
+
+            {/* Expandable Info Section on Hover */}
+            <div className="mt-4 pt-3 border-t border-slate-100 overflow-hidden max-h-0 group-hover:max-h-40 transition-all duration-500 ease-in-out">
+              <div className="text-[11px] space-y-2 text-slate-600 bg-indigo-50/40 p-3 rounded-xl border border-indigo-100/50">
+                <div>
+                  <span className="font-extrabold text-indigo-700 block uppercase tracking-wider text-[9px] mb-0.5">
+                    {translate("TAKIMSAL FORMÜLLER", "TEAM FORMULAS")}
+                  </span>
+                  <div className="font-mono text-[9px] text-slate-700 space-y-1 bg-white p-1.5 rounded border border-slate-200/60 shadow-3xs">
+                    <div className="leading-normal">WidthUsagePct = (Wing_Attacks / Total_Attacks) * 100</div>
+                    <div className="leading-normal">CentralityIndex = (Central_Attacks / Total_Attacks) * 100</div>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center pt-1 border-t border-slate-100">
+                  <span className="font-bold text-slate-700 text-[10px]">
+                    {translate("Aşama Genişlik / Merkez Ortalaması:", "Stage Width / Centrality Average:")}
+                  </span>
+                  <span className="font-mono font-extrabold text-indigo-600 text-[10px] bg-indigo-100/40 px-2 py-0.5 rounded-md">
+                    %{varyansTeamGlobalAverages.widthUsageIndex} / %{varyansTeamGlobalAverages.centralityIndex}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Team Category 3: Defensive */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-2xs group relative overflow-hidden transition-all duration-300 hover:shadow-md hover:border-slate-300 varyans-intelligence-engine-card flex flex-col justify-between">
+            <div>
+              <span className="text-xs font-bold text-rose-600 font-mono tracking-wider border-b border-slate-100 pb-2.5 block flex items-center gap-1.5 mb-4">
+                <Shield className="w-4 h-4" /> {translate("TAKIM SAVUNMA VE PRES ETKİNLİĞİ", "TEAM DEFENSIVE & PRESS EFFICIENCY")}
+              </span>
+              
+              {varyansTeamStats ? (
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex justify-between text-xs text-slate-600 mb-1 font-mono">
+                      <span>{translate("Genel Pres Başarı Oranı (Press Eff.)", "Press Efficiency")}</span>
+                      <span className="font-bold text-slate-800">{varyansTeamStats.pressEfficiency}</span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                      <div className="bg-rose-500 h-full rounded-full" style={{ width: `${Math.min(varyansTeamStats.pressEfficiency * 10, 100)}%` }} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between text-xs text-slate-600 mb-1 font-mono">
+                      <span>{translate("Ön Alan Pres Başarısı (High Press)", "High Press Efficiency")}</span>
+                      <span className="font-bold text-slate-800">{varyansTeamStats.highPressEfficiency}</span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                      <div className="bg-rose-500 h-full rounded-full" style={{ width: `${Math.min(varyansTeamStats.highPressEfficiency * 10, 100)}%` }} />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400 italic py-4 text-center">{translate("Bu grup için veri hesaplanamadı.", "No data calculated for this group.")}</p>
+              )}
+            </div>
+
+            {/* Expandable Info Section on Hover */}
+            <div className="mt-4 pt-3 border-t border-slate-100 overflow-hidden max-h-0 group-hover:max-h-40 transition-all duration-500 ease-in-out">
+              <div className="text-[11px] space-y-2 text-slate-600 bg-rose-50/40 p-3 rounded-xl border border-rose-100/50">
+                <div>
+                  <span className="font-extrabold text-rose-700 block uppercase tracking-wider text-[9px] mb-0.5">
+                    {translate("TAKIMSAL FORMÜLLER", "TEAM FORMULAS")}
+                  </span>
+                  <div className="font-mono text-[9px] text-slate-700 space-y-1 bg-white p-1.5 rounded border border-slate-200/60 shadow-3xs">
+                    <div className="leading-normal">PressEfficiency = Successful_Press_Actions / Press_Attempts</div>
+                    <div className="leading-normal">HighPressEfficiency = High_Press_Regains / High_Press_Attempts</div>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center pt-1 border-t border-slate-100">
+                  <span className="font-bold text-slate-700 text-[10px]">
+                    {translate("Aşama Pres / Ön Alan Pres Ortalaması:", "Stage Press / High Press Average:")}
+                  </span>
+                  <span className="font-mono font-extrabold text-rose-600 text-[10px] bg-rose-100/40 px-2 py-0.5 rounded-md">
+                    {varyansTeamGlobalAverages.pressEfficiency} / {varyansTeamGlobalAverages.highPressEfficiency}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Team Category 4: Physical */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-2xs group relative overflow-hidden transition-all duration-300 hover:shadow-md hover:border-slate-300 varyans-intelligence-engine-card flex flex-col justify-between">
+            <div>
+              <span className="text-xs font-bold text-amber-600 font-mono tracking-wider border-b border-slate-100 pb-2.5 block flex items-center gap-1.5 mb-4">
+                <Activity className="w-4 h-4" /> {translate("TAKIM ATLETİK VE SPRINT DAĞILIMI", "TEAM ATHLETIC & SPRINT INTENSITY")}
+              </span>
+              
+              {varyansTeamStats ? (
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex justify-between text-xs text-slate-600 mb-1 font-mono">
+                      <span>{translate("Fiziksel Mesafe Yoğunluğu", "Physical Intensity")}</span>
+                      <span className="font-bold text-slate-800">%{varyansTeamStats.physicalIntensityIndex}</span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                      <div className="bg-amber-500 h-full rounded-full" style={{ width: `${Math.min(varyansTeamStats.physicalIntensityIndex, 100)}%` }} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between text-xs text-slate-600 mb-1 font-mono">
+                      <span>{translate("Toplam Sprint Yoğunluğu", "Sprint Density")}</span>
+                      <span className="font-bold text-slate-800">{varyansTeamStats.sprintDensity}</span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                      <div className="bg-amber-500 h-full rounded-full" style={{ width: `${Math.min(varyansTeamStats.sprintDensity * 10, 100)}%` }} />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400 italic py-4 text-center">{translate("Bu grup için veri hesaplanamadı.", "No data calculated for this group.")}</p>
+              )}
+            </div>
+
+            {/* Expandable Info Section on Hover */}
+            <div className="mt-4 pt-3 border-t border-slate-100 overflow-hidden max-h-0 group-hover:max-h-40 transition-all duration-500 ease-in-out">
+              <div className="text-[11px] space-y-2 text-slate-600 bg-amber-50/40 p-3 rounded-xl border border-amber-100/50">
+                <div>
+                  <span className="font-extrabold text-amber-700 block uppercase tracking-wider text-[9px] mb-0.5">
+                    {translate("TAKIMSAL FORMÜLLER", "TEAM FORMULAS")}
+                  </span>
+                  <div className="font-mono text-[9px] text-slate-700 space-y-1 bg-white p-1.5 rounded border border-slate-200/60 shadow-3xs">
+                    <div className="leading-normal">PhysicalIntensity = (High_Speed_Running_m / Total_Distance) * 100</div>
+                    <div className="leading-normal">SprintDensity = Sprints_Completed / Played_Minutes</div>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center pt-1 border-t border-slate-100">
+                  <span className="font-bold text-slate-700 text-[10px]">
+                    {translate("Aşama Yoğunluk / Sprint Ortalaması:", "Stage Intensity / Sprint Average:")}
+                  </span>
+                  <span className="font-mono font-extrabold text-amber-600 text-[10px] bg-amber-100/40 px-2 py-0.5 rounded-md">
+                    %{varyansTeamGlobalAverages.physicalIntensityIndex} / {varyansTeamGlobalAverages.sprintDensity}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   )}
 
   {subTab === "team" && (
@@ -3740,8 +5598,6 @@ export default function TournamentAnalyticsView({
               setTeamFormations({
                 "Mexico": "4-3-3",
                 "South Africa": "4-3-3",
-                "Italy": "3-5-2",
-                "Japan": "4-2-3-1",
               });
               localStorage.removeItem("__team_assigned_formations_v2");
             }}
@@ -4134,9 +5990,7 @@ export default function TournamentAnalyticsView({
               // Dynamically compile tactical configurations
               const correlationRows = [
                 { team: "Mexico", press: 22, lowBlock: 11, buildUp: 27, distance: 2341, sprints: 16.5 },
-                { team: "South Africa", press: 12, lowBlock: 14, buildUp: 24, distance: 2064, sprints: 11.0 },
-                { team: "Italy", press: 18, lowBlock: 24, buildUp: 31, distance: 2190, sprints: 13.2 },
-                { team: "Japan", press: 26, lowBlock: 15, buildUp: 26, distance: 2480, sprints: 17.8 }
+                { team: "South Africa", press: 12, lowBlock: 14, buildUp: 24, distance: 2064, sprints: 11.0 }
               ];
 
               return (
@@ -4182,10 +6036,10 @@ export default function TournamentAnalyticsView({
                 Bulgu Özetleri: Koşu Yoğunluğu ile Oyun Fazı Arasındaki İlişkiler
               </strong>
               <p>
-                1. <strong>Ön Alan Baskısı Korelasyonu:</strong> Yüksek hat baskısı (% Ön Alan Baskısı) oranı %20 olan takımlar (örn. Mexico, Japan), rakipleri üzerinde yoğun baskı kurarken, hücum yerleşimindeki oyuncularının yüksek şiddetli koşu (Sprint) sayılarında <strong>%25 ila %35 oranında</strong> belirgin bir artış kaydeder.
+                1. <strong>Ön Alan Baskısı Korelasyonu:</strong> Yüksek hat baskısı (% Ön Alan Baskısı) oranı yüksek olan takımlarda (örn. Mexico), rakipleri üzerinde yoğun baskı kurarken, hücum yerleşimindeki oyuncularının yüksek şiddetli koşu (Sprint) sayılarında belirgin bir artış kaydedilir.
               </p>
               <p>
-                2. <strong>Low Block / Derin Blok Savunma Etkisi:</strong> Savunma bloğunu geride kuran (% Derin Blok %20+) takımların (örn. Italy) stoperleri, geniş alan savunmak zorunda olmadıkları için sprint adetlerini minimumda tutarken, <strong>Defansif Mücadele, Top Kurtarma ve Şut Engelleme (Block)</strong> katsayılarında çok daha yüksek verimlilik yüzdelerine ulaşırlar.
+                2. <strong>Low Block / Derin Blok Savunma Etkisi:</strong> Savunma bloğunu geride kuran (% Derin Blok) takımların (örn. South Africa) stoperleri, geniş alan savunmak zorunda olmadıkları için sprint adetlerini minimumda tutarken, <strong>Defansif Mücadele, Top Kurtarma ve Şut Engelleme (Block)</strong> katsayılarında çok daha yüksek verimlilik yüzdelerine ulaşırlar.
               </p>
             </div>
           </div>
@@ -4868,16 +6722,6 @@ export default function TournamentAnalyticsView({
               // Align matches directly with team phases of play and physical variables
               const teamPhaseMapping = [
                 {
-                  team: "Italy",
-                  formation: teamFormations["Italy"] || "3-5-2",
-                  inPoss: { buildUp: 31, fastAttack: 42, regularPoss: 27 },
-                  outPoss: { lowBlock: 35, highPress: 18, midBlock: 47 },
-                  avgDistance: 2190,
-                  avgSprints: 13.2,
-                  tacticalLineType: "Uçlarda bek barındıran 3-5-2 varyasyonu.",
-                  description: "Zorlu düşük derinde blok (%35 Low Block) tercih eder. Bek oyuncuları hücuma daha kontrollü ve taktiksel yerleşimle katılır."
-                },
-                {
                   team: "Mexico",
                   formation: teamFormations["Mexico"] || "4-3-3",
                   inPoss: { buildUp: 27, fastAttack: 48, regularPoss: 25 },
@@ -4896,16 +6740,6 @@ export default function TournamentAnalyticsView({
                   avgSprints: 11.0,
                   tacticalLineType: "Geçiş oyununa dayalı geleneksel 4-3-3.",
                   description: "Hızlı doğrudan paslaşma ve hızlı hücum (%52 Fast Attack) dener. Eforlar dikine ve yırtıcıdır."
-                },
-                {
-                  team: "Japan",
-                  formation: teamFormations["Japan"] || "4-2-3-1",
-                  inPoss: { buildUp: 26, fastAttack: 45, regularPoss: 29 },
-                  outPoss: { lowBlock: 15, highPress: 45, midBlock: 40 },
-                  avgDistance: 2480,
-                  avgSprints: 17.8,
-                  tacticalLineType: "Modern dinamik 4-2-3-1.",
-                  description: "Çok eforlu ön alan baskısı (%45 High Press) ile top çalar. Orta alanın toplam koşuları rekor düzeydedir."
                 }
               ];
 
@@ -5393,7 +7227,22 @@ export default function TournamentAnalyticsView({
           <SlidersHorizontal className="w-3.5 h-3.5" />
           <span>Taktik & Fizik Matrisi</span>
         </button>
+        <button
+          onClick={() => setMacroTrendsSubTab("predictability")}
+          className={`py-2 px-4 rounded-xl text-xs font-sans font-extrabold transition-all cursor-pointer flex items-center gap-1.5 ${
+            macroTrendsSubTab === "predictability"
+              ? "bg-white text-indigo-950 shadow-2xs ring-1 ring-black/5"
+              : "text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <TrendingUp className="w-3.5 h-3.5 text-rose-500" />
+          <span>Öngörülebilirlik & Kararlılık (Small Multiples)</span>
+        </button>
       </div>
+
+      {macroTrendsSubTab === "predictability" && (
+        <TeamPredictabilityMultiples uploadedMatches={uploadedMatches} />
+      )}
 
       {macroTrendsSubTab === "regression" && (
         <TacticalRegressionEngine uploadedMatches={uploadedMatches} teamFormations={teamFormations} />
@@ -6150,6 +7999,241 @@ export default function TournamentAnalyticsView({
           </div>
         </div>
 
+        {/* Bireysel Oyuncu İnceleme ve Metrik Laboratuvarı (New section) */}
+        <div className="xl:col-span-12 bg-white border border-slate-100 rounded-3xl p-6 shadow-xs flex flex-col gap-5 mt-6">
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-slate-100 pb-4">
+            <div>
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400">OYUNCU GELİŞMİŞ VERİ LABORATUVARI</span>
+              <h4 className="text-base font-sans font-extrabold text-slate-900 mt-0.5">🧬 Bireysel Oyuncu İnceleme ve Detaylı Metrik Matrisi</h4>
+              <p className="text-xs text-slate-400 font-sans mt-0.5">
+                Turnuvadaki tüm futbolcuların mevkisel koşu yüklerini, pas verimliliklerini ve defansif aksiyonlarını bireysel olarak sorgulayın ve sıralayın.
+              </p>
+            </div>
+
+            {/* Filter and search controls */}
+            <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+              {/* Search bar */}
+              <div className="relative flex-1 sm:flex-initial">
+                <input
+                  type="text"
+                  placeholder="Oyuncu ara..."
+                  value={playerLabSearch}
+                  onChange={(e) => setPlayerLabSearch(e.target.value)}
+                  className="w-full sm:w-48 border border-slate-200 rounded-xl pl-8 pr-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
+                />
+                <span className="absolute left-2.5 top-2.5 text-slate-400">🔍</span>
+              </div>
+
+              {/* Team dropdown */}
+              <select
+                value={playerLabTeam}
+                onChange={(e) => setPlayerLabTeam(e.target.value)}
+                className="border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 bg-slate-50 outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+              >
+                <option value="all">Tüm Takımlar</option>
+                {Array.from(new Set(uploadedMatches.flatMap(m => [m.matchInfo.homeTeam, m.matchInfo.awayTeam]))).map(team => (
+                  <option key={team} value={team}>{team}</option>
+                ))}
+              </select>
+
+              {/* Position dropdown */}
+              <select
+                value={playerLabPos}
+                onChange={(e) => setPlayerLabPos(e.target.value)}
+                className="border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 bg-slate-50 outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+              >
+                <option value="all">Tüm Mevkiler</option>
+                <option value="CB">Stoper (CB)</option>
+                <option value="FB">Bek (FB)</option>
+                <option value="WB">Kanat Bek (WB)</option>
+                <option value="CM">Merkez Orta Saha (CM)</option>
+                <option value="FW">Hücumcu (FW)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Table Area with detailed metrics */}
+          <div className="overflow-x-auto border border-slate-100 rounded-2xl shadow-2xs max-h-[500px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-100 font-mono text-[10px] text-slate-500 uppercase font-bold sticky top-0 z-10">
+                  <th className="py-3 px-4 min-w-[180px]">Oyuncu / Takım / Mevki</th>
+                  <th 
+                    onClick={() => {
+                      setPlayerLabSortField("distance");
+                      setPlayerLabSortAsc(!playerLabSortAsc);
+                    }}
+                    className="py-3 px-3 text-right cursor-pointer hover:bg-slate-100 select-none"
+                  >
+                    Mesafe (m) {playerLabSortField === "distance" ? (playerLabSortAsc ? "▲" : "▼") : ""}
+                  </th>
+                  <th 
+                    onClick={() => {
+                      setPlayerLabSortField("zone4");
+                      setPlayerLabSortAsc(!playerLabSortAsc);
+                    }}
+                    className="py-3 px-3 text-right cursor-pointer hover:bg-slate-100 select-none"
+                  >
+                    Zone 4 (m) {playerLabSortField === "zone4" ? (playerLabSortAsc ? "▲" : "▼") : ""}
+                  </th>
+                  <th 
+                    onClick={() => {
+                      setPlayerLabSortField("zone5");
+                      setPlayerLabSortAsc(!playerLabSortAsc);
+                    }}
+                    className="py-3 px-3 text-right cursor-pointer hover:bg-slate-100 select-none"
+                  >
+                    Zone 5 (m) {playerLabSortField === "zone5" ? (playerLabSortAsc ? "▲" : "▼") : ""}
+                  </th>
+                  <th 
+                    onClick={() => {
+                      setPlayerLabSortField("sprints");
+                      setPlayerLabSortAsc(!playerLabSortAsc);
+                    }}
+                    className="py-3 px-3 text-right cursor-pointer hover:bg-slate-100 select-none"
+                  >
+                    Sprints {playerLabSortField === "sprints" ? (playerLabSortAsc ? "▲" : "▼") : ""}
+                  </th>
+                  <th 
+                    onClick={() => {
+                      setPlayerLabSortField("hsrCount");
+                      setPlayerLabSortAsc(!playerLabSortAsc);
+                    }}
+                    className="py-3 px-3 text-right cursor-pointer hover:bg-slate-100 select-none"
+                  >
+                    HSR Sayısı {playerLabSortField === "hsrCount" ? (playerLabSortAsc ? "▲" : "▼") : ""}
+                  </th>
+                  <th 
+                    onClick={() => {
+                      setPlayerLabSortField("topSpeed");
+                      setPlayerLabSortAsc(!playerLabSortAsc);
+                    }}
+                    className="py-3 px-3 text-right cursor-pointer hover:bg-slate-100 select-none"
+                  >
+                    Sürat (km/h) {playerLabSortField === "topSpeed" ? (playerLabSortAsc ? "▲" : "▼") : ""}
+                  </th>
+                  <th 
+                    onClick={() => {
+                      setPlayerLabSortField("goals");
+                      setPlayerLabSortAsc(!playerLabSortAsc);
+                    }}
+                    className="py-3 px-3 text-right cursor-pointer hover:bg-slate-100 select-none"
+                  >
+                    Gol {playerLabSortField === "goals" ? (playerLabSortAsc ? "▲" : "▼") : ""}
+                  </th>
+                  <th 
+                    onClick={() => {
+                      setPlayerLabSortField("lineBreaksCompleted");
+                      setPlayerLabSortAsc(!playerLabSortAsc);
+                    }}
+                    className="py-3 px-3 text-right cursor-pointer hover:bg-slate-100 select-none"
+                  >
+                    Hat Kıran {playerLabSortField === "lineBreaksCompleted" ? (playerLabSortAsc ? "▲" : "▼") : ""}
+                  </th>
+                  <th 
+                    onClick={() => {
+                      setPlayerLabSortField("regains");
+                      setPlayerLabSortAsc(!playerLabSortAsc);
+                    }}
+                    className="py-3 px-3 text-right cursor-pointer hover:bg-slate-100 select-none"
+                  >
+                    Kazanma {playerLabSortField === "regains" ? (playerLabSortAsc ? "▲" : "▼") : ""}
+                  </th>
+                  <th 
+                    onClick={() => {
+                      setPlayerLabSortField("passesCompletionPct");
+                      setPlayerLabSortAsc(!playerLabSortAsc);
+                    }}
+                    className="py-3 px-3 text-right cursor-pointer hover:bg-slate-100 select-none"
+                  >
+                    Pas % {playerLabSortField === "passesCompletionPct" ? (playerLabSortAsc ? "▲" : "▼") : ""}
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
+                {filteredAndSortedLabPlayers.map((player, idx) => {
+                  const pPhoto = findPlayerPhoto(player.name, squadPhotos);
+                  const pFlag = getTeamFlag ? getTeamFlag(player.team) : "";
+                  const passPct = player.passesAttempted > 0 ? Math.round((player.passesCompleted / player.passesAttempted) * 100) : 0;
+                  
+                  return (
+                    <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="py-3.5 px-4 font-semibold">
+                        <div className="flex items-center gap-3">
+                          {/* Larger Player Photo */}
+                          {pPhoto ? (
+                            <img
+                              src={pPhoto.base64}
+                              alt=""
+                              className="w-10 h-10 rounded-full object-cover shrink-0 border border-slate-205 shadow-2xs"
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 border border-slate-200 flex items-center justify-center text-xs uppercase font-bold shrink-0 font-sans">
+                              {player.name.substring(0, 2)}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <span className="text-slate-900 block font-bold text-xs truncate">{player.name}</span>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <TeamFlag team={player.team} getTeamFlag={getTeamFlag} className="w-4 h-2.5 object-cover rounded-3xs border border-slate-200" fallbackTextSize="text-[10px]" />
+                              <span className="text-[10px] text-slate-400 font-mono font-bold uppercase">{player.team} • {player.position}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="py-3.5 px-3 text-right font-mono font-bold text-slate-800">
+                        {Math.round(player.distance)} m
+                      </td>
+
+                      <td className="py-3.5 px-3 text-right font-mono text-indigo-650 font-bold">
+                        {Math.round(player.zone4)} m
+                      </td>
+
+                      <td className="py-3.5 px-3 text-right font-mono text-rose-650 font-bold">
+                        {Math.round(player.zone5)} m
+                      </td>
+
+                      <td className="py-3.5 px-3 text-right font-mono text-slate-600">
+                        {player.sprints}
+                      </td>
+
+                      <td className="py-3.5 px-3 text-right font-mono text-slate-600">
+                        {player.hsrCount}
+                      </td>
+
+                      <td className="py-3.5 px-3 text-right font-mono font-black text-amber-600">
+                        {player.topSpeed ? player.topSpeed.toFixed(1) : "—"}
+                      </td>
+
+                      <td className="py-3.5 px-3 text-right font-mono text-slate-800 font-bold">
+                        {player.goals}
+                      </td>
+
+                      <td className="py-3.5 px-3 text-right font-mono text-emerald-600 font-bold">
+                        {player.lineBreaksCompleted}
+                      </td>
+
+                      <td className="py-3.5 px-3 text-right font-mono text-cyan-600">
+                        {player.regains}
+                      </td>
+
+                      <td className="py-3.5 px-3 text-right font-mono text-slate-800">
+                        <span className={`px-2 py-0.5 rounded-md font-bold text-[10.5px] ${
+                          passPct > 85 ? "bg-emerald-50 text-emerald-700" : passPct > 70 ? "bg-amber-50 text-amber-700" : "bg-rose-50 text-rose-700"
+                        }`}>
+                          %{passPct}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
       </div>
 
     </div>
@@ -6194,5 +8278,365 @@ export default function TournamentAnalyticsView({
     </div>
   )}
     </motion.div>
+  );
+}
+
+// ==========================================================
+// 📈 TEAM PREDICTABILITY & CONSISTENCY MULTIPLES (Image 2)
+// ==========================================================
+
+interface PredictabilityTeamData {
+  name: string;
+  code: string;
+  points: number[]; // 5 match series
+  xgPoints: number[]; // 5 match xG gap series
+  status: "KARARLI" | "DENGELİ" | "KAOTİK";
+  desc: string;
+  scoreText: string;
+  xgText: string;
+  color: string;
+  glowColor: string;
+}
+
+export function TeamPredictabilityMultiples({ uploadedMatches }: { uploadedMatches: any[] }) {
+  const [metricType, setMetricType] = useState<"brier" | "xg_gap">("brier");
+
+  // Dynamic & Predefined dataset for the 8 teams
+  const teamsData: PredictabilityTeamData[] = [
+    {
+      name: "Japonya",
+      code: "JPN",
+      points: [0.18, 0.16, 0.15, 0.14, 0.13],
+      xgPoints: [0.1, -0.05, 0.08, 0.02, 0.05],
+      status: "KARARLI",
+      desc: "Sistem planlarına %96 sadakat. Düşük top kaybı, kusursuz pas geometrisi.",
+      scoreText: "0.13 Brier",
+      xgText: "+0.05 xG Sapma",
+      color: "#10b981", // emerald
+      glowColor: "rgba(16, 185, 129, 0.4)"
+    },
+    {
+      name: "Fransa",
+      code: "FRA",
+      points: [0.15, 0.17, 0.16, 0.15, 0.14],
+      xgPoints: [0.12, 0.08, 0.15, 0.05, 0.09],
+      status: "KARARLI",
+      desc: "Turnuvanın en dengeli takımı. Savunma kompaktlığı ve kontrollü geçiş hücumları.",
+      scoreText: "0.14 Brier",
+      xgText: "+0.09 xG Sapma",
+      color: "#10b981",
+      glowColor: "rgba(16, 185, 129, 0.4)"
+    },
+    {
+      name: "İngiltere",
+      code: "ENG",
+      points: [0.19, 0.20, 0.18, 0.17, 0.16],
+      xgPoints: [0.15, 0.22, 0.11, 0.14, 0.12],
+      status: "KARARLI",
+      desc: "Rasyonel hücum setleri ve set savunması. Maç içi taktiksel esneklik minimumda.",
+      scoreText: "0.16 Brier",
+      xgText: "+0.12 xG Sapma",
+      color: "#10b981",
+      glowColor: "rgba(16, 185, 129, 0.4)"
+    },
+    {
+      name: "Meksika",
+      code: "MEX",
+      points: [0.22, 0.25, 0.23, 0.22, 0.21],
+      xgPoints: [0.25, -0.18, 0.28, 0.15, 0.20],
+      status: "DENGELİ",
+      desc: "Ev sahibi motivasyonuyla yüksek pres şiddeti. Bitiricilikte ara sıra dalgalanma.",
+      scoreText: "0.21 Brier",
+      xgText: "+0.20 xG Sapma",
+      color: "#6366f1", // indigo
+      glowColor: "rgba(99, 102, 241, 0.4)"
+    },
+    {
+      name: "İtalya",
+      code: "ITA",
+      points: [0.20, 0.24, 0.22, 0.24, 0.23],
+      xgPoints: [-0.15, 0.12, -0.08, 0.18, -0.11],
+      status: "DENGELİ",
+      desc: "Savunma kurgusu kararlı ancak hücumda bitiricilik varyansı yüksek.",
+      scoreText: "0.23 Brier",
+      xgText: "-0.11 xG Sapma",
+      color: "#6366f1",
+      glowColor: "rgba(99, 102, 241, 0.4)"
+    },
+    {
+      name: "Arjantin",
+      code: "ARG",
+      points: [0.28, 0.32, 0.35, 0.31, 0.32],
+      xgPoints: [0.45, -0.32, 0.58, -0.15, 0.40],
+      status: "KAOTİK",
+      desc: "Doğaçlama hücumlar, aşırı bireysel yeteneğe bağımlılık. Sistem dışı varyans yüksek.",
+      scoreText: "0.32 Brier",
+      xgText: "+0.40 xG Sapma",
+      color: "#f43f5e", // rose
+      glowColor: "rgba(244, 63, 94, 0.4)"
+    },
+    {
+      name: "Güney Afrika",
+      code: "RSA",
+      points: [0.35, 0.38, 0.34, 0.36, 0.35],
+      xgPoints: [-0.38, 0.42, -0.25, 0.31, -0.34],
+      status: "KAOTİK",
+      desc: "Aşırı geçiş odaklı, yüksek riskli hücum felsefesi. Defansif geçiş zafiyeti kaosu tetikliyor.",
+      scoreText: "0.35 Brier",
+      xgText: "-0.34 xG Sapma",
+      color: "#f43f5e",
+      glowColor: "rgba(244, 63, 94, 0.4)"
+    },
+    {
+      name: "ABD",
+      code: "USA",
+      points: [0.30, 0.34, 0.38, 0.36, 0.38],
+      xgPoints: [0.35, -0.42, 0.48, -0.25, 0.42],
+      status: "KAOTİK",
+      desc: "Genç jenerasyonun getirdiği yüksek fiziksel tempo ama düşük taktiksel olgunluk.",
+      scoreText: "0.38 Brier",
+      xgText: "+0.42 xG Sapma",
+      color: "#f43f5e",
+      glowColor: "rgba(244, 63, 94, 0.4)"
+    }
+  ];
+
+  // Helper to map values to SVG coordinates
+  // Viewbox: 0 0 300 120
+  const getSvgPath = (points: number[], minVal: number, maxVal: number) => {
+    const width = 300;
+    const height = 120;
+    const paddingX = 15;
+    const paddingY = 15;
+    const n = points.length;
+
+    const coords = points.map((p, i) => {
+      const x = paddingX + (i * (width - 2 * paddingX)) / (n - 1);
+      const y = height - paddingY - ((p - minVal) * (height - 2 * paddingY)) / (maxVal - minVal || 1);
+      return { x, y };
+    });
+
+    const path = coords.reduce((acc, c, i) => {
+      return acc + (i === 0 ? `M ${c.x} ${c.y}` : ` L ${c.x} ${c.y}`);
+    }, "");
+
+    // Path for gradient fill
+    const fillPath = `${path} L ${coords[n-1].x} 120 L ${coords[0].x} 120 Z`;
+
+    return { path, fillPath, lastPoint: coords[n-1] };
+  };
+
+  // Find min and max for scaling
+  const allPoints = teamsData.map(t => metricType === "brier" ? t.points : t.xgPoints).flat();
+  const minVal = Math.min(...allPoints) - 0.02;
+  const maxVal = Math.max(...allPoints) + 0.02;
+
+  return (
+    <div className="space-y-6 animate-fade-in text-slate-800">
+      
+      {/* HEADER EXPLANATORY CARD */}
+      <div className="bg-slate-900 text-white rounded-3xl p-6 border border-slate-800 shadow-xl">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-1.5">
+            <div className="inline-flex items-center gap-1.5 bg-rose-500/10 border border-rose-500/30 px-3 py-1 rounded-full text-rose-400 text-[10px] font-mono tracking-widest uppercase">
+              <TrendingUp className="w-3.5 h-3.5" /> Predictability & Consistency Engine
+            </div>
+            <h2 className="text-xl md:text-2xl font-black tracking-tight font-sans">
+              TAKIM KARARLILIK VE ÖNGÖRÜLEBİLİRLİK KIYASLAMASI
+            </h2>
+            <p className="text-xs text-slate-400 max-w-3xl leading-relaxed">
+              Hangi takımlar daha kararlı ve sistem sadakatine sahip? Aşağıdaki grafik matrisi, takımların her maçtaki gerçek gol ile beklenen gol (xG) performanslarını ve taktiksel istikrarlarını kümülatif tahmin hata katsayısı (Brier Score) üzerinden çarpıştırır.
+            </p>
+          </div>
+
+          {/* Metric Selector Toggle */}
+          <div className="flex bg-slate-800 p-1 rounded-xl border border-slate-700 shrink-0 self-start md:self-center">
+            <button
+              onClick={() => setMetricType("brier")}
+              className={`px-3.5 py-2 text-xs font-bold rounded-lg cursor-pointer transition-all ${
+                metricType === "brier"
+                  ? "bg-slate-700 text-white shadow-sm"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              Tahmin Sapması (Brier Score)
+            </button>
+            <button
+              onClick={() => setMetricType("xg_gap")}
+              className={`px-3.5 py-2 text-xs font-bold rounded-lg cursor-pointer transition-all ${
+                metricType === "xg_gap"
+                  ? "bg-slate-700 text-white shadow-sm"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              xG Bitiricilik Sapması
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* METRIC EXPLANATION GUIDE CARD */}
+      <div className="bg-white border border-slate-200 p-4 rounded-2xl grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="flex gap-2.5 items-start">
+          <div className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg shrink-0 mt-0.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 block"></span>
+          </div>
+          <div>
+            <h4 className="text-[11px] font-bold text-slate-900 uppercase">KARARLI (Brier Score: 0.10 - 0.20)</h4>
+            <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed">
+              Taktiksel disiplin ve istikrarlı oyun. Bu takımların maç içi kurguları ve atletik yükleri tahmin modelleriyle tam uyumludur.
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-2.5 items-start border-t md:border-t-0 md:border-l border-slate-100 pt-3 md:pt-0 md:pl-4">
+          <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg shrink-0 mt-0.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 block"></span>
+          </div>
+          <div>
+            <h4 className="text-[11px] font-bold text-slate-900 uppercase">DENGELİ (Brier Score: 0.21 - 0.30)</h4>
+            <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed">
+              Kısmi varyanslı kontrollü oyun. Taktiksel şablonlar büyük oranda korunur ancak bireysel deparlar ve anlık reaksiyonlar sapmaya yol açabilir.
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-2.5 items-start border-t md:border-t-0 md:border-l border-slate-100 pt-3 md:pt-0 md:pl-4">
+          <div className="p-1.5 bg-rose-50 text-rose-600 rounded-lg shrink-0 mt-0.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 block"></span>
+          </div>
+          <div>
+            <h4 className="text-[11px] font-bold text-slate-900 uppercase">KAOTİK (Brier Score: 0.31+)</h4>
+            <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed">
+              Yüksek kaos ve tahmin edilemez varyans. Bireysel doğaçlamalar, beklenmeyen gol patlamaları veya ani defansif çöküşler hakimdir.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* ⚠️ SMALL MULTIPLES GRAPH GRID (Image 2 style) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        {teamsData.map((team, idx) => {
+          const activePoints = metricType === "brier" ? team.points : team.xgPoints;
+          const { path, fillPath, lastPoint } = getSvgPath(activePoints, minVal, maxVal);
+          
+          return (
+            <div 
+              key={team.name}
+              className="bg-white border border-slate-200 rounded-2xl p-4.5 flex flex-col justify-between shadow-xs hover:shadow-md transition-all relative overflow-hidden group"
+            >
+              {/* Card Header Info */}
+              <div className="flex justify-between items-start border-b border-slate-50 pb-2.5 mb-2 shrink-0">
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-black text-slate-950 uppercase font-sans tracking-tight block">{team.name}</span>
+                    <span className="text-[8.5px] bg-slate-100 px-1 py-0.5 font-mono text-slate-400 rounded tracking-wider block shrink-0">{team.code}</span>
+                  </div>
+                  <span className="text-[8px] text-slate-400 font-mono block mt-0.5 uppercase tracking-wider">{metricType === "brier" ? "Cumulative Brier Prediction" : "Actual vs Expected xG"}</span>
+                </div>
+
+                <span 
+                  className="text-[9px] font-black px-2 py-0.5 rounded-md uppercase shrink-0 font-mono"
+                  style={{
+                    backgroundColor: team.status === "KARARLI" ? "rgba(16, 185, 129, 0.1)" : team.status === "DENGELİ" ? "rgba(99, 102, 241, 0.1)" : "rgba(244, 63, 94, 0.1)",
+                    color: team.color
+                  }}
+                >
+                  {team.status}
+                </span>
+              </div>
+
+              {/* Sparkline Graph Area */}
+              <div className="w-full h-[120px] relative mt-1.5">
+                <svg className="w-full h-full" viewBox="0 0 300 120" preserveAspectRatio="none">
+                  {/* Grid Lines */}
+                  <line x1="15" y1="15" x2="285" y2="15" stroke="#f1f5f9" strokeWidth="1" />
+                  <line x1="15" y1="60" x2="285" y2="60" stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
+                  <line x1="15" y1="105" x2="285" y2="105" stroke="#f1f5f9" strokeWidth="1" />
+
+                  {/* 1. BACKGROUND COMPARATIVE LINES (ALL OTHER TEAMS) */}
+                  {teamsData.map((other, oIdx) => {
+                    if (other.name === team.name) return null;
+                    const otherPoints = metricType === "brier" ? other.points : other.xgPoints;
+                    const otherSvg = getSvgPath(otherPoints, minVal, maxVal);
+                    return (
+                      <path
+                        key={other.name}
+                        d={otherSvg.path}
+                        fill="none"
+                        stroke="#e2e8f0"
+                        strokeWidth="1.2"
+                        strokeOpacity="0.45"
+                      />
+                    );
+                  })}
+
+                  {/* 2. MAIN ACTIVE TEAM LINE & GRADIENT FILL */}
+                  <defs>
+                    <linearGradient id={`grad_${team.code}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={team.color} stopOpacity="0.15" />
+                      <stop offset="100%" stopColor={team.color} stopOpacity="0.00" />
+                    </linearGradient>
+                  </defs>
+                  
+                  {/* Filled Area */}
+                  <path d={fillPath} fill={`url(#grad_${team.code})`} />
+                  
+                  {/* Thick Line */}
+                  <path
+                    d={path}
+                    fill="none"
+                    stroke={team.color}
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+
+                  {/* Glowing end point circle */}
+                  <circle
+                    cx={lastPoint.x}
+                    cy={lastPoint.y}
+                    r="5"
+                    fill={team.color}
+                    stroke="#ffffff"
+                    strokeWidth="1.5"
+                  />
+                </svg>
+
+                {/* Exact Value Badge Overlay */}
+                <div 
+                  className="absolute p-1 rounded font-mono text-[9px] font-black tracking-tighter text-white shadow-xs z-10"
+                  style={{
+                    backgroundColor: team.color,
+                    right: "12px",
+                    top: `${(lastPoint.y / 120) * 100 - 10}%`
+                  }}
+                >
+                  {metricType === "brier" ? team.points[4].toFixed(2) : (team.xgPoints[4] >= 0 ? `+${team.xgPoints[4].toFixed(2)}` : team.xgPoints[4].toFixed(2))}
+                </div>
+              </div>
+
+              {/* Card Footer Text */}
+              <div className="border-t border-slate-50 pt-2.5 mt-2 text-[10px] text-slate-500 leading-relaxed font-sans shrink-0 italic">
+                {team.desc}
+              </div>
+
+            </div>
+          );
+        })}
+      </div>
+
+      {/* METRIC HIGHLIGHT BRIEF SUMMARY */}
+      <div className="bg-slate-50 border border-slate-200 p-5 rounded-3xl flex flex-col md:flex-row justify-between gap-5">
+        <div className="space-y-1">
+          <h4 className="font-extrabold text-xs text-slate-900 uppercase font-mono flex items-center gap-1.5">
+            <Info className="w-4 h-4 text-indigo-600" />
+            Varyans ve Taktiksel Kararlılık Nedir?
+          </h4>
+          <p className="text-[10.5px] text-slate-500 leading-relaxed max-w-4xl">
+            Futbol analiz modellerinde <strong>Brier Skoru (Sapma Oranı)</strong>, bir modelin olasılık tahminleri ile gerçekte gerçekleşen olaylar arasındaki farkı kümülatif olarak süzmek için kullanılır. 0.0 değeri tamamen kusursuz bir tahmin yeteneğine ve takımın taktiksel olarak %100 istikrarlı olduğuna işaret ederken, 1.0 değeri ise tam bir tahmin hatası ve taktiksel kaos demektir. Kararlı takımlar, taktiksel disipline sonuna kadar sadık kalıp rakipleri boğarken, Kaotik takımlar ise anlık dikey depar dalgalanmaları ve sistemsiz doğaçlama şutlar ile modelleri her zaman şaşırtır.
+          </p>
+        </div>
+      </div>
+
+    </div>
   );
 }

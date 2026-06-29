@@ -110,7 +110,7 @@ export default function GuidedChatbotView({
     uploadedMatches.forEach(m => {
       if (m.matchInfo.group) grps.add(cleanGroupName(m.matchInfo.group));
     });
-    return Array.from(grps);
+    return Array.from(grps).sort((a, b) => a.localeCompare(b));
   }, [uploadedMatches]);
 
   // Get list of teams based on selected details
