@@ -3350,10 +3350,12 @@ export default function App() {
           </div>
         </div>
 
-        {/* Ambient golden/indigo glow backgrounds and stars */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-950/40 via-slate-950 to-slate-950 pointer-events-none z-0" />
-        <div className="absolute top-[-10%] left-[20%] w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-3xl pointer-events-none animate-pulse duration-[8000ms]" />
-        <div className="absolute bottom-[-10%] right-[10%] w-[600px] h-[600px] bg-amber-500/5 rounded-full blur-3xl pointer-events-none animate-pulse duration-[12000ms]" />
+        {/* Ambient golden/indigo fluid glow backgrounds */}
+        <div className="absolute inset-0 bg-slate-950 overflow-hidden pointer-events-none z-0">
+          <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] bg-indigo-600/10 rounded-full blur-[130px] pointer-events-none animate-fluid-flow-1" />
+          <div className="absolute bottom-[-20%] right-[-10%] w-[700px] h-[700px] bg-amber-500/8 rounded-full blur-[140px] pointer-events-none animate-fluid-flow-2" />
+          <div className="absolute top-[30%] left-[30%] w-[500px] h-[500px] bg-emerald-500/5 rounded-full blur-[120px] pointer-events-none animate-fluid-flow-3" />
+        </div>
         
         {/* Subtle decorative grid lines */}
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#0f172a_1px,transparent_1px),linear-gradient(to_bottom,#0f172a_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_40%,#000_70%,transparent_100%)] opacity-30 pointer-events-none mix-blend-overlay" />
@@ -3365,7 +3367,21 @@ export default function App() {
           <div className="w-full flex flex-col items-center text-center gap-6 max-w-2xl mb-12">
             
             {/* Logo Wrapper */}
-            <div className="relative group flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md rounded-3xl border border-slate-800/80 shadow-2xl hover:border-amber-500/20 transition-all duration-300">
+            <div 
+              onClick={() => {
+                const logoInput = document.getElementById("entry-logo-input");
+                if (logoInput) logoInput.click();
+              }}
+              className="relative group flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md rounded-3xl border border-slate-800/80 shadow-2xl hover:border-amber-500/30 hover:shadow-amber-500/5 transition-all duration-300 cursor-pointer"
+              title={language === "TR" ? "Logoyu değiştirmek için tıklayın" : "Click to change logo"}
+            >
+              <input 
+                type="file" 
+                id="entry-logo-input" 
+                className="hidden" 
+                accept="image/*"
+                onChange={(e) => e.target.files && handleLogoUpload(e.target.files[0])}
+              />
               {appLogo ? (
                 <div className="relative w-36 h-36 flex items-center justify-center">
                   <img
@@ -3374,24 +3390,11 @@ export default function App() {
                     className="max-w-full max-h-full object-contain rounded-2xl shadow-xl transition-transform duration-300 group-hover:scale-105 animate-fade-in"
                     referrerPolicy="no-referrer"
                   />
-                  {/* Hover Clear Button */}
-                  <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setAppLogo(null);
-                      localStorage.removeItem("fifa_custom_app_logo");
-                      triggerToast("Uygulama logosu kaldırıldı!");
-                    }}
-                    className="absolute -top-2 -right-2 bg-rose-600 hover:bg-rose-700 text-white p-1.5 rounded-full shadow-lg transition-all scale-100 active:scale-95 cursor-pointer flex items-center justify-center"
-                    title="Özel logoyu kaldır"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
                 </div>
               ) : (
                 /* FIFA Gold Trophy Premium SVG badge */
                 <div className="relative flex flex-col items-center justify-center">
-                  <svg className="w-36 h-36 transform hover:scale-105 transition-transform duration-300" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <svg className="w-36 h-36 transform group-hover:scale-105 transition-transform duration-300" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <defs>
                       <radialGradient id="goldGlow" cx="50%" cy="50%" r="50%">
                         <stop offset="0%" stopColor="#fde047" />
@@ -3445,109 +3448,8 @@ export default function App() {
             </div>
           </div>
 
-          {/* Core User Interactions Grid */}
-          <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch mb-12">
-            
-            {/* Logo Manager & Upload Card */}
-            <div className="bg-slate-900/30 backdrop-blur-md p-6 rounded-3xl border border-slate-800 flex flex-col justify-between gap-4 shadow-xl">
-              <div>
-                <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-                  <Upload className="w-4 h-4 text-amber-500 shrink-0" />
-                  {language === "TR" ? "Özel Logo Yükleme & Yönetme" : "Upload & Manage Custom Logo"}
-                </h3>
-                <p className="text-xs text-slate-400 mt-1">
-                  {language === "TR" 
-                    ? "Uygulamanın genelinde (analiz sayfalarında, başlıkta ve PDF çıktı tasarımlarında) kullanılacak istediğiniz görsele ait resmi buraya yükleyin." 
-                    : "Upload your custom image to be used as the application logo across all analytics views, headers, and PDF report prints."}
-                </p>
-              </div>
-
-              {/* Upload Drag area */}
-              <div 
-                className="flex-1 min-h-[140px] border-2 border-dashed border-slate-800 hover:border-amber-500/40 rounded-2xl flex flex-col items-center justify-center p-4 text-center cursor-pointer hover:bg-slate-900/15 transition-all text-slate-400 relative"
-                onClick={() => {
-                  const logoInput = document.getElementById("entry-logo-input");
-                  if (logoInput) logoInput.click();
-                }}
-              >
-                <input 
-                  type="file" 
-                  id="entry-logo-input" 
-                  className="hidden" 
-                  accept="image/*"
-                  onChange={(e) => e.target.files && handleLogoUpload(e.target.files[0])}
-                />
-                
-                {appLogo ? (
-                  <div className="flex flex-col items-center gap-2 text-indigo-400">
-                    <CheckCircle2 className="w-8 h-8 text-emerald-400 shrink-0" />
-                    <span className="text-xs font-semibold text-slate-200">
-                      {language === "TR" ? "Kanal logonuz başarıyla sisteme kaydedildi!" : "Your custom logo has been successfully saved!"}
-                    </span>
-                    <span className="text-[10px] text-slate-500">
-                      {language === "TR" ? "Logoyu değiştirmek için üzerine tıklayın" : "Click to change logo"}
-                    </span>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="w-10 h-10 bg-slate-900 rounded-full flex items-center justify-center border border-slate-800 text-slate-400 hover:text-amber-500 transition-all">
-                      <Plus className="w-5 h-5 text-amber-500" />
-                    </div>
-                    <span className="text-xs font-bold text-slate-300">
-                      {language === "TR" ? "Resim Seçin veya Sürükleyin" : "Select or Drag Image"}
-                    </span>
-                    <span className="text-[10px] text-slate-500">
-                      {language === "TR" ? "Tüm resim uzantılarını destekler (Max 10MB)" : "Supports all image extensions (Max 10MB)"}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Quick Analytics Summary Stats Card */}
-            <div className="bg-slate-900/30 backdrop-blur-md p-6 rounded-3xl border border-slate-800 flex flex-col justify-between gap-4 shadow-xl">
-              <div>
-                <span className="text-[9px] font-mono tracking-widest uppercase font-bold text-amber-500">
-                  ⚡ INSTANT SYSTEM CAPABILITY
-                </span>
-                <h3 className="text-sm font-bold text-slate-100 mt-1">
-                  {language === "TR" ? "Entegre Analiz Modülleri & Veritabanı" : "Integrated Analysis Modules & Database"}
-                </h3>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3.5">
-                <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-900">
-                  <span className="text-[10px] text-slate-400">{language === "TR" ? "Kayıtlı Maç" : "Saved Matches"}</span>
-                  <div className="text-base font-black text-white font-mono mt-0.5">{uploadedMatches.length} {language === "TR" ? "Rapor" : "Reports"}</div>
-                </div>
-                <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-900">
-                  <span className="text-[10px] text-slate-400">{language === "TR" ? "ML Kümeleme" : "ML Clustering"}</span>
-                  <div className="text-base font-black text-white mt-0.5 font-mono">{language === "TR" ? "Dinamik Roller" : "Dynamic Roles"}</div>
-                </div>
-                <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-900">
-                  <span className="text-[10px] text-slate-400">{language === "TR" ? "Sürat Limitleri" : "Speed Limits"}</span>
-                  <div className="text-base font-black text-white mt-0.5 font-mono">Zone 4 & 5</div>
-                </div>
-                <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-900">
-                  <span className="text-[10px] text-slate-400">{language === "TR" ? "Veri Tabanı" : "Database"}</span>
-                  <div className="text-base font-black text-white mt-0.5 font-mono">IndexedDB</div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 text-xs text-slate-400 border-t border-slate-900/60 pt-3">
-                <Activity className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                <span>
-                  {language === "TR"
-                    ? "IndexedDB yerel veri depolaması sayesinde internetiniz kopsa dahi verileriniz korunur."
-                    : "Your data is kept safe locally using IndexedDB storage even if your connection drops."}
-                </span>
-              </div>
-            </div>
-
-          </div>
-
           {/* Huge ENTER Button with motion hover effects */}
-          <div className="w-full flex justify-center mt-4">
+          <div className="w-full flex justify-center mt-6 mb-12">
             <button
               onClick={handleEnterApp}
               className="px-12 py-4.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 active:from-amber-700 active:to-yellow-700 text-slate-950 font-black tracking-wide uppercase text-sm sm:text-base rounded-2xl shadow-xl shadow-amber-500/10 cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98] text-center flex items-center justify-center gap-3 select-none"
