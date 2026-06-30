@@ -46,13 +46,14 @@ import {
 
 interface PhysicalAnalysisProps {
   sheets: any[]; // List of { name: string, data: any[] }
+  language?: "TR" | "EN";
 }
 
 function cn(...inputs: any[]) {
   return inputs.filter(Boolean).join(" ");
 }
 
-export function PhysicalAnalysis({ sheets }: PhysicalAnalysisProps) {
+export function PhysicalAnalysis({ sheets, language = "TR" }: PhysicalAnalysisProps) {
   const [sheet1Name, setSheet1Name] = useState<string>(sheets[0]?.name || "");
   const [sheet2Name, setSheet2Name] = useState<string>(sheets.length > 1 ? sheets[1]?.name : sheets[0]?.name || "");
   const [viewMode, setViewMode] = useState<"tactical_insight" | "dashboard" | "fitness_dashboard" | "table" | "correlation" | "classification">("tactical_insight");

@@ -25,7 +25,7 @@ import { runVaryansOrchestration, VaryansAnalysisPackage, TeamKpiResult, compute
 import { findPlayerPhoto } from "../lib/db";
 
 const ADV_METRICS_METADATA = [
-  { key: "mLber", code: "M-LBER", name: "İlerlemeci Verimlilik Endeksi", desc: "Pas başına üretilen ilerlemeci aksiyon (çizgi kırma, ceza sahasına sızma, step-in) oranı.", cat: "Hücum & Progresyon" },
+  { key: "mLber", code: "M-LBER", name: "İlerlemeci Verimlilik Endeksi", desc: "Pas başına üretilen ilerlemeci aksiyon (hat kırma, ceza sahasına sızma, step-in) oranı.", cat: "Hücum & Progresyon" },
   { key: "mPprr", code: "M-PPRR", name: "Saf İlerlemeci Risk Oranı", desc: "İlerlemeci aksiyonların toplam isabetsiz paslara oranı. Risk alma verimliliği.", cat: "Hücum & Progresyon" },
   { key: "mCpi", name: "Merkez Delicilik Endeksi", code: "M-CPI", desc: "Tamamlanan hat kırmaların ne kadarının merkez koridorları yardığını gösterir.", cat: "Hücum & Merkez" },
   { key: "mVdr", name: "Dikine Oyun Bağımlılığı", code: "M-VDR", desc: "Tamamlanan her pas başına üretilen başarılı hat kırma sıklığı.", cat: "Hücum & Dikeylik" },
@@ -50,6 +50,7 @@ interface VaryansIntelligenceEngineProps {
   onSelectMatch?: (index: number) => void;
   getTeamFlag?: (teamName: string) => string;
   squadPhotos?: Record<string, { base64: string; fileName: string }>;
+  language?: "TR" | "EN";
 }
 
 interface RenderFlagProps {
@@ -80,8 +81,10 @@ export default function VaryansIntelligenceEngine({
   allMatches = [], 
   onSelectMatch,
   getTeamFlag,
-  squadPhotos
+  squadPhotos,
+  language = "TR"
 }: VaryansIntelligenceEngineProps) {
+  const translate = (tr: string, en: string) => language === "TR" ? tr : en;
   const [activeTab, setActiveTab] = useState<"dna" | "clash" | "territorial" | "shots" | "patterns" | "advanced_stats" | "kpi_cards" | "reference_catalog" | "comparisons">("dna");
   const [advMetricFilter, setAdvMetricFilter] = useState<string>("mLber");
   const [advTeamFilter, setAdvTeamFilter] = useState<"all" | "home" | "away">("all");
@@ -2628,7 +2631,7 @@ export default function VaryansIntelligenceEngine({
                       </span>
                     </div>
                     <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/60">
-                      <span className="text-[10px] text-slate-400 block mb-1">Çizgi Kırma (Line Break)</span>
+                      <span className="text-[10px] text-slate-400 block mb-1">Hat Kırma (Line Break)</span>
                       <span className="text-sm font-bold text-white">
                         {playerStats.poss?.lineBreaksCompleted || 0} / {playerStats.poss?.lineBreaksAttempted || 0}
                       </span>
@@ -2738,7 +2741,7 @@ export default function VaryansIntelligenceEngine({
                             <span className="text-[10px] text-slate-400 font-medium">M-VDR (Dikeylik)</span>
                             <span className="text-xs font-bold text-white font-mono">{playerAdvStats.mVdr ?? "—"}</span>
                           </div>
-                          <span className="text-[9px] text-slate-500 block mt-1 leading-normal">Pas başına çizgi kırma bağımlılığı</span>
+                          <span className="text-[9px] text-slate-500 block mt-1 leading-normal">Pas başına hat kırma bağımlılığı</span>
                         </div>
                       </div>
                     </div>

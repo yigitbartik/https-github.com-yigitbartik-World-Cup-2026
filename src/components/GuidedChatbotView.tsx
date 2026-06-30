@@ -745,22 +745,56 @@ export default function GuidedChatbotView({
 
             {/* Numerator */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] font-mono uppercase text-indigo-605 font-bold">1. Pay Metriği (Üst Değer)</label>
+              <label className="text-[10px] font-mono uppercase text-indigo-600 font-bold">1. Pay Metriği (Üst Değer)</label>
               <select
                 value={numerator}
                 onChange={(e) => setNumerator(e.target.value)}
                 className="bg-indigo-50/20 border border-indigo-150 rounded-xl px-3 py-2 text-xs font-semibold cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500 text-indigo-950"
               >
-                <option value="zone5">🔥 Zone 5 Sprint Mesafesi</option>
-                <option value="zone4">⚡ Zone 4 Yüksek Hızlı Koşu</option>
-                <option value="highSpeedRuns">🏃‍♂️ Toplam Süratli Koşular</option>
-                <option value="lineBreaksCompleted">🎯 Başarılı Hat Kıran Paslar</option>
-                <option value="goals">⚽ Toplam Gol Sayısı</option>
-                <option value="attemptsAtGoal">🏹 Top Şut Girişimi</option>
-                <option value="passesCompleted">🧱 Başarılı Paslar</option>
-                <option value="takeOns">⚡ Başarılı Çalımlar</option>
-                <option value="interceptions">📐 Pas Arası Engeller</option>
-                <option value="regains">📈 Top Geri Kazanımları</option>
+                <optgroup label="Taktiksel & Hücum (Attacking & Possession)">
+                  <option value="goals">⚽ Atılan Gol Sayısı</option>
+                  <option value="attemptsAtGoal">🏹 Şut Girişimleri</option>
+                  <option value="passesCompleted">🧱 Başarılı Paslar</option>
+                  <option value="passesAttempted">🧱 Denenen Toplam Paslar</option>
+                  <option value="switchesOfPlay">🔄 Oyun Yönü Değiştirme (Switches)</option>
+                  <option value="crossesCompleted">📐 Başarılı Ortalar</option>
+                  <option value="crossesAttempted">📐 Denenen Ortalar</option>
+                  <option value="lineBreaksCompleted">🎯 Başarılı Hat Kıran Paslar</option>
+                  <option value="lineBreaksAttempted">🎯 Denenen Hat Kıran Paslar</option>
+                  <option value="ballProgressions">📈 Ceza Sahasına Sızmalar / Progresyonlar</option>
+                  <option value="takeOns">⚡ Başarılı Çalımlar / Take-Ons</option>
+                  <option value="stepIns">👣 Savunmadan Çıkışlar / Step-Ins</option>
+                </optgroup>
+                <optgroup label="Defansif & Mücadele (Defensive & Duels)">
+                  <option value="regains">📈 Top Geri Kazanımları (Regains)</option>
+                  <option value="tackles">🤺 Top Çalmalar (Tackles)</option>
+                  <option value="interceptions">📐 Pas Arası Engeller (Interceptions)</option>
+                  <option value="blocks">🛡️ Şut/Pas Blokları (Blocks)</option>
+                  <option value="clearances">🧹 Tehlike Uzaklaştırma (Clearances)</option>
+                  <option value="recoveries">🔄 Sahipsiz Top Kazanma (Recoveries)</option>
+                  <option value="defensiveDuels">⚔️ Savunma İkili Mücadeleleri</option>
+                  <option value="duelsWon">🏆 Kazanılan Toplam İkili Mücadeleler</option>
+                  <option value="duelsWonAerial">☁️ Kazanılan Hava Topu Mücadeleleri</option>
+                  <option value="duelsWonPhysical">💪 Kazanılan Fiziksel Mücadeleler</option>
+                  <option value="pressingDirect">⚡ Direkt Pres / Baskı</option>
+                  <option value="pressingIndirect">🛡️ İndirekt Pres / Baskı</option>
+                  <option value="possessionContestsWon">🤼 Kazanılan Sahipsiz Top Mücadeleleri</option>
+                  <option value="looseBallReceptions">⚽ Sahipsiz Topu Alıp Buluşmalar</option>
+                </optgroup>
+                <optgroup label="Fiziksel & Atletik (Physical & Athletic)">
+                  <option value="totalDistance">🏃‍♂️ Toplam Koşu Mesafesi (m)</option>
+                  <option value="zone1">🚶‍♂️ Zone 1 Yürüme Mesafesi (m)</option>
+                  <option value="zone2">🏃‍♂️ Zone 2 Jogging Mesafesi (m)</option>
+                  <option value="zone3">🏃‍♂️ Zone 3 Aktif Koşu Mesafesi (m)</option>
+                  <option value="zone4">⚡ Zone 4 Yüksek Hızlı Koşu Mesafesi (m)</option>
+                  <option value="zone5">🔥 Zone 5 Sprint Mesafesi (m)</option>
+                  <option value="highSpeedRuns">🏃‍♂️ Toplam Süratli Koşular (Zone 4+5)</option>
+                  <option value="sprints">🔥 Süratli Deparlar / Sprints</option>
+                  <option value="topSpeed">🚀 Maksimum Ulaşılan Hız (km/h)</option>
+                </optgroup>
+                <optgroup label="Genel (General)">
+                  <option value="gp">🏟️ Oynanan Maç Sayısı (gp)</option>
+                </optgroup>
               </select>
             </div>
 
@@ -768,16 +802,37 @@ export default function GuidedChatbotView({
 
             {/* Denominator */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] font-mono uppercase text-rose-605 font-bold">2. Payda Metriği (Alt Bölen)</label>
+              <label className="text-[10px] font-mono uppercase text-rose-600 font-bold">2. Payda Metriği (Alt Bölen)</label>
               <select
                 value={denominator}
                 onChange={(e) => setDenominator(e.target.value)}
                 className="bg-rose-50/20 border border-rose-150 rounded-xl px-3 py-2 text-xs font-semibold cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500 text-rose-950"
               >
-                <option value="totalDistance">📈 Toplam Koşu Mesafesi (m)</option>
-                <option value="gp">🏟️ Oynanan Maç Sayısı (gp)</option>
-                <option value="passesAttempted">🧱 Denenen Toplam Pas Sayısı</option>
-                <option value="attemptsAtGoal">🏹 Top Şut Girişimi</option>
+                <optgroup label="Genel & Süre">
+                  <option value="gp">🏟️ Oynanan Maç Sayısı (gp)</option>
+                </optgroup>
+                <optgroup label="Fiziksel & Atletik (Physical & Athletic)">
+                  <option value="totalDistance">🏃‍♂️ Toplam Koşu Mesafesi (m)</option>
+                  <option value="zone1">🚶‍♂️ Zone 1 Yürüme Mesafesi (m)</option>
+                  <option value="zone2">🏃‍♂️ Zone 2 Jogging Mesafesi (m)</option>
+                  <option value="zone3">🏃‍♂️ Zone 3 Aktif Koşu Mesafesi (m)</option>
+                  <option value="zone4">⚡ Zone 4 Yüksek Hızlı Koşu Mesafesi (m)</option>
+                  <option value="zone5">🔥 Zone 5 Sprint Mesafesi (m)</option>
+                  <option value="highSpeedRuns">🏃‍♂️ Toplam Süratli Koşular (Zone 4+5)</option>
+                  <option value="sprints">🔥 Süratli Deparlar / Sprints</option>
+                </optgroup>
+                <optgroup label="Taktiksel & Hücum (Attacking & Possession)">
+                  <option value="passesAttempted">🧱 Denenen Toplam Pas Sayısı</option>
+                  <option value="passesCompleted">🧱 Başarılı Paslar</option>
+                  <option value="attemptsAtGoal">🏹 Top Şut Girişimi</option>
+                  <option value="lineBreaksAttempted">🎯 Denenen Hat Kıran Paslar</option>
+                  <option value="crossesAttempted">📐 Denenen Toplam Ortalar</option>
+                </optgroup>
+                <optgroup label="Defansif & Mücadele (Defensive & Duels)">
+                  <option value="defensiveDuels">⚔️ Savunma İkili Mücadeleleri</option>
+                  <option value="duelsWon">🏆 Kazanılan Toplam İkili Mücadeleler</option>
+                  <option value="regains">📈 Top Geri Kazanımları (Regains)</option>
+                </optgroup>
               </select>
             </div>
 
@@ -977,10 +1032,10 @@ export default function GuidedChatbotView({
             <div className="flex flex-col gap-5">
               {funnelChartData.length > 0 ? (
                 <div className="h-64 filter-drop">
-                  <ResponsiveContainer width="105%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%">
                     <BarChart
                       data={funnelChartData}
-                      margin={{ top: 10, right: 20, left: -25, bottom: 5 }}
+                      margin={{ top: 10, right: 20, left: -15, bottom: 5 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                       <XAxis
@@ -1068,10 +1123,10 @@ export default function GuidedChatbotView({
 
               {customRatioChartData.length > 0 ? (
                 <div className="h-64">
-                  <ResponsiveContainer width="105%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%">
                     <BarChart
                       data={customRatioChartData}
-                      margin={{ top: 10, right: 20, left: -25, bottom: 5 }}
+                      margin={{ top: 10, right: 20, left: -15, bottom: 5 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                       <XAxis

@@ -40,13 +40,17 @@ import {
 
 interface FootballHackersLabProps {
   sheets: any[]; // List of { name: string, data: any[] }
+  language?: "TR" | "EN";
 }
 
 function cn(...inputs: any[]) {
   return inputs.filter(Boolean).join(" ");
 }
 
-export function FootballHackersLab({ sheets }: FootballHackersLabProps) {
+export function FootballHackersLab({ sheets, language = "TR" }: FootballHackersLabProps) {
+  const translate = React.useCallback((tr: string, en: string) => {
+    return language === "TR" ? tr : en;
+  }, [language]);
   // If no sheets, show empty state
   if (!sheets || sheets.length === 0) {
     return (

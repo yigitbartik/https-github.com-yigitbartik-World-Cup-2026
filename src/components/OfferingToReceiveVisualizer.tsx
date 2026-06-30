@@ -6,11 +6,13 @@ import { Sliders, ToggleLeft, Activity, Info, Trophy, User } from "lucide-react"
 interface OfferingToReceiveVisualizerProps {
   matchData: MatchReport;
   squadPhotos?: Record<string, { base64: string }>;
+  language?: string;
 }
 
 export default function OfferingToReceiveVisualizer({
   matchData,
-  squadPhotos = {}
+  squadPhotos = {},
+  language = "TR"
 }: OfferingToReceiveVisualizerProps) {
   // Combine all players from both teams who have offering data
   const playersList = React.useMemo(() => {
@@ -107,16 +109,18 @@ export default function OfferingToReceiveVisualizer({
         <div>
           <h3 className="font-sans font-bold text-sm text-slate-905 flex items-center gap-1.5">
             <span className="p-1 px-2 bg-indigo-50 text-indigo-700 rounded-lg font-mono text-xs font-black">ACTIVE</span>
-            Offensive Space Creation: Offering to Receive Visualizer
+            {language === "TR" ? "Hücumda Alan Yaratma: Pas Seçeneği Olma Analizi" : "Offensive Space Creation: Offering to Receive Visualizer"}
           </h3>
           <p className="text-[10.5px] text-slate-400 font-sans tracking-wide mt-0.5">
-            Analyze where and how players offer themselves to receives. Interactive spatial overlay on the attacking pitch.
+            {language === "TR" ? "Oyuncuların pas almak için kendilerini nasıl boşa çıkardıklarını inceleyin. Sahadaki interaktif görsel yerleşim." : "Analyze where and how players offer themselves to receives. Interactive spatial overlay on the attacking pitch."}
           </p>
         </div>
 
         {/* Dropdown to select a player */}
         <div className="flex items-center gap-2">
-          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Select Target Player:</label>
+          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+            {language === "TR" ? "Oyuncu Seçin:" : "Select Target Player:"}
+          </label>
           <select
             value={selectedPlayerName}
             onChange={(e) => setSelectedPlayerName(e.target.value)}

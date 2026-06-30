@@ -6,11 +6,13 @@ import { Sliders, HelpCircle, Activity, Play, Milestone } from "lucide-react";
 interface MovementToReceiveVisualizerProps {
   matchData: MatchReport;
   squadPhotos?: Record<string, { base64: string }>;
+  language?: string;
 }
 
 export default function MovementToReceiveVisualizer({
   matchData,
-  squadPhotos = {}
+  squadPhotos = {},
+  language = "TR"
 }: MovementToReceiveVisualizerProps) {
   // Combine all players from both teams who have movement details
   const playersList = React.useMemo(() => {
@@ -93,16 +95,18 @@ export default function MovementToReceiveVisualizer({
         <div>
           <h3 className="font-sans font-bold text-sm text-slate-905 flex items-center gap-1.5">
             <span className="p-1 px-2 bg-emerald-50 text-emerald-700 rounded-lg font-mono text-xs font-black">SPATIAL RUNS</span>
-            Dynamic Runs: Movement to Receive Visualizer
+            {language === "TR" ? "Hücum Koşuları: Pas Almak İçin Hareketlenme Analizi" : "Dynamic Runs: Movement to Receive Visualizer"}
           </h3>
           <p className="text-[10.5px] text-slate-400 font-sans tracking-wide mt-0.5">
-            Map off-the-ball tactical run movements. Filter by dynamic, penetrative styles on the graphic grid.
+            {language === "TR" ? "Topsuz alandaki taktiksel koşu hareketlerini haritalandırın. Grafik alanından dinamik ve sızıcı koşu tiplerini inceleyin." : "Map off-the-ball tactical run movements. Filter by dynamic, penetrative styles on the graphic grid."}
           </p>
         </div>
 
         {/* Dropdown to select a player */}
         <div className="flex items-center gap-2">
-          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Select Target Player:</label>
+          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+            {language === "TR" ? "Oyuncu Seçin:" : "Select Target Player:"}
+          </label>
           <select
             value={selectedPlayerName}
             onChange={(e) => setSelectedPlayerName(e.target.value)}

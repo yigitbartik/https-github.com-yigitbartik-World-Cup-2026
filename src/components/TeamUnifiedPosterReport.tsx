@@ -183,6 +183,77 @@ export default function TeamUnifiedPosterReport({ allMatches }: TeamUnifiedPoste
     };
   }, [allMatches, selectedTeam]);
 
+  // Dynamically map starting XI players of the selected team to the tactical board
+  const tacticalPlayers = useMemo(() => {
+    // Find the first match where the selected team played
+    const match = allMatches.find(m => m?.matchInfo?.homeTeam === selectedTeam || m?.matchInfo?.awayTeam === selectedTeam);
+    const isHome = match?.matchInfo?.homeTeam === selectedTeam;
+    const starting = (isHome ? match?.homeTeamLineup?.starting : match?.awayTeamLineup?.starting) || [];
+
+    // Fallback if no match or empty lineup
+    if (!match || starting.length === 0) {
+      return {
+        gk: { name: "Mert Günok", number: 1 },
+        lb: { name: "Ferdi K.", number: 20 },
+        lcb: { name: "Abdülkerim", number: 14 },
+        rcb: { name: "Merih D.", number: 3 },
+        rb: { name: "Mert Müldür", number: 18 },
+        lcm: { name: "İsmail Y.", number: 16 },
+        rcm: { name: "Kaan Ayhan", number: 22 },
+        am: { name: "Hakan Ç.", number: 10 },
+        lw: { name: "Kenan Y.", number: 11 },
+        cf: { name: "Barış Alper", number: 21 },
+        rw: { name: "Arda Güler", number: 8 }
+      };
+    }
+
+    let playersList = [...starting];
+
+    // Separate players into approximate positions
+    const gkPlayer = playersList.find(p => p?.position?.toUpperCase().includes("GK") || p?.position?.toUpperCase() === "G" || p?.number === 1) || playersList[0] || { name: "-", number: 0 };
+    
+    // Filter out goalkeeper from remaining list
+    const fieldPlayers = playersList.filter(p => p !== gkPlayer);
+
+    // Let's simple-slice field players or match by their position strings
+    const defenders = fieldPlayers.filter(p => p?.position?.toUpperCase().includes("DF") || p?.position?.toUpperCase().includes("CB") || p?.position?.toUpperCase().includes("LB") || p?.position?.toUpperCase().includes("RB") || p?.position?.toUpperCase().includes("B"));
+    const midfielders = fieldPlayers.filter(p => !defenders.includes(p) && (p?.position?.toUpperCase().includes("MF") || p?.position?.toUpperCase().includes("CM") || p?.position?.toUpperCase().includes("DM") || p?.position?.toUpperCase().includes("AM") || p?.position?.toUpperCase().includes("M")));
+    const forwards = fieldPlayers.filter(p => !defenders.includes(p) && !midfielders.includes(p));
+
+    const remainingField = [...fieldPlayers];
+    const takeOne = (list: any[], filterFn: (p: any) => boolean) => {
+      const foundIdx = list.findIndex(filterFn);
+      if (foundIdx !== -1) {
+        const p = list[foundIdx];
+        list.splice(foundIdx, 1);
+        const rIdx = remainingField.findIndex(x => x.name === p.name);
+        if (rIdx !== -1) remainingField.splice(rIdx, 1);
+        return p;
+      }
+      if (remainingField.length > 0) {
+        const p = remainingField[0];
+        remainingField.shift();
+        return p;
+      }
+      return { name: "-", number: 0 };
+    };
+
+    const lb = takeOne(defenders, p => p?.position?.toUpperCase().includes("L") || p?.position?.toUpperCase() === "LB");
+    const rb = takeOne(defenders, p => p?.position?.toUpperCase().includes("R") || p?.position?.toUpperCase() === "RB");
+    const lcb = takeOne(defenders, () => true);
+    const rcb = takeOne(defenders, () => true);
+
+    const lcm = takeOne(midfielders, p => p?.position?.toUpperCase().includes("L") || p?.position?.toUpperCase() === "LCM" || p?.position?.toUpperCase() === "DM");
+    const rcm = takeOne(midfielders, p => p?.position?.toUpperCase().includes("R") || p?.position?.toUpperCase() === "RCM" || p?.position?.toUpperCase() === "CM");
+    const am = takeOne(midfielders, () => true);
+
+    const lw = takeOne(forwards, p => p?.position?.toUpperCase().includes("L") || p?.position?.toUpperCase() === "LW");
+    const rw = takeOne(forwards, p => p?.position?.toUpperCase().includes("R") || p?.position?.toUpperCase() === "RW");
+    const cf = takeOne(forwards, () => true);
+
+    return { gk: gkPlayer, lb, lcb, rcb, rb, lcm, rcm, am, lw, cf, rw };
+  }, [allMatches, selectedTeam]);
+
   // Helper parser
   const safeInt = (val: any, fallback = 0) => {
     if (typeof val === "number") return val;
@@ -1046,8 +1117,8 @@ export default function TeamUnifiedPosterReport({ allMatches }: TeamUnifiedPoste
                       animate={{ y: tacticalShapeMode === "in_possession" ? 10 : 35, x: tacticalShapeMode === "in_possession" ? -10 : 5 }}
                       className="flex flex-col items-center cursor-help"
                     >
-                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">11</div>
-                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">Kenan Y.</span>
+                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">{tacticalPlayers.lw?.number || 11}</div>
+                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">{tacticalPlayers.lw?.name || "LW"}</span>
                     </motion.div>
                     
                     {/* CF / ST */}
@@ -1055,8 +1126,8 @@ export default function TeamUnifiedPosterReport({ allMatches }: TeamUnifiedPoste
                       animate={{ y: tacticalShapeMode === "in_possession" ? 0 : 40 }}
                       className="flex flex-col items-center cursor-help"
                     >
-                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">21</div>
-                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">Barış Alper</span>
+                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">{tacticalPlayers.cf?.number || 21}</div>
+                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">{tacticalPlayers.cf?.name || "CF"}</span>
                     </motion.div>
 
                     {/* RW */}
@@ -1064,8 +1135,8 @@ export default function TeamUnifiedPosterReport({ allMatches }: TeamUnifiedPoste
                       animate={{ y: tacticalShapeMode === "in_possession" ? 10 : 35, x: tacticalShapeMode === "in_possession" ? 10 : -5 }}
                       className="flex flex-col items-center cursor-help"
                     >
-                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">8</div>
-                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">Arda Güler</span>
+                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">{tacticalPlayers.rw?.number || 8}</div>
+                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">{tacticalPlayers.rw?.name || "RW"}</span>
                     </motion.div>
                   </div>
 
@@ -1075,8 +1146,8 @@ export default function TeamUnifiedPosterReport({ allMatches }: TeamUnifiedPoste
                       animate={{ y: tacticalShapeMode === "in_possession" ? 10 : 35 }}
                       className="flex flex-col items-center cursor-help"
                     >
-                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">10</div>
-                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">Hakan Ç.</span>
+                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">{tacticalPlayers.am?.number || 10}</div>
+                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">{tacticalPlayers.am?.name || "AM"}</span>
                     </motion.div>
                   </div>
 
@@ -1087,8 +1158,8 @@ export default function TeamUnifiedPosterReport({ allMatches }: TeamUnifiedPoste
                       animate={{ y: tacticalShapeMode === "in_possession" ? 15 : 30, x: tacticalShapeMode === "in_possession" ? -5 : 5 }}
                       className="flex flex-col items-center cursor-help"
                     >
-                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">16</div>
-                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">İsmail Y.</span>
+                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">{tacticalPlayers.lcm?.number || 16}</div>
+                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">{tacticalPlayers.lcm?.name || "LCM"}</span>
                     </motion.div>
 
                     {/* RCM */}
@@ -1096,8 +1167,8 @@ export default function TeamUnifiedPosterReport({ allMatches }: TeamUnifiedPoste
                       animate={{ y: tacticalShapeMode === "in_possession" ? 15 : 30, x: tacticalShapeMode === "in_possession" ? 5 : -5 }}
                       className="flex flex-col items-center cursor-help"
                     >
-                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">22</div>
-                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">Kaan Ayhan</span>
+                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">{tacticalPlayers.rcm?.number || 22}</div>
+                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">{tacticalPlayers.rcm?.name || "RCM"}</span>
                     </motion.div>
                   </div>
 
@@ -1108,8 +1179,8 @@ export default function TeamUnifiedPosterReport({ allMatches }: TeamUnifiedPoste
                       animate={{ y: tacticalShapeMode === "in_possession" ? -25 : 10, x: tacticalShapeMode === "in_possession" ? -15 : 5 }}
                       className="flex flex-col items-center cursor-help"
                     >
-                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">20</div>
-                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">Ferdi K.</span>
+                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">{tacticalPlayers.lb?.number || 20}</div>
+                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">{tacticalPlayers.lb?.name || "LB"}</span>
                     </motion.div>
 
                     {/* LCB */}
@@ -1117,8 +1188,8 @@ export default function TeamUnifiedPosterReport({ allMatches }: TeamUnifiedPoste
                       animate={{ y: tacticalShapeMode === "in_possession" ? 5 : 20, x: tacticalShapeMode === "in_possession" ? -5 : 5 }}
                       className="flex flex-col items-center cursor-help"
                     >
-                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">14</div>
-                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">Abdülkerim</span>
+                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">{tacticalPlayers.lcb?.number || 14}</div>
+                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">{tacticalPlayers.lcb?.name || "LCB"}</span>
                     </motion.div>
 
                     {/* RCB */}
@@ -1126,8 +1197,8 @@ export default function TeamUnifiedPosterReport({ allMatches }: TeamUnifiedPoste
                       animate={{ y: tacticalShapeMode === "in_possession" ? 5 : 20, x: tacticalShapeMode === "in_possession" ? 5 : -5 }}
                       className="flex flex-col items-center cursor-help"
                     >
-                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">3</div>
-                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">Merih D.</span>
+                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">{tacticalPlayers.rcb?.number || 3}</div>
+                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">{tacticalPlayers.rcb?.name || "RCB"}</span>
                     </motion.div>
 
                     {/* RB */}
@@ -1135,16 +1206,16 @@ export default function TeamUnifiedPosterReport({ allMatches }: TeamUnifiedPoste
                       animate={{ y: tacticalShapeMode === "in_possession" ? -25 : 10, x: tacticalShapeMode === "in_possession" ? 15 : -5 }}
                       className="flex flex-col items-center cursor-help"
                     >
-                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">18</div>
-                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">Mert Müldür</span>
+                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">{tacticalPlayers.rb?.number || 18}</div>
+                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">{tacticalPlayers.rb?.name || "RB"}</span>
                     </motion.div>
                   </div>
 
                   {/* GOALKEEPER */}
                   <div className="flex justify-center items-center -mb-4">
                     <div className="flex flex-col items-center">
-                      <div className="w-7 h-7 rounded-full bg-amber-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">1</div>
-                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">Mert Günok</span>
+                      <div className="w-7 h-7 rounded-full bg-amber-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">{tacticalPlayers.gk?.number || 1}</div>
+                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">{tacticalPlayers.gk?.name || "GK"}</span>
                     </div>
                   </div>
 

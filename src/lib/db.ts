@@ -636,3 +636,29 @@ export function findPlayerPhoto(
 
   return null;
 }
+
+export async function saveAppLogoToDB(base64: string): Promise<void> {
+  try {
+    const configDocRef = doc(firestoreDb, "settings", "app_config");
+    await setDoc(configDocRef, {
+      appLogo: base64,
+      updatedAt: new Date().toISOString()
+    });
+  } catch (err) {
+    console.warn("Firestore saveAppLogoToDB failed:", err);
+  }
+}
+
+export async function getAppLogoFromDB(): Promise<string | null> {
+  try {
+    const configDocRef = doc(firestoreDb, "settings", "app_config");
+    const docSnap = await getDoc(configDocRef);
+    if (docSnap.exists()) {
+      return docSnap.data().appLogo || null;
+    }
+  } catch (err) {
+    console.warn("Firestore getAppLogoFromDB failed:", err);
+  }
+  return null;
+}
+

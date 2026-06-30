@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { MatchReport } from "../data/mexico_south_rich_data";
 import {
   ResponsiveContainer,
@@ -39,7 +39,25 @@ export function PerformanceTrends({ uploadedMatches, language = "TR" }: Performa
   }, [uploadedMatches]);
 
   const [selectedTeam, setSelectedTeam] = useState<string>("Mexico");
-  const [activeMetric, setActiveMetric] = useState<"shot_quality" | "finishing_efficiency" | "possession" | "line_breaks" | "any">("shot_quality");
+  const [activeMetric, setActiveMetric] = useState<
+    | "shot_quality"
+    | "finishing_efficiency"
+    | "possession"
+    | "line_breaks"
+    | "xg"
+    | "crosses"
+    | "distance"
+    | "attemptsAtGoal"
+    | "goals"
+    | "any"
+  >("shot_quality");
+
+  // Synchronize selected team when list of teams updates
+  useEffect(() => {
+    if (allTeams.length > 0 && !allTeams.includes(selectedTeam)) {
+      setSelectedTeam(allTeams[0]);
+    }
+  }, [allTeams, selectedTeam]);
 
   // Emoji flag helper
   const getTeamFlagSymbol = React.useCallback((teamName: string): string => {
@@ -82,6 +100,8 @@ export function PerformanceTrends({ uploadedMatches, language = "TR" }: Performa
       const attempts = parseAttempts(stats.attemptsAtGoal);
       const xg = stats.xG || 1.0;
       const goals = isHome ? match.matchInfo.homeScore : match.matchInfo.awayScore;
+      const crosses = stats.crosses || 0;
+      const distance = stats.distanceCovered || 0;
 
       // 1. Shot Quality = xG / Şut sayısı
       const shotQuality = attempts > 0 ? xg / attempts : 0.1;
@@ -96,6 +116,11 @@ export function PerformanceTrends({ uploadedMatches, language = "TR" }: Performa
         finishingEfficiency: Math.round(finishingEfficiency * 100) / 100,
         possession: stats.possession,
         lineBreaks: stats.completedLineBreaks,
+        xg: Number(xg.toFixed(2)),
+        crosses: crosses,
+        distance: distance,
+        attemptsAtGoal: attempts,
+        goals: goals,
         opponent: oppTeam,
         score
       });
@@ -125,10 +150,40 @@ export function PerformanceTrends({ uploadedMatches, language = "TR" }: Performa
       yAxisLabel: "%"
     },
     line_breaks: {
-      label: translate("Başarılı Çizgi Kırma Pasları", "Completed Line Breaks"),
+      label: translate("Başarılı Hat Kırma Pasları", "Completed Line Breaks"),
       desc: translate("Rakip blokları (defans, orta saha) dikeyde keserek aşan isabetli pas sayıları.", "Accurate passes that completely bypass opponent defensive or midfield lines."),
       color: "#f59e0b", // amber
       yAxisLabel: translate("Pas Sayısı", "Passes")
+    },
+    xg: {
+      label: translate("Gol Beklentisi (xG)", "Expected Goals (xG)"),
+      desc: translate("Takımın maç boyu yarattığı gol pozisyonlarının toplam kalitesi ve xG değeri.", "The combined expected goals (xG) score representing overall chance creation quality."),
+      color: "#a855f7", // purple
+      yAxisLabel: "xG"
+    },
+    crosses: {
+      label: translate("Orta Girişimleri (Adet)", "Crosses Attempted"),
+      desc: translate("Takımın maç boyunca kanatlardan gerçekleştirdiği toplam orta deparları.", "The total number of crosses attempted from the wings during the match."),
+      color: "#06b6d4", // cyan
+      yAxisLabel: translate("Orta Adedi", "Crosses")
+    },
+    distance: {
+      label: translate("Koşu Mesafesi (km)", "Distance Covered (km)"),
+      desc: translate("Takımın maç süresince katettiği toplam dikey ve yatay mesafe (kilometre).", "The cumulative distance covered in kilometers by the team during the match."),
+      color: "#14b8a6", // teal
+      yAxisLabel: "km"
+    },
+    attemptsAtGoal: {
+      label: translate("Şut Girişimleri (Adet)", "Attempts at Goal (Shots)"),
+      desc: translate("Takımın maç boyu kaleye gönderdiği toplam şut sayısı.", "Total number of shots attempted during the full match duration."),
+      color: "#f97316", // orange
+      yAxisLabel: translate("Şut Adedi", "Shots")
+    },
+    goals: {
+      label: translate("Atılan Goller", "Goals Scored"),
+      desc: translate("Takımın ilgili karşılaşmada kaydettiği gol skoru.", "The total number of goals actually scored by the team in the match."),
+      color: "#ec4899", // pink
+      yAxisLabel: translate("Gol Sayısı", "Goals")
     }
   };
 

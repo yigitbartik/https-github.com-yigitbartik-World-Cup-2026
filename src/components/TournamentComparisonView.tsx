@@ -102,11 +102,22 @@ export function TournamentComparisonView({ uploadedMatches, language = "TR" }: T
   const metricsList = [
     { key: "possession", label_tr: "Topa Sahip Olma (%)", label_en: "Possession (%)", color: "#6366f1" },
     { key: "passCompletion", label_tr: "Pas İsabeti (%)", label_en: "Pass Completion (%)", color: "#10b981" },
-    { key: "lineBreaks", label_tr: "Başarılı Çizgi Kırma (Adet)", label_en: "Completed Line Breaks (Qty)", color: "#f59e0b" },
+    { key: "lineBreaks", label_tr: "Başarılı Hat Kırma (Adet)", label_en: "Completed Line Breaks (Qty)", color: "#f59e0b" },
     { key: "xg", label_tr: "Gol Beklentisi (xG)", label_en: "Expected Goals (xG)", color: "#f43f5e" },
     { key: "finalThird", label_tr: "3. Bölge Girişleri (Adet)", label_en: "3rd Zone Receptions", color: "#8b5cf6" },
     { key: "distance", label_tr: "Koşu Mesafesi (km)", label_en: "Distance Covered (km)", color: "#06b6d4" },
     { key: "goals", label_tr: "Atılan Goller", label_en: "Goals Scored", color: "#ec4899" },
+    { key: "crosses", label_tr: "Orta Girişimleri (Adet)", label_en: "Crosses Attempted", color: "#14b8a6" },
+    { key: "attemptsAtGoal", label_tr: "Şut Girişimleri (Adet)", label_en: "Attempts at Goal (Shots)", color: "#f97316" },
+    { key: "defensivePressures", label_tr: "Savunma Baskıları (Pres)", label_en: "Defensive Pressures", color: "#ef4444" },
+    { key: "receptionsPenaltyArea", label_tr: "Ceza Sahası İçi Buluşmalar", label_en: "Receptions inside Penalty Area", color: "#a855f7" },
+    { key: "inContest", label_tr: "Sahipsiz Top Mücadeleleri %", label_en: "In Contest (%)", color: "#3b82f6" },
+    { key: "totalPasses", label_tr: "Toplam Pas Sayısı", label_en: "Total Passes Attempted", color: "#6b7280" },
+    { key: "defensiveLineBreaks", label_tr: "Defans Hattını Kıran Paslar", label_en: "Defensive Line Breaks", color: "#84cc16" },
+    { key: "ballProgressions", label_tr: "Top Taşıma / İlerleme (Adet)", label_en: "Ball Progressions", color: "#06b6d4" },
+    { key: "forcedTurnovers", label_tr: "Zorlanan Top Kayıpları", label_en: "Forced Turnovers", color: "#14b8a6" },
+    { key: "secondBalls", label_tr: "Dönen Top Kazanımları", label_en: "Second Balls Recovered", color: "#d946ef" },
+    { key: "zone4Sprinting", label_tr: "Bölge 4 Süratli Koşu (km)", label_en: "Zone 4 Low Sprinting (km)", color: "#f43f5e" },
   ];
 
   const currentMetricConfig = metricsList.find(m => m.key === selectedMetric) || metricsList[0];
@@ -146,8 +157,36 @@ export function TournamentComparisonView({ uploadedMatches, language = "TR" }: T
     if (name.includes("italy") || name.includes("italya")) return "🇮🇹";
     if (name.includes("japan") || name.includes("japonya")) return "🇯🇵";
     if (name.includes("turkey") || name.includes("türkiye")) return "🇹🇷";
+    if (name.includes("canada") || name.includes("kanada")) return "🇨🇦";
+    if (name.includes("panama")) return "🇵🇦";
+    if (name.includes("czech") || name.includes("çek")) return "🇨🇿";
+    if (name.includes("korea") || name.includes("kore")) return "🇰🇷";
+    if (name.includes("usa") || name.includes("abd")) return "🇺🇸";
     return "⚽";
   }, []);
+
+  const getTeamShortNameAndFlag = React.useCallback((teamName: string): string => {
+    const flag = getTeamFlagSymbol(teamName);
+    const name = String(teamName).toUpperCase().trim();
+    let code = name.slice(0, 3);
+    if (name.includes("TURK")) code = "TUR";
+    else if (name.includes("MEX")) code = "MEX";
+    else if (name.includes("SOUTH") || name.includes("GÜNEY")) code = "RSA";
+    else if (name.includes("ARG")) code = "ARG";
+    else if (name.includes("BRA")) code = "BRA";
+    else if (name.includes("GER") || name.includes("ALM")) code = "GER";
+    else if (name.includes("FRA")) code = "FRA";
+    else if (name.includes("ESP") || name.includes("İSP")) code = "ESP";
+    else if (name.includes("ITA") || name.includes("İTA")) code = "ITA";
+    else if (name.includes("ENG") || name.includes("İNG")) code = "ENG";
+    else if (name.includes("PAN")) code = "PAN";
+    else if (name.includes("CZE") || name.includes("ÇEK")) code = "CZE";
+    else if (name.includes("KOR")) code = "KOR";
+    else if (name.includes("JAP")) code = "JPN";
+    else if (name.includes("USA") || name.includes("ABD")) code = "USA";
+    else if (name.includes("CAN") || name.includes("KAN")) code = "CAN";
+    return `${flag} ${code}`;
+  }, [getTeamFlagSymbol]);
 
   // Initialize Custom Match pool
   React.useEffect(() => {
@@ -183,6 +222,28 @@ export function TournamentComparisonView({ uploadedMatches, language = "TR" }: T
         return stats.distanceCovered || 0;
       case "goals":
         return isHome ? m.matchInfo.homeScore : m.matchInfo.awayScore;
+      case "crosses":
+        return stats.crosses || 0;
+      case "attemptsAtGoal":
+        return parseNum(stats.attemptsAtGoal || 0);
+      case "defensivePressures":
+        return parseNum(stats.defensivePressures || 0);
+      case "receptionsPenaltyArea":
+        return Math.round((stats.receptionsFinalThird || 40) * 0.4);
+      case "inContest":
+        return stats.inContest || 0;
+      case "totalPasses":
+        return parseNum(stats.totalPasses || 0);
+      case "defensiveLineBreaks":
+        return stats.defensiveLineBreaks || 0;
+      case "ballProgressions":
+        return stats.ballProgressions || 0;
+      case "forcedTurnovers":
+        return stats.forcedTurnovers || 0;
+      case "secondBalls":
+        return stats.secondBalls || 0;
+      case "zone4Sprinting":
+        return stats.zone4Sprinting || 0;
       default:
         return 0;
     }
@@ -253,7 +314,7 @@ export function TournamentComparisonView({ uploadedMatches, language = "TR" }: T
     const metrics = [
       { key: "possession", label: translate("Topa Sahip Olma %", "Possession %") },
       { key: "passCompletion", label: translate("Pas İsabeti %", "Pass Accuracy %") },
-      { key: "lineBreaks", label: translate("Çizgi Kırma (Skor)", "Line Breaks (Score)") },
+      { key: "lineBreaks", label: translate("Hat Kırma (Skor)", "Line Breaks (Score)") },
       { key: "xg", label: translate("Gol Beklentisi (xG)", "Expected Goals (xG)") },
       { key: "finalThird", label: translate("3. Bölge Girişi", "3rd Zone Receptions") },
       { key: "defPressure", label: translate("Defansif Yoğunluk", "Defensive Intensity") }
@@ -589,7 +650,7 @@ export function TournamentComparisonView({ uploadedMatches, language = "TR" }: T
           }`}
         >
           <Zap className="w-4 h-4 text-amber-500" />
-          <span>{translate("Çizgi Kıran Başarı Oranları", "Line Breaks Excellence")}</span>
+          <span>{translate("Hat Kıran Başarı Oranları", "Line Breaks Excellence")}</span>
         </button>
       </div>
 
@@ -709,7 +770,7 @@ export function TournamentComparisonView({ uploadedMatches, language = "TR" }: T
                   <ResponsiveContainer width="100%" height="90%">
                     <BarChart data={computedTeamMetricsList} margin={{ top: 10, right: 10, left: -25, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                      <XAxis dataKey="team" tick={{ fontSize: 9, fontWeight: "bold", fill: "#475569" }} />
+                      <XAxis dataKey="team" tick={{ fontSize: 10, fontWeight: "bold", fill: "#475569" }} tickFormatter={(team) => getTeamShortNameAndFlag(team)} />
                       <YAxis tick={{ fontSize: 8, fill: "#94a3b8" }} />
                       <Tooltip
                         content={({ active, payload }) => {
@@ -899,7 +960,7 @@ export function TournamentComparisonView({ uploadedMatches, language = "TR" }: T
 
                     <div>
                       <div className="flex justify-between text-slate-300 mb-1.5">
-                        <span>{translate("Maç Başına Başarılı Çizgi Kırma", "Completed Line Breaks")}</span>
+                        <span>{translate("Maç Başına Başarılı Hat Kırma", "Completed Line Breaks")}</span>
                         <span className="font-bold text-white">{tournamentDNAAverage.lineBreaks} {translate("Pas", "Passes")}</span>
                       </div>
                       <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
@@ -1314,7 +1375,7 @@ export function TournamentComparisonView({ uploadedMatches, language = "TR" }: T
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={teamDimensionsByPhase} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="team" tick={{ fontSize: 10, fontWeight: "bold" }} />
+                      <XAxis dataKey="team" tick={{ fontSize: 10, fontWeight: "bold" }} tickFormatter={(team) => getTeamShortNameAndFlag(team)} />
                       <YAxis unit="m" />
                       <Tooltip 
                         contentStyle={{ background: "#0f172a", border: "none", borderRadius: "10px", color: "#fff" }}
@@ -1368,10 +1429,10 @@ export function TournamentComparisonView({ uploadedMatches, language = "TR" }: T
               <div>
                 <h3 className="text-sm font-black text-slate-950 uppercase font-mono tracking-wider flex items-center gap-2">
                   <Users className="w-5 h-5 text-indigo-600 animate-pulse" />
-                  {translate("ÇİZGİ KIRAN PASLARDA TAKIMSEL HACİM VE VERİMLİLİK", "TEAM-LEVEL LINE BREAKS VOLUMETRIC ANALYSIS")}
+                  {translate("HAT KIRAN PASLARDA TAKIMSEL HACİM VE VERİMLİLİK", "TEAM-LEVEL LINE BREAKS VOLUMETRIC ANALYSIS")}
                 </h3>
                 <p className="text-xs text-slate-400 mt-1">
-                  {translate("Takımların maç başına gerçekleştirdikleri çizgi kıran (line break) pas deneme sayıları ile bunların başarı oranları (%) kıyası.", "Compare the volume of attempted line breaks vs completion rate (%) at the team level.")}
+                  {translate("Takımların maç başına gerçekleştirdikleri hat kıran (line break) pas deneme sayıları ile bunların başarı oranları (%) kıyası.", "Compare the volume of attempted line breaks vs completion rate (%) at the team level.")}
                 </p>
               </div>
 
@@ -1407,22 +1468,22 @@ export function TournamentComparisonView({ uploadedMatches, language = "TR" }: T
               {/* Bar Chart comparing attempts vs completed */}
               <div className="lg:col-span-2 bg-slate-50 border border-slate-100 p-5 rounded-2xl space-y-4">
                 <h4 className="text-xs font-bold text-slate-800 uppercase font-mono tracking-wider">
-                  {translate("Maç Başına Başarılı / Denenen Çizgi Kıran Pas Oranı", "Avg Attempted vs Completed Line Breaks per Match")}
+                  {translate("Maç Başına Başarılı / Denenen Hat Kıran Pas Oranı", "Avg Attempted vs Completed Line Breaks per Match")}
                 </h4>
 
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={teamLineBreaksStats} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="team" tick={{ fontSize: 10, fontWeight: "bold" }} />
+                      <XAxis dataKey="team" tick={{ fontSize: 10, fontWeight: "bold" }} tickFormatter={(team) => getTeamShortNameAndFlag(team)} />
                       <YAxis />
                       <Tooltip
                         contentStyle={{ background: "#0f172a", border: "none", borderRadius: "10px", color: "#fff" }}
                         formatter={(value) => [`${value} Kez`, ""]}
                       />
                       <Legend wrapperStyle={{ fontSize: 10 }} />
-                      <Bar dataKey="attempted" name={translate("Denenen Çizgi Kıran", "Attempted Breaks")} fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={16} />
-                      <Bar dataKey="completed" name={translate("Başarılı Çizgi Kıran", "Completed Breaks")} fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={16} />
+                      <Bar dataKey="attempted" name={translate("Denenen Hat Kıran", "Attempted Breaks")} fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={16} />
+                      <Bar dataKey="completed" name={translate("Başarılı Hat Kıran", "Completed Breaks")} fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={16} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -1451,7 +1512,7 @@ export function TournamentComparisonView({ uploadedMatches, language = "TR" }: T
                 </div>
 
                 <div className="pt-3 border-t border-slate-200 text-[10px] text-slate-400 bg-slate-100/50 p-2.5 rounded-lg font-mono">
-                  💡 <strong>Çizgi Kırma (Line Break):</strong> Rakip defans veya orta saha blok çizgilerini doğrudan dikey paslaşmalarla (through, around, over) bypass edip pas alıcısını hatların gerisinde topla buluşturma sanatıdır.
+                  💡 <strong>Hat Kırma (Line Break):</strong> Rakip defans veya orta saha blok çizgilerini doğrudan dikey paslaşmalarla (through, around, over) bypass edip pas alıcısını hatların gerisinde topla buluşturma sanatıdır.
                 </div>
               </div>
             </div>
@@ -1463,7 +1524,7 @@ export function TournamentComparisonView({ uploadedMatches, language = "TR" }: T
               <div>
                 <h3 className="text-sm font-black text-slate-955 uppercase font-mono tracking-wider flex items-center gap-2">
                   <Target className="w-5 h-5 text-amber-500 animate-pulse" />
-                  {translate("B. OYUNCU TABANLI SÜPER PENETRASYON (ÇİZGİ KIRMA) MATRİSİ", "B. PLAYER-LEVEL LINE BREAKS CORRELATION MATRIX")}
+                  {translate("B. OYUNCU TABANLI SÜPER PENETRASYON (HAT KIRMA) MATRİSİ", "B. PLAYER-LEVEL LINE BREAKS CORRELATION MATRIX")}
                 </h3>
                 <p className="text-xs text-slate-400 mt-1">
                   {translate("Dikey hat kırma paslarını yüksek hacimde deneyen ve yüksek isabet oranıyla bitiren turnuvanın dahi pasörleri.", "Plotting players across attempted line breaks (Volume) vs. success rate (Efficiency) to isolate elitists.")}
@@ -1548,7 +1609,7 @@ export function TournamentComparisonView({ uploadedMatches, language = "TR" }: T
                             <XAxis 
                               type="number" 
                               dataKey="x" 
-                              name={translate("Toplam Denenen Çizgi Kırma", "Total Attempted Line Breaks")} 
+                              name={translate("Toplam Denenen Hat Kırma", "Total Attempted Line Breaks")} 
                               unit="" 
                               label={{ value: translate("Denenen Pas (Hacim)", "Attempted (Volume)"), position: 'insideBottom', offset: -5, fontSize: 10, fill: '#64748b', fontWeight: 'bold' }} 
                             />

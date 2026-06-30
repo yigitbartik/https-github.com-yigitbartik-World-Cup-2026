@@ -27,7 +27,9 @@ import {
   Trash2,
   Sparkles,
   Database,
-  AlertTriangle
+  AlertTriangle,
+  TrendingUp,
+  LineChart
 } from "lucide-react";
 import { mexicoSouthAfricaMatchData, MatchReport, Shot } from "./data/mexico_south_rich_data";
 import { predefinedSimulatedMatches } from "./data/simulated_matches";
@@ -44,7 +46,9 @@ import {
   saveTeamFlagToDB,
   findPlayerPhoto,
   cleanPlayerName,
-  syncWithFirestore
+  syncWithFirestore,
+  getAppLogoFromDB,
+  saveAppLogoToDB
 } from "./lib/db";
 import ManageSquadPhotosModal from "./components/ManageSquadPhotosModal";
 import OfferingToReceiveVisualizer from "./components/OfferingToReceiveVisualizer";
@@ -57,6 +61,7 @@ import VaryansIntelligenceEngine from "./components/VaryansIntelligenceEngine";
 import TeamUnifiedPosterReport from "./components/TeamUnifiedPosterReport";
 import { TournamentComparisonView } from "./components/TournamentComparisonView";
 import ReportDownloadHub from "./components/ReportDownloadHub";
+import XGAnalysisView from "./components/XGAnalysisView";
 
 const defaultTeamStats = {
   possession: 0,
@@ -380,6 +385,7 @@ function normalizeMatchReport(data: any): MatchReport {
       awayFormation: data.matchInfo?.awayFormation || "",
       homeManager: data.matchInfo?.homeManager || "",
       awayManager: data.matchInfo?.awayManager || "",
+      fileName: data.matchInfo?.fileName || "",
     },
     keyStats: {
       home: { ...defaultTeamStats, ...data.keyStats?.home },
@@ -631,8 +637,21 @@ const MarqueeFlag = ({ country }: { country: string }) => {
           <circle cx="1.5" cy="1" r="0.55" fill="#bc002d" />
         </svg>
       );
-    default:
-      return <span className="text-sm">🏳️</span>;
+    default: {
+      const emojiMap: Record<string, string> = {
+        "ITALY": "🇮🇹",
+        "NETHERLANDS": "🇳🇱",
+        "BELGIUM": "🇧🇪",
+        "PORTUGAL": "🇵🇹",
+        "URUGUAY": "🇺🇾",
+        "SOUTH KOREA": "🇰🇷",
+        "USA": "🇺🇸",
+        "MOROCCO": "🇲🇦",
+        "CANADA": "🇨🇦"
+      };
+      const emoji = emojiMap[norm] || "🏳️";
+      return <span className="text-sm shrink-0 select-none filter drop-shadow-[0_1px_1px_rgba(0,0,0,0.15)]">{emoji}</span>;
+    }
   }
 };
 
@@ -685,7 +704,7 @@ export default function App() {
       const saved = localStorage.getItem("__varyans_global_theme");
       if (saved === "pitch-green" || saved === "studio-dark" || saved === "light") return saved;
     } catch (e) {}
-    return "studio-dark";
+    return "light";
   });
 
   React.useEffect(() => {
@@ -705,6 +724,43 @@ export default function App() {
   const [globalMatchdayFilter, setGlobalMatchdayFilter] = useState<string>("All");
 
   const getMatchdayForMatch = React.useCallback((match: MatchReport, allList: MatchReport[]) => {
+    // Try to get match number from fileName or title
+    let fileName = (match.matchInfo as any).fileName || "";
+    let title = match.matchInfo.title || "";
+    
+    // Check if filename has digits
+    let matchNum: number | null = null;
+    if (fileName) {
+      const matchDigits = fileName.match(/\d+/);
+      if (matchDigits) {
+        matchNum = parseInt(matchDigits[0], 10);
+      }
+    }
+    
+    // If no digit in filename, try to find in title
+    if (matchNum === null && title) {
+      const titleDigits = title.match(/\d+/);
+      if (titleDigits) {
+        matchNum = parseInt(titleDigits[0], 10);
+      }
+    }
+
+    // If still null, try finding by index in the list (1-indexed)
+    if (matchNum === null) {
+      const idx = allList.indexOf(match);
+      if (idx !== -1) {
+        matchNum = idx + 1;
+      }
+    }
+
+    if (matchNum !== null) {
+      if (matchNum >= 1 && matchNum <= 24) return "1";
+      if (matchNum >= 25 && matchNum <= 48) return "2";
+      if (matchNum >= 49 && matchNum <= 72) return "3";
+      if (matchNum >= 73) return "KO";
+    }
+
+    // Default fallback
     const idx = allList.indexOf(match);
     if (idx === -1) return "All";
     const home = match.matchInfo.homeTeam;
@@ -1175,42 +1231,46 @@ export default function App() {
   }, [language]);
 
   const MATCH_LAB_TABS = useMemo(() => [
-    { id: "overview", label: language === "TR" ? "Genel Bakış & Ana İstatistikler" : "Overview & Key Stats" },
-    { id: "shots", label: language === "TR" ? "Şut Zaman Çizelgesi" : "Shot Timeline" },
-    { id: "lineups", label: language === "TR" ? "Kadrolar" : "Lineups" },
-    { id: "passing_networks", label: language === "TR" ? "Pas Ağları" : "Passing Networks" },
-    { id: "phases", label: language === "TR" ? "Oyun Evreleri" : "Phases of Play" },
-    { id: "line_height", label: language === "TR" ? "Takım Boyu / Yükseklik" : "Line Heights" },
-    { id: "line_breaks", label: language === "TR" ? "Çizgi Kırmalar" : "Line Breaks" },
-    { id: "crosses", label: language === "TR" ? "Açık Oyun Ortaları" : "Crosses Open Play" },
-    { id: "offering", label: language === "TR" ? "Kabul Etmeye Sunma" : "Offering to Receive" },
-    { id: "movement", label: language === "TR" ? "Kabul Etme Koşuları" : "Movement to Receive" },
-    { id: "goalkeeping", label: language === "TR" ? "Kalecilik" : "Goalkeeping" },
-    { id: "set_plays", label: language === "TR" ? "Duran Toplar" : "Set Plays" }
+    { id: "overview", label: language === "TR" ? "Maç Genel Analiz Raporu" : "General Match Summary & Overview" },
+    { id: "xg_analysis", label: language === "TR" ? "📈 xG Analiz Portalı" : "📈 xG Analysis Portal" },
+    { id: "lineups", label: language === "TR" ? "İlk 11'ler & Taktiksel Dizilişler" : "Squad Lineups & Tactical Formations" },
+    { id: "phases", label: language === "TR" ? "Hücum Aşamaları & Topa Sahip Olma" : "Possession & Play Phase Analysis" },
+    { id: "line_height", label: language === "TR" ? "Defansif Hat Genişliği & Blok Boyları" : "Defensive Line Heights & Block Positions" },
+    { id: "line_breaks", label: language === "TR" ? "Hat Kıran (Blok Kıran) Pas Analizleri" : "Line-Breaking Pass Analytics" },
+    { id: "crosses", label: language === "TR" ? "Kanat Ortaları & Ceza Sahası Girişleri" : "Cross Quality & Box Entries" },
+    { id: "offering", label: language === "TR" ? "Top Almaya Hazır Olma (Pas Seçeneği)" : "Offering to Receive (Open to Receive)" },
+    { id: "movement", label: language === "TR" ? "Pas Almak İçin Hareketlenme (Mobilite)" : "Movement to Receive (Dynamic Runs)" },
+    { id: "goalkeeping", label: language === "TR" ? "Kaleci Kurtarış & Pozisyon Analizi" : "Goalkeeping & Shot-Stopping Analysis" },
+    { id: "shots", label: language === "TR" ? "Şut Tercihleri & Zaman Çizelgesi" : "Shot Decisions & Timeline" },
+    { id: "set_plays", label: language === "TR" ? "Duran Top Organizasyonları & Analizleri" : "Set Plays & Dead Ball Analysis" }
   ], [language]);
 
   const SCOUT_ENGINE_TABS = useMemo(() => [
-    { id: "in_possession", label: language === "TR" ? "Topa Sahipken Oyuncular" : "Player In Possession" },
-    { id: "out_possession", label: language === "TR" ? "Top Rakipteyken Oyuncular" : "Player Out of Possession" },
-    { id: "defensive_actions", label: language === "TR" ? "Savunma Aksiyonları" : "Defensive Actions" },
-    { id: "defensive_pressure", label: language === "TR" ? "Savunma Baskısı" : "Defensive Pressure" },
-    { id: "physical", label: language === "TR" ? "Fiziksel Performans" : "Physical Performance" }
+    { id: "in_possession", label: language === "TR" ? "Ofansif KPI & Hücum Göstergeleri" : "Offensive KPIs & On-the-ball Actions" },
+    { id: "out_possession", label: language === "TR" ? "Defansif KPI & Savunma Göstergeleri" : "Defensive KPIs & Off-the-ball Actions" },
+    { id: "defensive_actions", label: language === "TR" ? "Savunma Müdahaleleri & Top Kazanma" : "Defensive Duels & Ball Recoveries" },
+    { id: "defensive_pressure", label: language === "TR" ? "Pres Şiddeti & Savunma Baskısı" : "Pressing & Defensive Pressure Analytics" },
+    { id: "physical", label: language === "TR" ? "Atletik Performans & Fiziksel Güç" : "Physical Metrics & Athletic Performance" }
   ], [language]);
 
   const TOURNAMENT_INSIGHTS_TABS = useMemo(() => [
-    { id: "tournament_analytics", label: language === "TR" ? "🏆 Turnuva & Grup Analizleri" : "🏆 Tournament & Group Analytics" },
-    { id: "tournament_comparison", label: language === "TR" ? "📊 Turnuva Kıyaslama & DNA" : "📊 Tournament Comparison & DNA" },
-    { id: "varyans_engine", label: language === "TR" ? "⚡ VARYANS Yapay Zeka Hattı" : "⚡ VARYANS Football Intelligence Pipeline" },
-    { id: "football_hackers_lab", label: language === "TR" ? "💻 Football Hackers Lab" : "💻 Football Hackers Lab" },
-    { id: "team_poster_report", label: language === "TR" ? "📋 Takım Birleşik İnfografik Raporu (PDF)" : "📋 Team Unified Poster Report (PDF)" },
-    { id: "tactical_report", label: language === "TR" ? "🧠 Gelişmiş Taktik Rapor & PDF" : "🧠 Advanced Tactical Report & PDF" },
-    { id: "export_hub", label: language === "TR" ? "🚀 Karar Akışı & İndirme İstasyonu" : "🚀 Decision Flow & Export Station" }
+    { id: "tournament_analytics", label: language === "TR" ? "🏆 Turnuva Genel Tablosu & Puan Durumu" : "🏆 Tournament Stage & Group Standings" },
+    { id: "tournament_comparison", label: language === "TR" ? "📊 Takım Karşılaştırma & Turnuva DNA'sı" : "📊 Team Comparison & Tournament DNA" },
+    { id: "xg_analysis", label: language === "TR" ? "📈 xG Analiz Portalı" : "📈 xG Analysis Portal" },
+    { id: "varyans_engine", label: language === "TR" ? "⚡ VARYANS Yapay Zeka (AI) Öneri Motoru" : "⚡ VARYANS AI Recommendation Engine" },
+    { id: "football_hackers_lab", label: language === "TR" ? "💻 Football Hackers SQL Sorgu Laboratuvarı" : "💻 Football Hackers SQL & Raw Data Lab" },
+    { id: "team_poster_report", label: language === "TR" ? "📋 Takım Analiz İnfografiği & PDF İndirme" : "📋 Team Analysis Infographic & PDF Export" },
+    { id: "tactical_report", label: language === "TR" ? "🧠 Teknik Heyet Özel Gelişmiş Taktik Raporu" : "🧠 Technical Staff Advanced Tactical Report" },
+    { id: "export_hub", label: language === "TR" ? "🚀 Karar Destek Sistemi & Veri Dışa Aktarma" : "🚀 Decision Support System & Data Export Hub" }
   ], [language]);
 
   const [highLevelTab, setHighLevelTab] = useState<"match_lab" | "scout_engine" | "tournament_insights">("tournament_insights");
+  const [expandedParents, setExpandedParents] = useState<Record<string, boolean>>({ match_lab: true, scout_engine: true });
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
 
   const [activeTab, setActiveTab] = useState<
     | "overview"
+    | "xg_analysis"
     | "phases"
     | "line_height"
     | "line_breaks"
@@ -1316,9 +1376,19 @@ export default function App() {
       "PORTUGAL": "🇵🇹",
       "URUGUAY": "🇺🇾",
       "CROATIA": "🇭🇷",
+      "CRO": "🇭🇷",
       "JAPAN": "🇯🇵",
+      "JPN": "🇯🇵",
       "SOUTH KOREA": "🇰🇷",
-      "USA": "🇺🇸"
+      "KOR": "🇰🇷",
+      "USA": "🇺🇸",
+      "TÜRKİYE": "🇹🇷",
+      "TURKIYE": "🇹🇷",
+      "TUR": "🇹🇷",
+      "MOROCCO": "🇲🇦",
+      "MAR": "🇲🇦",
+      "CANADA": "🇨🇦",
+      "CAN": "🇨🇦"
     };
   });
 
@@ -1481,13 +1551,29 @@ export default function App() {
           setUploadedMatches([]);
         }
         
-        // Load custom squad photos and country flags
-        const [photos, flags] = await Promise.all([
+        // Load custom squad photos, country flags, and app logo
+        const [photos, flags, cloudLogo] = await Promise.all([
           getAllPlayerPhotosFromDB(),
-          getAllTeamFlagsFromDB()
+          getAllTeamFlagsFromDB(),
+          getAppLogoFromDB()
         ]);
         setSquadPhotos(photos);
         setCustomTeamFlags(flags);
+
+        if (cloudLogo) {
+          setAppLogo(cloudLogo);
+          try {
+            localStorage.setItem("fifa_custom_app_logo", cloudLogo);
+          } catch (e) {}
+        } else {
+          // Fallback to local storage if present, and backup to Firestore
+          try {
+            const localLogo = localStorage.getItem("fifa_custom_app_logo");
+            if (localLogo) {
+              await saveAppLogoToDB(localLogo);
+            }
+          } catch (e) {}
+        }
 
         // Run background sync with Firestore to pull any cloud updates silently on startup
         startFirestoreSync(true);
@@ -3203,6 +3289,10 @@ export default function App() {
         throw new Error("Sunucudan geçerli bir JSON yanıtı alınamadı. Yanıt içeriği: " + (resText?.slice(0, 200) || "Boş yanıt"));
       }
       if (responsePayload.success && responsePayload.data) {
+        if (!responsePayload.data.matchInfo) {
+          responsePayload.data.matchInfo = {};
+        }
+        responsePayload.data.matchInfo.fileName = file.name;
         const newMatch = normalizeMatchReport(responsePayload.data);
         
         // Save the newly uploaded match permanently in IndexedDB!
@@ -3366,22 +3456,8 @@ export default function App() {
           {/* Main Logo & Presentation Card */}
           <div className="w-full flex flex-col items-center text-center gap-6 max-w-2xl mb-12">
             
-            {/* Logo Wrapper */}
-            <div 
-              onClick={() => {
-                const logoInput = document.getElementById("entry-logo-input");
-                if (logoInput) logoInput.click();
-              }}
-              className="relative group flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md rounded-3xl border border-slate-800/80 shadow-2xl hover:border-amber-500/30 hover:shadow-amber-500/5 transition-all duration-300 cursor-pointer"
-              title={language === "TR" ? "Logoyu değiştirmek için tıklayın" : "Click to change logo"}
-            >
-              <input 
-                type="file" 
-                id="entry-logo-input" 
-                className="hidden" 
-                accept="image/*"
-                onChange={(e) => e.target.files && handleLogoUpload(e.target.files[0])}
-              />
+            {/* Logo Wrapper (Read-only on landing page, managed securely inside locked Settings Panel) */}
+            <div className="relative group flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md rounded-3xl border border-slate-800/80 shadow-2xl transition-all duration-300">
               {appLogo ? (
                 <div className="relative w-36 h-36 flex items-center justify-center">
                   <img
@@ -3477,6 +3553,15 @@ export default function App() {
       </div>
     );
   }
+
+  const isMatchTab = [
+    "overview", "lineups", "passing_networks", "phases", 
+    "line_height", "line_breaks", "crosses", "offering", "movement"
+  ].includes(activeTab);
+
+  const showMatchSwitcher = isMatchTab || [
+    "in_possession", "out_possession", "defensive_actions", "defensive_pressure", "physical", "goalkeeping", "shots"
+  ].includes(activeTab);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 selection:bg-indigo-500 selection:text-white pb-20 font-sans">
@@ -3648,7 +3733,7 @@ export default function App() {
                 }
               }}
               className="w-10 h-10 rounded-xl bg-slate-150 hover:bg-slate-200 border border-slate-200 text-slate-700 hover:text-slate-900 flex items-center justify-center transition-all shadow-3xs cursor-pointer select-none shrink-0 relative"
-              title={language === "TR" ? "Operasyonel Kokpit & Ayarlar (Şifreli)" : "Operational Cockpit & Settings (Locked)"}
+              title={language === "TR" ? "Operasyonel Analiz Merkezi & Ayarlar (Şifreli)" : "Operational Analysis Centre & Settings (Locked)"}
             >
               <SlidersHorizontal className="w-4 h-4" />
               {!isSettingsUnlocked && (
@@ -3657,6 +3742,15 @@ export default function App() {
                   <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
                 </span>
               )}
+            </button>
+
+            {/* Mobile Sidebar Hamburger Toggle */}
+            <button
+              onClick={() => setIsSidebarOpen(true)}
+              className="lg:hidden w-10 h-10 rounded-xl bg-slate-150 hover:bg-slate-200 border border-slate-200 text-slate-750 hover:text-slate-900 flex items-center justify-center transition-all shadow-3xs cursor-pointer select-none shrink-0"
+              title={language === "TR" ? "Yol Haritası Menüsü" : "Roadmap Menu"}
+            >
+              <SlidersHorizontal className="w-4 h-4 text-indigo-650" />
             </button>
           </div>
 
@@ -3682,6 +3776,15 @@ export default function App() {
               { countryKey: "ENGLAND", text: "ENGLAND", color: "text-stone-300" },
               { countryKey: "CROATIA", text: "CROATIA", color: "text-red-500" },
               { countryKey: "JAPAN", text: "JAPAN", color: "text-indigo-300" },
+              { countryKey: "ITALY", text: "ITALY", color: "text-emerald-500" },
+              { countryKey: "NETHERLANDS", text: "NETHERLANDS", color: "text-orange-400" },
+              { countryKey: "BELGIUM", text: "BELGIUM", color: "text-yellow-500" },
+              { countryKey: "PORTUGAL", text: "PORTUGAL", color: "text-red-400" },
+              { countryKey: "URUGUAY", text: "URUGUAY", color: "text-cyan-400" },
+              { countryKey: "SOUTH KOREA", text: "SOUTH KOREA", color: "text-red-300" },
+              { countryKey: "USA", text: "USA", color: "text-blue-300" },
+              { countryKey: "MOROCCO", text: "MOROCCO", color: "text-emerald-500" },
+              { countryKey: "CANADA", text: "CANADA", color: "text-red-400" },
               { isSpecial: true, icon: "⚽", text: "VARYANS TACTICAL INTEGRATOR: LIVE", color: "text-emerald-400" },
               { isSpecial: true, icon: "⚡", text: "xG CALIBRATION: SECURED", color: "text-indigo-400" },
               { isSpecial: true, icon: "📈", text: "PERFORMANCE TRANSITIONS DNA: CALIBRATED", color: "text-amber-400" },
@@ -3698,6 +3801,15 @@ export default function App() {
               { countryKey: "ENGLAND", text: "ENGLAND", color: "text-stone-300" },
               { countryKey: "CROATIA", text: "CROATIA", color: "text-red-500" },
               { countryKey: "JAPAN", text: "JAPAN", color: "text-indigo-300" },
+              { countryKey: "ITALY", text: "ITALY", color: "text-emerald-500" },
+              { countryKey: "NETHERLANDS", text: "NETHERLANDS", color: "text-orange-400" },
+              { countryKey: "BELGIUM", text: "BELGIUM", color: "text-yellow-500" },
+              { countryKey: "PORTUGAL", text: "PORTUGAL", color: "text-red-400" },
+              { countryKey: "URUGUAY", text: "URUGUAY", color: "text-cyan-400" },
+              { countryKey: "SOUTH KOREA", text: "SOUTH KOREA", color: "text-red-300" },
+              { countryKey: "USA", text: "USA", color: "text-blue-300" },
+              { countryKey: "MOROCCO", text: "MOROCCO", color: "text-emerald-500" },
+              { countryKey: "CANADA", text: "CANADA", color: "text-red-400" },
               { isSpecial: true, icon: "⚽", text: "VARYANS TACTICAL INTEGRATOR: LIVE", color: "text-emerald-400" },
               { isSpecial: true, icon: "⚡", text: "xG CALIBRATION: SECURED", color: "text-indigo-400" },
               { isSpecial: true, icon: "📈", text: "PERFORMANCE TRANSITIONS DNA: CALIBRATED", color: "text-amber-400" },
@@ -3706,7 +3818,7 @@ export default function App() {
               <div key={index} className="inline-flex items-center gap-2 text-xs font-mono font-black uppercase tracking-widest">
                 {item.countryKey ? (
                   <div className="flex items-center gap-1.5">
-                    <MarqueeFlag country={item.countryKey} />
+                    <TeamFlag team={item.countryKey} getTeamFlag={getTeamFlag} className="w-5 h-3.5 object-cover rounded-xs border border-slate-700/30 shrink-0" fallbackTextSize="text-xs" />
                     <span className={item.color}>{item.text}</span>
                   </div>
                 ) : (
@@ -3761,8 +3873,412 @@ export default function App() {
         </div>
       )}
 
-      {/* Tournament Match Hub & Multi-Match Switcher */}
-      <section className="max-w-full xl:max-w-[1650px] mx-auto px-4 sm:px-8 lg:px-10 mt-6">
+      {/* Dynamic Mobile Sidebar Slide-over Drawer */}
+      <AnimatePresence>
+        {isSidebarOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.5 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsSidebarOpen(false)}
+              className="fixed inset-0 bg-black z-50 lg:hidden"
+            />
+            <motion.aside
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="fixed inset-y-0 left-0 w-80 max-w-xs bg-white dark:bg-slate-900 border-r border-slate-200 z-50 p-5 flex flex-col gap-4 shadow-2xl lg:hidden overflow-y-auto"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-bold text-indigo-600 font-mono tracking-wider uppercase">VARYANS Studio</span>
+                  <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 tracking-tight mt-1">
+                    {language === "TR" ? "Analiz Yol Haritası" : "Analysis Roadmap"}
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setIsSidebarOpen(false)}
+                  className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 flex flex-col gap-5 py-2">
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[9px] font-mono font-bold tracking-widest text-slate-400 px-3 uppercase">
+                    {language === "TR" ? "TEMEL ANALİZLER" : "BASIC ANALYSES"}
+                  </span>
+                  
+                  <button
+                    onClick={() => {
+                      setHighLevelTab("tournament_insights");
+                      setActiveTab("tournament_analytics");
+                      setIsSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left font-semibold text-xs transition-all ${
+                      activeTab === "tournament_analytics"
+                        ? "bg-indigo-600 text-white shadow-md"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                    }`}
+                  >
+                    <Trophy className="w-4 h-4 shrink-0" />
+                    <span className="flex-1 truncate">{language === "TR" ? "🏆 Turnuva & Grup" : "🏆 Tournament Stage"}</span>
+                  </button>
+
+                  <div className="flex flex-col">
+                    <button
+                      onClick={() => {
+                        setExpandedParents(prev => ({ ...prev, match_lab: !prev.match_lab }));
+                        if (highLevelTab !== "match_lab") {
+                          setHighLevelTab("match_lab");
+                          setActiveTab("overview");
+                        }
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left font-semibold text-xs transition-all ${
+                        highLevelTab === "match_lab"
+                          ? "bg-indigo-55 dark:bg-indigo-950/25 text-indigo-700 dark:text-indigo-450"
+                          : "text-slate-600 dark:text-slate-300 hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Activity className="w-4 h-4 shrink-0 text-slate-400" />
+                        <span className="truncate">{language === "TR" ? "⚽ Maç Analiz Merkezi" : "⚽ Match Analysis Centre"}</span>
+                      </div>
+                      {expandedParents.match_lab ? <ChevronUp className="w-3.5 h-3.5 shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 shrink-0" />}
+                    </button>
+                    {expandedParents.match_lab && (
+                      <div className="pl-6 pr-1 mt-1 border-l border-slate-100 dark:border-slate-800 ml-5 flex flex-col gap-1 py-1">
+                        {MATCH_LAB_TABS.map(sub => (
+                          <button
+                            key={sub.id}
+                            onClick={() => {
+                              setHighLevelTab("match_lab");
+                              setActiveTab(sub.id as any);
+                              setIsSidebarOpen(false);
+                            }}
+                            className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-left text-[11px] font-medium transition-all ${
+                              activeTab === sub.id
+                                ? "text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50/50"
+                                : "text-slate-500 hover:text-slate-800"
+                            }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${activeTab === sub.id ? "bg-indigo-500" : "bg-slate-350"}`} />
+                            <span className="truncate">{sub.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col">
+                    <button
+                      onClick={() => {
+                        setExpandedParents(prev => ({ ...prev, scout_engine: !prev.scout_engine }));
+                        if (highLevelTab !== "scout_engine") {
+                          setHighLevelTab("scout_engine");
+                          setActiveTab("in_possession");
+                        }
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left font-semibold text-xs transition-all ${
+                        highLevelTab === "scout_engine"
+                          ? "bg-indigo-55 dark:bg-indigo-950/25 text-indigo-700 dark:text-indigo-450"
+                          : "text-slate-600 dark:text-slate-300 hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <User className="w-4 h-4 shrink-0 text-slate-400" />
+                        <span className="truncate">{language === "TR" ? "🏃 Scout Oyuncu Raporları" : "🏃 Scout Engine"}</span>
+                      </div>
+                      {expandedParents.scout_engine ? <ChevronUp className="w-3.5 h-3.5 shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 shrink-0" />}
+                    </button>
+                    {expandedParents.scout_engine && (
+                      <div className="pl-6 pr-1 mt-1 border-l border-slate-100 dark:border-slate-800 ml-5 flex flex-col gap-1 py-1">
+                        {SCOUT_ENGINE_TABS.map(sub => (
+                          <button
+                            key={sub.id}
+                            onClick={() => {
+                              setHighLevelTab("scout_engine");
+                              setActiveTab(sub.id as any);
+                              setIsSidebarOpen(false);
+                            }}
+                            className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-left text-[11px] font-medium transition-all ${
+                              activeTab === sub.id
+                                ? "text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50/50"
+                                : "text-slate-500 hover:text-slate-800"
+                            }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${activeTab === sub.id ? "bg-indigo-500" : "bg-slate-350"}`} />
+                            <span className="truncate">{sub.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[9px] font-mono font-bold tracking-widest text-slate-400 px-3 uppercase">
+                    {language === "TR" ? "GELİŞMİŞ ANALİZLER" : "ADVANCED ANALYSES"}
+                  </span>
+                  {[
+                    { id: "tactical_report", icon: FileText },
+                    { id: "varyans_engine", icon: Sparkles },
+                    { id: "xg_analysis", icon: LineChart },
+                    { id: "football_hackers_lab", icon: Database },
+                    { id: "tournament_comparison", icon: SlidersHorizontal },
+                    { id: "team_poster_report", icon: Download }
+                  ].map(item => {
+                    const matchedTab = TOURNAMENT_INSIGHTS_TABS.find(t => t.id === item.id);
+                    const label = matchedTab ? matchedTab.label : item.id;
+                    const IconComponent = item.icon;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          setHighLevelTab("tournament_insights");
+                          setActiveTab(item.id as any);
+                          setIsSidebarOpen(false);
+                        }}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left font-semibold text-xs transition-all ${
+                          activeTab === item.id
+                            ? "bg-indigo-600 text-white shadow-md"
+                            : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                        }`}
+                      >
+                        <IconComponent className="w-4 h-4 shrink-0" />
+                        <span className="flex-1 truncate">{label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex flex-col gap-1.5 mt-auto pt-4 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    onClick={() => {
+                      setHighLevelTab("tournament_insights");
+                      setActiveTab("export_hub");
+                      setIsSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left font-semibold text-xs transition-all ${
+                      activeTab === "export_hub"
+                        ? "bg-indigo-600 text-white shadow-md"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                    }`}
+                  >
+                    <Download className="w-4 h-4 shrink-0" />
+                    <span className="flex-1 truncate">{language === "TR" ? "🚀 Karar Akışı & İndirme" : "🚀 Decision & Export"}</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsSettingsOpen(true);
+                      setIsSidebarOpen(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left font-semibold text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all"
+                  >
+                    <SlidersHorizontal className="w-4 h-4 shrink-0 text-amber-500 animate-pulse" />
+                    <span className="flex-1 truncate">{language === "TR" ? "⚙️ Sistem Ayarları" : "⚙️ System Settings"}</span>
+                  </button>
+                </div>
+              </div>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Main Structural Layout Container (Sidebar + Content Workspace) */}
+      <div className="max-w-full xl:max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 mt-6 flex flex-col lg:flex-row gap-6 items-start w-full">
+        
+        {/* DESKTOP FIXED SIDEBAR */}
+        <aside className="w-80 shrink-0 sticky top-24 h-[calc(100vh-8rem)] overflow-y-auto hidden lg:flex flex-col gap-4 bg-white dark:bg-slate-900 border border-slate-150 rounded-3xl p-5 shadow-xs scrollbar-thin scrollbar-thumb-slate-250">
+          <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 pb-4">
+            <span className="text-[10px] font-bold text-indigo-600 font-mono tracking-wider uppercase">VARYANS ROADMAP</span>
+            <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 tracking-tight mt-1">
+              {language === "TR" ? "Analiz Navigasyonu" : "Analysis Navigation"}
+            </h3>
+          </div>
+
+          <div className="flex-1 flex flex-col gap-5 py-2">
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[9px] font-mono font-bold tracking-widest text-slate-400 px-3 uppercase">
+                {language === "TR" ? "TEMEL ANALİZLER" : "BASIC ANALYSES"}
+              </span>
+              
+              <button
+                onClick={() => {
+                  setHighLevelTab("tournament_insights");
+                  setActiveTab("tournament_analytics");
+                }}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left font-semibold text-xs transition-all ${
+                  activeTab === "tournament_analytics"
+                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/10"
+                    : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                }`}
+              >
+                <Trophy className="w-4 h-4 shrink-0 text-amber-500" />
+                <span className="flex-1 truncate font-bold">{language === "TR" ? "🏆 Turnuva & Grup Tabloları" : "Tournament & Group Stage"}</span>
+              </button>
+
+              <div className="flex flex-col">
+                <button
+                  onClick={() => {
+                    setExpandedParents(prev => ({ ...prev, match_lab: !prev.match_lab }));
+                    if (highLevelTab !== "match_lab") {
+                      setHighLevelTab("match_lab");
+                      setActiveTab("overview");
+                    }
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left font-semibold text-xs transition-all ${
+                    highLevelTab === "match_lab"
+                      ? "bg-indigo-50 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400 font-extrabold"
+                      : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Activity className="w-4 h-4 shrink-0 text-slate-400 animate-pulse" />
+                    <span className="truncate">{language === "TR" ? "⚽ Maç Analiz Merkezi (Match Analysis Centre)" : "⚽ Match Analysis Centre (Match Lab)"}</span>
+                  </div>
+                  {expandedParents.match_lab ? <ChevronUp className="w-3.5 h-3.5 shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 shrink-0" />}
+                </button>
+                {expandedParents.match_lab && (
+                  <div className="pl-6 pr-1 mt-1 border-l border-slate-100 dark:border-slate-800 ml-5 flex flex-col gap-1 py-1">
+                    {MATCH_LAB_TABS.map(sub => (
+                      <button
+                        key={sub.id}
+                        onClick={() => {
+                          setHighLevelTab("match_lab");
+                          setActiveTab(sub.id as any);
+                        }}
+                        className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-left text-[11px] font-medium transition-all ${
+                          activeTab === sub.id
+                            ? "text-indigo-600 dark:text-indigo-400 font-extrabold bg-indigo-50/50 dark:bg-indigo-950/10"
+                            : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-100"
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${activeTab === sub.id ? "bg-indigo-500" : "bg-slate-350"}`} />
+                        <span className="truncate">{sub.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col">
+                <button
+                  onClick={() => {
+                    setExpandedParents(prev => ({ ...prev, scout_engine: !prev.scout_engine }));
+                    if (highLevelTab !== "scout_engine") {
+                      setHighLevelTab("scout_engine");
+                      setActiveTab("in_possession");
+                    }
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left font-semibold text-xs transition-all ${
+                    highLevelTab === "scout_engine"
+                      ? "bg-indigo-55 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400 font-extrabold"
+                      : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <User className="w-4 h-4 shrink-0 text-slate-400" />
+                    <span className="truncate">{language === "TR" ? "🏃 Scout Oyuncu Raporları" : "🏃 Scout Engine"}</span>
+                  </div>
+                  {expandedParents.scout_engine ? <ChevronUp className="w-3.5 h-3.5 shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 shrink-0" />}
+                </button>
+                {expandedParents.scout_engine && (
+                  <div className="pl-6 pr-1 mt-1 border-l border-slate-100 dark:border-slate-800 ml-5 flex flex-col gap-1 py-1">
+                    {SCOUT_ENGINE_TABS.map(sub => (
+                      <button
+                        key={sub.id}
+                        onClick={() => {
+                          setHighLevelTab("scout_engine");
+                          setActiveTab(sub.id as any);
+                        }}
+                        className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-left text-[11px] font-medium transition-all ${
+                          activeTab === sub.id
+                            ? "text-indigo-600 dark:text-indigo-400 font-extrabold bg-indigo-50/50 dark:bg-indigo-950/10"
+                            : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-100"
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${activeTab === sub.id ? "bg-indigo-500" : "bg-slate-350"}`} />
+                        <span className="truncate">{sub.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[9px] font-mono font-bold tracking-widest text-slate-400 px-3 uppercase">
+                {language === "TR" ? "GELİŞMİŞ ANALİZLER" : "ADVANCED ANALYSES"}
+              </span>
+              {[
+                { id: "tactical_report", icon: FileText },
+                { id: "varyans_engine", icon: Sparkles },
+                { id: "xg_analysis", icon: LineChart },
+                { id: "football_hackers_lab", icon: Database },
+                { id: "tournament_comparison", icon: SlidersHorizontal },
+                { id: "team_poster_report", icon: Download }
+              ].map(item => {
+                const matchedTab = TOURNAMENT_INSIGHTS_TABS.find(t => t.id === item.id);
+                const label = matchedTab ? matchedTab.label : item.id;
+                const IconComponent = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setHighLevelTab("tournament_insights");
+                      setActiveTab(item.id as any);
+                    }}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left font-semibold text-xs transition-all ${
+                      activeTab === item.id
+                        ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/10"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                    }`}
+                  >
+                    <IconComponent className="w-4 h-4 shrink-0" />
+                    <span className="flex-1 truncate">{label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-col gap-1.5 mt-auto pt-4 border-t border-slate-100 dark:border-slate-800">
+              <button
+                onClick={() => {
+                  setHighLevelTab("tournament_insights");
+                  setActiveTab("export_hub");
+                }}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left font-semibold text-xs transition-all ${
+                  activeTab === "export_hub"
+                    ? "bg-indigo-600 text-white shadow-md"
+                    : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                }`}
+              >
+                <Download className="w-4 h-4 shrink-0 text-emerald-500" />
+                <span className="flex-1 truncate font-bold">{language === "TR" ? "🚀 Karar Akışı & İndirme" : "🚀 Decision & Export"}</span>
+              </button>
+
+              <button
+                onClick={() => setIsSettingsOpen(true)}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left font-semibold text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all"
+              >
+                <SlidersHorizontal className="w-4 h-4 shrink-0 text-amber-500 animate-pulse" />
+                <span className="flex-1 truncate">{language === "TR" ? "⚙️ Sistem Ayarları (Yönetici)" : "⚙️ System Settings"}</span>
+              </button>
+            </div>
+          </div>
+        </aside>
+
+        {/* RIGHT WORKSPACE PANELS */}
+        <div className="flex-1 w-full min-w-0 flex flex-col gap-6">
+
+          {/* Tournament Match Hub & Multi-Match Switcher */}
+          {showMatchSwitcher && (
+            <section className="w-full">
         <div className="bg-slate-900 rounded-3xl p-6 text-white shadow-xl border border-slate-800 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 relative overflow-hidden">
           {/* Subtle gradient light flare in background */}
           <div className="absolute right-0 top-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
@@ -3818,10 +4334,10 @@ export default function App() {
                 className="bg-slate-950 border border-slate-800 hover:border-slate-700 px-3 py-2.5 rounded-xl text-xs font-sans font-semibold text-slate-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer transition-all"
               >
                 <option value="All">{language === "TR" ? "Tüm Maçlar" : "All Matchdays"}</option>
-                <option value="1">1. Maçlar (Matchday 1)</option>
-                <option value="2">2. Maçlar (Matchday 2)</option>
-                <option value="3">3. Maçlar (Matchday 3)</option>
-                <option value="KO">{language === "TR" ? "Eleme Aşaması" : "Knockout Stage"}</option>
+                <option value="1">{language === "TR" ? "1. Grup Maçları (1-24)" : "Group Matches 1 (1-24)"}</option>
+                <option value="2">{language === "TR" ? "2. Grup Maçları (25-48)" : "Group Matches 2 (25-48)"}</option>
+                <option value="3">{language === "TR" ? "3. Grup Maçları (49-72)" : "Group Matches 3 (49-72)"}</option>
+                <option value="KO">{language === "TR" ? "Eleme Aşaması (73-104)" : "Knockout Stage (73-104)"}</option>
               </select>
             </div>
 
@@ -3875,14 +4391,15 @@ export default function App() {
               }}
               className="sm:mt-5 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-sans font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition shadow-lg shadow-indigo-600/15 cursor-pointer select-none"
             >
-              🏆 View Group Tables & Tournament Analytics
+              {language === "TR" ? "🏆 Turnuva Analizleri & Puan Durumunu Gör" : "🏆 View Group Tables & Tournament Analytics"}
             </button>
           </div>
         </div>
       </section>
+      )}
 
       {uploadedMatches.length === 0 && (
-        <section className="max-w-full xl:max-w-[1650px] mx-auto px-4 sm:px-8 lg:px-10 mt-4">
+        <section className="w-full mt-4">
           <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-4 flex items-start gap-3.5 text-amber-900 shadow-sm animate-in fade-in slide-in-from-top-2 duration-200">
             <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
             <div className="flex-1">
@@ -3899,7 +4416,8 @@ export default function App() {
       )}
 
       {/* Hero Stats Header Card */}
-      <header className="max-w-full xl:max-w-[1650px] mx-auto px-4 sm:px-8 lg:px-10 mt-8">
+      {isMatchTab && (
+        <header className="w-full mt-6">
         <div className="bg-white border border-slate-100 rounded-3xl p-6 sm:p-8 relative overflow-hidden shadow-sm">
           
           {/* Subtle field grid pattern overlay */}
@@ -4205,8 +4723,12 @@ export default function App() {
                   <Info className="w-4 h-4" />
                 </div>
                 <div className="text-xs leading-relaxed text-slate-500 font-sans">
-                  <span className="text-slate-900 font-semibold block mb-0.5">Need another match parsed?</span>
-                  Drag and drop FIFA's PDF summary report anywhere in the section below to extract all stats using Gemini's native vision!
+                  <span className="text-slate-900 font-semibold block mb-0.5">
+                    {language === "TR" ? "Yeni Bir Maç Eklemek İster misiniz?" : "Need another match parsed?"}
+                  </span>
+                  {language === "TR" 
+                    ? "Gemini AI'ın yerleşik yapay zeka vizyonunu kullanarak tüm istatistikleri otomatik olarak çıkarmak için FIFA'nın PDF maç raporu özetini bu alana sürükleyip bırakın!"
+                    : "Drag and drop FIFA's PDF summary report anywhere in the section below to extract all stats using Gemini's native vision!"}
                 </div>
               </div>
             </div>
@@ -4214,9 +4736,10 @@ export default function App() {
           </div>
         </div>
       </header>
+      )}
 
       {/* Main Stats Viewer Dashboard */}
-      <main className="max-w-full xl:max-w-[1650px] mx-auto px-4 sm:px-8 lg:px-10 mt-10 animate-fade-in text-slate-800">
+      <main className="w-full mt-4 animate-fade-in text-slate-800">
         
         {/* Interactive Guided Onboarding Map & Instructions Center */}
         <AnimatePresence>
@@ -4438,7 +4961,7 @@ export default function App() {
         </AnimatePresence>
 
         {/* High-Level Executive Tab Clusters (Layered UI Operational Cockpit) */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 lg:hidden">
           <button
             onClick={() => {
               setHighLevelTab("match_lab");
@@ -4456,10 +4979,14 @@ export default function App() {
               <Activity className="w-5 h-5" />
             </div>
             <div className="flex-1 min-w-0">
-              <span className="block font-sans font-bold text-sm tracking-tight">Maç Kokpiti (Match Lab)</span>
+              <span className="block font-sans font-bold text-sm tracking-tight">
+                {language === "TR" ? "Maç Analiz Merkezi (Match Analysis Centre)" : "Match Analysis Centre (Match Lab)"}
+              </span>
               <span className={`block text-[11px] truncate mt-0.5 ${
                 highLevelTab === "match_lab" ? "text-indigo-200" : "text-slate-400"
-              }`}>12 Analitik Gösterge Modülü</span>
+              }`}>
+                {language === "TR" ? "12 Analitik Gösterge Modülü" : "12 Analytical Modules"}
+              </span>
             </div>
             {highLevelTab === "match_lab" && (
               <div className="absolute right-3 top-3 w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
@@ -4522,7 +5049,7 @@ export default function App() {
         </div>
 
         {/* Navigation Tabs with Left/Right Scroll Buttons */}
-        <div className="flex items-center gap-1.5 border-b border-slate-200 mb-6 bg-slate-55/45 p-1 rounded-2xl relative">
+        <div className="flex items-center gap-1.5 border-b border-slate-200 mb-6 bg-slate-55/45 p-1 rounded-2xl relative lg:hidden">
           {/* Scroll Left Button */}
           <button
             onClick={() => scrollTabs("left")}
@@ -4598,6 +5125,7 @@ export default function App() {
               homeTeam={matchData.matchInfo.homeTeam || "Ev Sahibi"}
               awayTeam={matchData.matchInfo.awayTeam || "Misafir"}
               rawPlayerData={matchData.playersPhysical?.home || []}
+              language={language}
             />
           </motion.div>
         )}
@@ -4639,6 +5167,7 @@ export default function App() {
               onSelectMatch={setActiveMatchIndex} 
               getTeamFlag={getTeamFlag}
               squadPhotos={squadPhotos}
+              language={language}
             />
           </motion.div>
         )}
@@ -4649,7 +5178,18 @@ export default function App() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <FootballHackersLab sheets={physicalAnalysisSheets} />
+            <FootballHackersLab sheets={physicalAnalysisSheets} language={language} />
+          </motion.div>
+        )}
+
+        {/* Tab: xG Analysis Portal */}
+        {activeTab === "xg_analysis" && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="w-full animate-fade-in"
+          >
+            <XGAnalysisView matchData={matchData} language={language} />
           </motion.div>
         )}
 
@@ -4674,8 +5214,8 @@ export default function App() {
                   { label: language === "TR" ? "Şut Girişimleri" : "Attempts at Goal", home: matchData.keyStats.home.attemptsAtGoal, away: matchData.keyStats.away.attemptsAtGoal, displayType: "raw" },
                   { label: language === "TR" ? "Toplam Pas" : "Total Passes", home: matchData.keyStats.home.totalPasses, away: matchData.keyStats.away.totalPasses, displayType: "raw" },
                   { label: language === "TR" ? "Pas İsabet %" : "Pass Completion %", home: matchData.keyStats.home.passCompletion, away: matchData.keyStats.away.passCompletion, displayType: "pct" },
-                  { label: language === "TR" ? "Başarılı Çizgi Kırmalar" : "Completed Line Breaks", home: matchData.keyStats.home.completedLineBreaks, away: matchData.keyStats.away.completedLineBreaks, displayType: "val" },
-                  { label: language === "TR" ? "Defansif Çizgi Kırmalar" : "Defensive Line Breaks", home: matchData.keyStats.home.defensiveLineBreaks, away: matchData.keyStats.away.defensiveLineBreaks, displayType: "val" },
+                  { label: language === "TR" ? "Başarılı Hat Kırmalar" : "Completed Line Breaks", home: matchData.keyStats.home.completedLineBreaks, away: matchData.keyStats.away.completedLineBreaks, displayType: "val" },
+                  { label: language === "TR" ? "Defansif Hat Kırmalar" : "Defensive Line Breaks", home: matchData.keyStats.home.defensiveLineBreaks, away: matchData.keyStats.away.defensiveLineBreaks, displayType: "val" },
                   { label: language === "TR" ? "3. Bölgede Top Buluşmaları" : "Receptions in Final Third", home: matchData.keyStats.home.receptionsFinalThird, away: matchData.keyStats.away.receptionsFinalThird, displayType: "val" },
                   { label: language === "TR" ? "Orta Denemeleri" : "Crosses Attempted", home: matchData.keyStats.home.crosses, away: matchData.keyStats.away.crosses, displayType: "val" },
                   { label: language === "TR" ? "Top Taşıma / İlerleme" : "Ball Progressions", home: matchData.keyStats.home.ballProgressions, away: matchData.keyStats.away.ballProgressions, displayType: "val" },
@@ -5228,7 +5768,7 @@ export default function App() {
             animate={{ opacity: 1, y: 0 }}
             className="w-full animate-fade-in"
           >
-            <PhysicalAnalysis sheets={physicalAnalysisSheets} />
+            <PhysicalAnalysis sheets={physicalAnalysisSheets} language={language} />
           </motion.div>
         )}
 
@@ -5654,12 +6194,12 @@ export default function App() {
             className="flex flex-col gap-8"
           >
             {/* Spatial interactive visualizer field */}
-            <OfferingToReceiveVisualizer matchData={matchData} squadPhotos={squadPhotos} />
+            <OfferingToReceiveVisualizer matchData={matchData} squadPhotos={squadPhotos} language={language} />
 
             {/* Team summary heights and lengths */}
             <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs">
               <h3 className="font-sans font-semibold text-sm text-slate-900 border-b border-slate-100 pb-3 mb-4">
-                Offering to Receive Team Summary Statistics
+                {language === "TR" ? "Top Almaya Hazır Olma - Takım Özet İstatistikleri" : "Offering to Receive Team Summary Statistics"}
               </h3>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs font-mono min-w-[700px]">
@@ -5698,7 +6238,7 @@ export default function App() {
             {/* Key Players individual offering statistics */}
             <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs">
               <h3 className="font-sans font-semibold text-sm text-slate-900 border-b border-slate-100 pb-3 mb-4">
-                Detailed Player Offering to Receive Trajectories Breakdown
+                {language === "TR" ? "Detaylı Oyuncu Pas Alma Koşuları Kırılımı" : "Detailed Player Offering to Receive Trajectories Breakdown"}
               </h3>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs font-mono min-w-[900px]">
@@ -5775,12 +6315,12 @@ export default function App() {
             className="flex flex-col gap-8"
           >
             {/* Spatial runs vector visualizer court */}
-            <MovementToReceiveVisualizer matchData={matchData} squadPhotos={squadPhotos} />
+            <MovementToReceiveVisualizer matchData={matchData} squadPhotos={squadPhotos} language={language} />
 
             {/* Team summary table */}
             <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs">
               <h3 className="font-sans font-semibold text-sm text-slate-900 border-b border-slate-100 pb-3 mb-4">
-                Tactical Movement Types - Team Summary Counts
+                {language === "TR" ? "Taktiksel Hareketlenme Tipleri - Takım Özet Sayıları" : "Tactical Movement Types - Team Summary Counts"}
               </h3>
               <table className="w-full text-left text-xs font-mono">
                 <thead>
@@ -6950,199 +7490,7 @@ export default function App() {
           </motion.div>
         )}
 
-        {/* Tab: Passing Networks */}
-        {activeTab === "passing_networks" && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col gap-8 w-full"
-          >
-            {/* Header controls */}
-            <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-              <div className="flex flex-col gap-1">
-                <h3 className="font-sans font-bold text-base text-slate-900 flex items-center gap-2">
-                  <span className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
-                    <Activity className="w-4 h-4" />
-                  </span>
-                  Tactical Passing Networks
-                </h3>
-                <p className="text-xs text-slate-500 font-sans">
-                  Visualize player-by-player positional connections and structural passing combinations. Adjust the minimum connection count slider to filter network density.
-                </p>
-              </div>
 
-              {/* Team and filters selector */}
-              <div className="flex flex-wrap items-center gap-4">
-                {/* Team toggle */}
-                <div className="bg-slate-100 p-1 rounded-xl flex gap-1">
-                  <button
-                    onClick={() => setPassingNetworkTeam("home")}
-                    className={`py-1.5 px-3.5 text-xs font-sans font-semibold rounded-lg transition-all ${
-                      passingNetworkTeam === "home"
-                        ? "bg-white text-slate-900 shadow-xs"
-                        : "text-slate-500 hover:text-slate-800"
-                    }`}
-                  >
-                    {matchData.matchInfo.homeTeam}
-                  </button>
-                  <button
-                    onClick={() => setPassingNetworkTeam("away")}
-                    className={`py-1.5 px-3.5 text-xs font-sans font-semibold rounded-lg transition-all ${
-                      passingNetworkTeam === "away"
-                        ? "bg-white text-slate-900 shadow-xs"
-                        : "text-slate-500 hover:text-slate-800"
-                    }`}
-                  >
-                    {matchData.matchInfo.awayTeam}
-                  </button>
-                </div>
-
-                {/* Filter slider */}
-                <div className="flex items-center gap-2 border border-slate-100 bg-slate-50/50 py-1.5 px-3 rounded-xl">
-                  <span className="text-[10px] font-mono uppercase tracking-wide text-slate-500">Min Passes:</span>
-                  <input
-                    type="range"
-                    min="1"
-                    max="20"
-                    value={minPassesLimit}
-                    onChange={(e) => setMinPassesLimit(Number(e.target.value))}
-                    className="w-24 accent-indigo-600 h-1 rounded-md bg-slate-200"
-                  />
-                  <span className="text-xs font-mono font-bold text-indigo-700 w-5 text-right">{minPassesLimit}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Main Visualizer and metrics */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* Pitch column (2 cols wide) */}
-              <div className="lg:col-span-2 bg-white rounded-3xl p-6 border border-slate-100 shadow-xs flex flex-col gap-4">
-                <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-                  <span className="text-xs font-sans font-bold text-slate-800 uppercase tracking-wide">
-                    {passingNetworkTeam === "home" ? matchData.matchInfo.homeTeam : matchData.matchInfo.awayTeam} Combination Grid
-                  </span>
-                  <span className="text-[10px] font-mono text-slate-400">Tactical Pitch Schema (Attack left-to-right)</span>
-                </div>
-
-                {/* Interactive Pitch Canvas */}
-                <PassingNetworkPitch
-                  connections={matchData.passingNetworks?.[passingNetworkTeam]?.connections || []}
-                  playerPositions={matchData.passingNetworks?.[passingNetworkTeam]?.playerPositions || []}
-                  minPasses={minPassesLimit}
-                />
-              </div>
-
-              {/* Data listing and breakdown column */}
-              <div className="flex flex-col gap-8">
-                {/* Stats recap cards */}
-                <div className="bg-slate-950 text-slate-100 rounded-3xl p-6 shadow-md flex flex-col gap-4">
-                  <div className="border-b border-slate-800 pb-3">
-                    <h4 className="text-xs font-mono uppercase tracking-wide text-slate-400">Network Statistics</h4>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-slate-900 p-3.5 rounded-2xl border border-slate-800">
-                      <span className="text-[10px] uppercase font-mono block text-slate-500">Total Group Passes</span>
-                      <strong className="text-xl text-white font-mono mt-1 block">
-                        {matchData.passingNetworks?.[passingNetworkTeam]?.totalPasses || 0}
-                      </strong>
-                    </div>
-                    <div className="bg-slate-900 p-3.5 rounded-2xl border border-slate-800">
-                      <span className="text-[10px] uppercase font-mono block text-slate-500">Active Combos</span>
-                      <strong className="text-xl text-white font-mono mt-1 block">
-                        {(matchData.passingNetworks?.[passingNetworkTeam]?.connections || []).length}
-                      </strong>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col gap-2 mt-2 text-xs">
-                    <div className="flex justify-between border-b border-slate-800/50 pb-2">
-                      <span className="text-slate-400">Top Combination Duo:</span>
-                      <span className="font-semibold text-emerald-400">
-                        {(() => {
-                          const conns = matchData.passingNetworks?.[passingNetworkTeam]?.connections || [];
-                          if (conns.length === 0) return "N/A";
-                          const maxConn = [...conns].sort((a,b) => b.passes - a.passes)[0];
-                          return `${maxConn.fromPlayer} ➔ ${maxConn.toPlayer} (${maxConn.passes})`;
-                        })()}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Hub Player:</span>
-                      <span className="font-semibold text-indigo-300">
-                        {(() => {
-                          const conns = matchData.passingNetworks?.[passingNetworkTeam]?.connections || [];
-                          const positions = matchData.passingNetworks?.[passingNetworkTeam]?.playerPositions || [];
-                          if (positions.length === 0) return "N/A";
-                          const counts: { [key: string]: number } = {};
-                          conns.forEach(c => {
-                            counts[c.fromPlayer] = (counts[c.fromPlayer] || 0) + c.passes;
-                            counts[c.toPlayer] = (counts[c.toPlayer] || 0) + c.passes;
-                          });
-                          let maxPlayer = "";
-                          let maxVal = -1;
-                          Object.entries(counts).forEach(([k, v]) => {
-                            if (v > maxVal) {
-                              maxVal = v;
-                              maxPlayer = k;
-                            }
-                          });
-                          return maxPlayer ? `${maxPlayer} (${maxVal})` : "N/A";
-                        })()}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Top ranked combinations list */}
-                <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs flex-1 flex flex-col gap-4">
-                  <h4 className="font-sans font-semibold text-sm text-slate-900 border-b border-slate-100 pb-3 flex justify-between items-center">
-                    <span>Passing Combinations Ledger</span>
-                    <span className="text-[10px] font-mono text-slate-400">Sorted by frequency</span>
-                  </h4>
-
-                  <div className="flex flex-col gap-3 max-h-[350px] overflow-y-auto pr-1">
-                    {(() => {
-                      const list = (matchData.passingNetworks?.[passingNetworkTeam]?.connections || [])
-                        .filter(c => c.passes >= minPassesLimit)
-                        .sort((a, b) => b.passes - a.passes);
-
-                      if (list.length === 0) {
-                        return (
-                          <div className="text-center py-8 text-slate-400 text-xs font-sans">
-                            No connections found meeting the minimum limit of {minPassesLimit} passes.
-                          </div>
-                        );
-                      }
-
-                      const maxPasses = list[0]?.passes || 1;
-
-                      return list.map((c, idx) => (
-                        <div key={idx} className="flex flex-col gap-1.5 border-b border-slate-50 pb-2.5 last:border-0 last:pb-0">
-                          <div className="flex justify-between items-center text-xs">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <span className="font-semibold text-slate-800 truncate">{c.fromPlayer}</span>
-                              <span className="text-slate-400 text-[10px]">➔</span>
-                              <span className="font-medium text-slate-600 truncate">{c.toPlayer}</span>
-                            </div>
-                            <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded-md shrink-0">
-                              {c.passes} passes
-                            </span>
-                          </div>
-                          <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                            <div
-                              className="bg-indigo-600 h-full rounded-full transition-all duration-300"
-                              style={{ width: `${(c.passes / maxPasses) * 100}%` }}
-                            />
-                          </div>
-                        </div>
-                      ));
-                    })()}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
 
         {/* Tab 18: Tournament & Group Stage Analytics Dashboard */}
         {activeTab === "tournament_analytics" && (
@@ -7161,6 +7509,8 @@ export default function App() {
         )}
 
       </main>
+      </div> {/* Closes RIGHT WORKSPACE PANELS */}
+    </div> {/* Closes Main Structural Layout Container */}
 
       {/* Global Application Footer Disclaimer & Credits */}
       <footer className="mt-12 border-t border-slate-200 py-8 text-center text-[11px] text-slate-500 max-w-full xl:max-w-[1650px] mx-auto px-4 sm:px-8 lg:px-10 bg-white/30 backdrop-blur-xs rounded-3xl mb-12">
@@ -7261,7 +7611,7 @@ export default function App() {
                   setIsPassModalOpen(false);
                   setIsSettingsOpen(true);
                   setPasswordError("");
-                  triggerToast("Giriş Başarılı! Operasyonel Ayarlar Kokpiti Açıldı.");
+                  triggerToast(language === "TR" ? "Giriş Başarılı! Operasyonel Analiz ve Ayar Merkezi Açıldı." : "Login Successful! Operational Analysis & Settings Center Opened.");
                 } else {
                   setPasswordError("Hatalı Şifre! Lütfen tekrar deneyin.");
                 }
@@ -7337,7 +7687,9 @@ export default function App() {
               {/* Header */}
               <div className="p-6 border-b border-slate-100/10 flex items-center justify-between shrink-0">
                 <div>
-                  <h2 className="text-base font-extrabold font-sans tracking-tight text-slate-900 dark:text-white">⚙️ Operasyonel Kokpit Ayarları</h2>
+                  <h2 className="text-base font-extrabold font-sans tracking-tight text-slate-900 dark:text-white">
+                    {language === "TR" ? "⚙️ Operasyonel Analiz ve Ayar Yönetimi" : "⚙️ Operational Analysis & Settings"}
+                  </h2>
                   <p className="text-[10px] text-slate-400 font-mono mt-0.5">BACKGROUND DATA SYNC & VIRTUAL ENGINES</p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -7707,6 +8059,74 @@ export default function App() {
                     <div className="space-y-3">
                       <div className="p-4 bg-slate-950/20 border border-slate-800 rounded-2xl flex flex-col gap-3">
                         <div>
+                          <strong className="text-xs text-slate-800 dark:text-slate-200 block">🏆 Kurumsal Logo Yönetimi</strong>
+                          <p className="text-[10px] text-slate-400 leading-relaxed mt-0.5">
+                            Giriş ekranında gösterilecek olan ana logoyu buradan güvenli bir şekilde yönetin. Yüklediğiniz görsel buluta kalıcı olarak işlenir.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-4 bg-slate-950/30 p-3 rounded-xl border border-slate-800/60">
+                          {appLogo ? (
+                            <div className="w-16 h-16 bg-white rounded-lg border border-slate-700/30 flex items-center justify-center p-1.5 shrink-0">
+                              <img src={appLogo} alt="Logo Önizleme" className="max-w-full max-h-full object-contain" referrerPolicy="no-referrer" />
+                            </div>
+                          ) : (
+                            <div className="w-16 h-16 bg-slate-900/40 rounded-lg border border-slate-800 flex items-center justify-center shrink-0">
+                              <span className="text-[10px] text-slate-500">Logo Yok</span>
+                            </div>
+                          )}
+                          <div className="flex-1 flex flex-col gap-2">
+                            <button
+                              onClick={() => {
+                                const logoInput = document.getElementById("admin-logo-upload-input");
+                                if (logoInput) logoInput.click();
+                              }}
+                              className="bg-indigo-650 hover:bg-indigo-600 text-white font-bold text-[10.5px] py-2 px-3 rounded-lg shadow-xs transition active:scale-98 cursor-pointer select-none text-center"
+                            >
+                              Görsel Seç & Buluta Kaydet
+                            </button>
+                            {appLogo && (
+                              <button
+                                onClick={async () => {
+                                  setAppLogo(null);
+                                  localStorage.removeItem("fifa_custom_app_logo");
+                                  await saveAppLogoToDB("");
+                                  triggerToast("Giriş ekranı logosu kaldırıldı!");
+                                }}
+                                className="bg-rose-650/15 hover:bg-rose-650/25 text-rose-400 border border-rose-500/10 font-semibold text-[10px] py-1 px-2 rounded-lg transition active:scale-98 cursor-pointer select-none text-center"
+                              >
+                                Logoyu Kaldır
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <input
+                          type="file"
+                          id="admin-logo-upload-input"
+                          className="hidden"
+                          accept="image/*"
+                          onChange={async (e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              const file = e.target.files[0];
+                              if (!file.type.startsWith("image/")) {
+                                triggerToast("Yalnızca geçerli bir resim dosyası seçebilirsiniz!");
+                                return;
+                              }
+                              const reader = new FileReader();
+                              reader.onload = async () => {
+                                const base64 = reader.result as string;
+                                setAppLogo(base64);
+                                localStorage.setItem("fifa_custom_app_logo", base64);
+                                await saveAppLogoToDB(base64);
+                                triggerToast("Giriş ekranı logosu başarıyla güncellendi ve buluta kaydedildi!");
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                      </div>
+
+                      <div className="p-4 bg-slate-950/20 border border-slate-800 rounded-2xl flex flex-col gap-3">
+                        <div>
                           <strong className="text-xs text-slate-800 dark:text-slate-200 block">Excel Rapor Kitapçığı</strong>
                           <p className="text-[10px] text-slate-400 leading-relaxed mt-0.5">
                             Sistemdeki mevcut tüm analiz detaylarını, her bir metriği ayrı sayfalarda sunan profesyonel bir Excel kitapçığı olarak indirin.
@@ -7747,7 +8167,7 @@ export default function App() {
               
               {/* Footer info inside settings panel */}
               <div className="p-4 bg-slate-950/45 text-center text-[10px] text-slate-500 font-mono border-t border-slate-100/10 shrink-0">
-                FIFA WORLD CUP ANALYSIS COCKPIT v1.6.0
+                {language === "TR" ? "FIFA DÜNYA KUPASI TEKNİK ALAN ANALİZ MERKEZİ v1.6.0" : "FIFA WORLD CUP TECHNICAL AREA ANALYTICS v1.6.0"}
               </div>
             </motion.div>
           </div>

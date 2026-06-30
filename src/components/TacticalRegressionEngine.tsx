@@ -33,16 +33,30 @@ export default function TacticalRegressionEngine({
   const [tacticalFormationFilter, setTacticalFormationFilter] = useState<string>("All");
 
   const xOptions = [
-    { value: "zone4", label: "Zone 4 Hızlı Koşu Mesafesi (20-25 km/h)", unit: "m" },
-    { value: "zone5", label: "Zone 5 Sprint Mesafesi (25+ km/h)", unit: "m" },
-    { value: "totalDistance", label: "Toplam Koşu Mesafesi Volume", unit: "m" }
+    { value: "totalDistance", label: "Toplam Koşu Mesafesi (m)", unit: "m" },
+    { value: "zone1", label: "Zone 1 Yürüme Mesafesi (m)", unit: "m" },
+    { value: "zone2", label: "Zone 2 Jogging Mesafesi (m)", unit: "m" },
+    { value: "zone3", label: "Zone 3 Aktif Koşu Mesafesi (m)", unit: "m" },
+    { value: "zone4", label: "Zone 4 Yüksek Hızlı Koşu (20-25 km/h) (m)", unit: "m" },
+    { value: "zone5", label: "Zone 5 Sprint Mesafesi (25+ km/h) (m)", unit: "m" },
+    { value: "highSpeedRuns", label: "Toplam Süratli Koşular (Zone 4+5) (m)", unit: "m" },
+    { value: "sprints", label: "Toplam Süratli Depar / Sprints (Adet)", unit: "adet" },
+    { value: "topSpeed", label: "Ortalama Maksimum Takım Hızı (km/h)", unit: "km/h" },
+    { value: "totalPassesAttempted", label: "Takım Toplam Pas Denemesi (Adet)", unit: "pas" },
+    { value: "crossesAttempted", label: "Toplam Orta Girişim Hacmi (Adet)", unit: "orta" }
   ];
 
   const yOptions = [
     { value: "lineBreaks", label: "Başarılı Hat Kıran Pas (Completed Line Breaks)", unit: "adet" },
-    { value: "shots", label: "Şut Sayısı (Attempts At Goal)", unit: "şut" },
+    { value: "defensiveLineBreaks", label: "Başarılı Defansif Hat Kırma Pası", unit: "adet" },
+    { value: "shots", label: "Toplam Şut Girişimi (Attempts At Goal)", unit: "şut" },
     { value: "xg", label: "Beklenen Gol Üretimi (Estimated xG)", unit: "xG" },
-    { value: "goals", label: "Atılan Goller (Goals Scored)", unit: "gol" }
+    { value: "goals", label: "Atılan Goller (Goals Scored)", unit: "gol" },
+    { value: "possession", label: "Topa Sahip Olma Oranı (%)", unit: "%" },
+    { value: "passCompletion", label: "Pas İsabet Oranı (%)", unit: "%" },
+    { value: "receptionsFinalThird", label: "3. Bölgede Topla Buluşmalar (Adet)", unit: "buluşma" },
+    { value: "crossesCompleted", label: "Başarılı Orta Sayısı (Crosses Completed)", unit: "adet" },
+    { value: "inContest", label: "Çekişmeli Top Mücadelesi Payı (In Contest %)", unit: "%" }
   ];
 
   // Derive points
@@ -52,27 +66,100 @@ export default function TacticalRegressionEngine({
       // Home team
       const homeTeam = m.matchInfo?.homeTeam || "Home";
       const homeForm = teamFormations[homeTeam] || "4-3-3";
-      
-      let xVal = 0;
       const homePhys = m.playersPhysical?.home || [];
-      if (tacticalXMetric === "zone4") {
-        xVal = homePhys.length ? homePhys.reduce((sum: number, p: any) => sum + (p.zone4 || 0), 0) / homePhys.length : 500;
-      } else if (tacticalXMetric === "zone5") {
-        xVal = homePhys.length ? homePhys.reduce((sum: number, p: any) => sum + (p.zone5 || 0), 0) / homePhys.length : 250;
-      } else {
-        xVal = homePhys.length ? homePhys.reduce((sum: number, p: any) => sum + (p.totalDistance || 0), 0) / homePhys.length : 9500;
-      }
+      const homeStats = m.keyStats?.home;
 
-      let yVal = 0;
-      if (tacticalYMetric === "lineBreaks") {
-        yVal = Number(m.keyStats?.home?.completedLineBreaks || 0);
-      } else if (tacticalYMetric === "xg") {
-        yVal = Number(m.matchInfo?.homeScore ?? 0) * 0.8 + Number(m.keyStats?.home?.totalShots || 0) * 0.1;
-      } else if (tacticalYMetric === "shots") {
-        yVal = Number(m.keyStats?.home?.totalShots || 10);
-      } else {
-        yVal = Number(m.matchInfo?.homeScore ?? 0);
-      }
+      const getXVal = (teamPhys: any[], stats: any) => {
+        if (!teamPhys || teamPhys.length === 0) {
+          if (tacticalXMetric === "totalDistance") return 9500;
+          if (tacticalXMetric === "zone1") return 4000;
+          if (tacticalXMetric === "zone2") return 3500;
+          if (tacticalXMetric === "zone3") return 1500;
+          if (tacticalXMetric === "zone4") return 500;
+          if (tacticalXMetric === "zone5") return 150;
+          if (tacticalXMetric === "highSpeedRuns") return 650;
+          if (tacticalXMetric === "sprints") return 20;
+          if (tacticalXMetric === "topSpeed") return 28.5;
+          if (tacticalXMetric === "totalPassesAttempted") return 400;
+          if (tacticalXMetric === "crossesAttempted") return 15;
+          return 0;
+        }
+
+        if (tacticalXMetric === "totalDistance") {
+          return teamPhys.reduce((sum: number, p: any) => sum + (p.totalDistance || 0), 0) / teamPhys.length;
+        }
+        if (tacticalXMetric === "zone1") {
+          return teamPhys.reduce((sum: number, p: any) => sum + (p.zone1 || 0), 0) / teamPhys.length;
+        }
+        if (tacticalXMetric === "zone2") {
+          return teamPhys.reduce((sum: number, p: any) => sum + (p.zone2 || 0), 0) / teamPhys.length;
+        }
+        if (tacticalXMetric === "zone3") {
+          return teamPhys.reduce((sum: number, p: any) => sum + (p.zone3 || 0), 0) / teamPhys.length;
+        }
+        if (tacticalXMetric === "zone4") {
+          return teamPhys.reduce((sum: number, p: any) => sum + (p.zone4 || 0), 0) / teamPhys.length;
+        }
+        if (tacticalXMetric === "zone5") {
+          return teamPhys.reduce((sum: number, p: any) => sum + (p.zone5 || 0), 0) / teamPhys.length;
+        }
+        if (tacticalXMetric === "highSpeedRuns") {
+          return teamPhys.reduce((sum: number, p: any) => sum + (p.highSpeedRuns || (p.zone4 || 0) + (p.zone5 || 0)), 0) / teamPhys.length;
+        }
+        if (tacticalXMetric === "sprints") {
+          return teamPhys.reduce((sum: number, p: any) => sum + (p.sprints || 0), 0) / teamPhys.length;
+        }
+        if (tacticalXMetric === "topSpeed") {
+          return teamPhys.reduce((sum: number, p: any) => sum + (p.topSpeed || 0), 0) / teamPhys.length;
+        }
+        if (tacticalXMetric === "totalPassesAttempted") {
+          const passStr = stats?.totalPasses || "400";
+          return parseInt(passStr, 10) || 400;
+        }
+        if (tacticalXMetric === "crossesAttempted") {
+          return Number(stats?.crosses || 15) * 1.5;
+        }
+        return 0;
+      };
+
+      const getYVal = (stats: any, score: number) => {
+        if (!stats) return 0;
+        if (tacticalYMetric === "lineBreaks") {
+          return Number(stats.completedLineBreaks || 0);
+        }
+        if (tacticalYMetric === "defensiveLineBreaks") {
+          return Number(stats.defensiveLineBreaks || 0);
+        }
+        if (tacticalYMetric === "shots") {
+          const shotStr = stats.attemptsAtGoal || "10";
+          return parseInt(shotStr, 10) || 10;
+        }
+        if (tacticalYMetric === "xg") {
+          return Number(stats.xG || (score * 0.85 + (parseInt(stats.attemptsAtGoal || "10", 10) * 0.08)));
+        }
+        if (tacticalYMetric === "goals") {
+          return score;
+        }
+        if (tacticalYMetric === "possession") {
+          return Number(stats.possession || 50);
+        }
+        if (tacticalYMetric === "passCompletion") {
+          return Number(stats.passCompletion || 80);
+        }
+        if (tacticalYMetric === "receptionsFinalThird") {
+          return Number(stats.receptionsFinalThird || 0);
+        }
+        if (tacticalYMetric === "crossesCompleted") {
+          return Number(stats.crosses || 0);
+        }
+        if (tacticalYMetric === "inContest") {
+          return Number(stats.inContest || 5.0);
+        }
+        return 0;
+      };
+
+      const xVal = getXVal(homePhys, homeStats);
+      const yVal = getYVal(homeStats, Number(m.matchInfo?.homeScore ?? 0));
 
       points.push({ 
         x: Number(xVal.toFixed(1)), 
@@ -85,27 +172,11 @@ export default function TacticalRegressionEngine({
       // Away team
       const awayTeam = m.matchInfo?.awayTeam || "Away";
       const awayForm = teamFormations[awayTeam] || "4-3-3";
-      
-      let xValAway = 0;
       const awayPhys = m.playersPhysical?.away || [];
-      if (tacticalXMetric === "zone4") {
-        xValAway = awayPhys.length ? awayPhys.reduce((sum: number, p: any) => sum + (p.zone4 || 0), 0) / awayPhys.length : 500;
-      } else if (tacticalXMetric === "zone5") {
-        xValAway = awayPhys.length ? awayPhys.reduce((sum: number, p: any) => sum + (p.zone5 || 0), 0) / awayPhys.length : 250;
-      } else {
-        xValAway = awayPhys.length ? awayPhys.reduce((sum: number, p: any) => sum + (p.totalDistance || 0), 0) / awayPhys.length : 9500;
-      }
+      const awayStats = m.keyStats?.away;
 
-      let yValAway = 0;
-      if (tacticalYMetric === "lineBreaks") {
-        yValAway = Number(m.keyStats?.away?.completedLineBreaks || 0);
-      } else if (tacticalYMetric === "xg") {
-        yValAway = Number(m.matchInfo?.awayScore ?? 0) * 0.8 + Number(m.keyStats?.away?.totalShots || 0) * 0.1;
-      } else if (tacticalYMetric === "shots") {
-        yValAway = Number(m.keyStats?.away?.totalShots || 10);
-      } else {
-        yValAway = Number(m.matchInfo?.awayScore ?? 0);
-      }
+      const xValAway = getXVal(awayPhys, awayStats);
+      const yValAway = getYVal(awayStats, Number(m.matchInfo?.awayScore ?? 0));
 
       points.push({ 
         x: Number(xValAway.toFixed(1)), 

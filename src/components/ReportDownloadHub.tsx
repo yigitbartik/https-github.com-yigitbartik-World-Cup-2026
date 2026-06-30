@@ -25,6 +25,7 @@ interface ReportDownloadHubProps {
   awayTeam: string;
   onTriggerPdfPrint?: () => void;
   rawPlayerData?: any[];
+  language?: "TR" | "EN";
 }
 
 export default function ReportDownloadHub({ 
@@ -32,7 +33,8 @@ export default function ReportDownloadHub({
   homeTeam, 
   awayTeam, 
   onTriggerPdfPrint,
-  rawPlayerData = [] 
+  rawPlayerData = [],
+  language = "TR" 
 }: ReportDownloadHubProps) {
   const [downloadStep, setDownloadStep] = useState<"idle" | "processing" | "success">("idle");
   const [progressVal, setProgressVal] = useState(0);
@@ -159,7 +161,7 @@ export default function ReportDownloadHub({
         // Title and badges
         ctx.fillStyle = "#ffffff";
         ctx.font = "bold 42px sans-serif";
-        ctx.fillText("VARYANS ANALYTICAL COCKPIT", 80, 100);
+        ctx.fillText(language === "TR" ? "VARYANS TEKNİK ALAN ANALİZİ" : "VARYANS TECHNICAL AREA ANALYTICS", 80, 100);
 
         ctx.fillStyle = "#f59e0b"; // Gold accent
         ctx.font = "bold 24px monospace";
