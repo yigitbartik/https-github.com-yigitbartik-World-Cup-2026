@@ -62,7 +62,6 @@ import TeamUnifiedPosterReport from "./components/TeamUnifiedPosterReport";
 import { TournamentComparisonView } from "./components/TournamentComparisonView";
 import ReportDownloadHub from "./components/ReportDownloadHub";
 import XGAnalysisView from "./components/XGAnalysisView";
-import { NAV_CATEGORIES, NavContent, type TabId, type CategoryId } from "./components/NavSidebar";
 
 const defaultTeamStats = {
   possession: 0,
@@ -1231,19 +1230,42 @@ export default function App() {
     } catch (e) {}
   }, [language]);
 
-  // Sekme tanımları artık NavSidebar.tsx içinde tek kaynaktan geliyor (NAV_CATEGORIES).
-  const [highLevelTab, setHighLevelTab] = useState<CategoryId>("tournament_insights");
-  const [expandedMore, setExpandedMore] = useState<Record<CategoryId, boolean>>({
-    match_lab: false,
-    scout_engine: false,
-    tournament_insights: false
-  });
+  const MATCH_LAB_TABS = useMemo(() => [
+    { id: "overview", label: language === "TR" ? "Maç Genel Analiz Raporu" : "General Match Summary & Overview" },
+    { id: "xg_analysis", label: language === "TR" ? "📈 xG Analiz Portalı" : "📈 xG Analysis Portal" },
+    { id: "lineups", label: language === "TR" ? "İlk 11'ler & Taktiksel Dizilişler" : "Squad Lineups & Tactical Formations" },
+    { id: "phases", label: language === "TR" ? "Hücum Aşamaları & Topa Sahip Olma" : "Possession & Play Phase Analysis" },
+    { id: "line_height", label: language === "TR" ? "Defansif Hat Genişliği & Blok Boyları" : "Defensive Line Heights & Block Positions" },
+    { id: "line_breaks", label: language === "TR" ? "Hat Kıran (Blok Kıran) Pas Analizleri" : "Line-Breaking Pass Analytics" },
+    { id: "crosses", label: language === "TR" ? "Kanat Ortaları & Ceza Sahası Girişleri" : "Cross Quality & Box Entries" },
+    { id: "offering", label: language === "TR" ? "Top Almaya Hazır Olma (Pas Seçeneği)" : "Offering to Receive (Open to Receive)" },
+    { id: "movement", label: language === "TR" ? "Pas Almak İçin Hareketlenme (Mobilite)" : "Movement to Receive (Dynamic Runs)" },
+    { id: "goalkeeping", label: language === "TR" ? "Kaleci Kurtarış & Pozisyon Analizi" : "Goalkeeping & Shot-Stopping Analysis" },
+    { id: "shots", label: language === "TR" ? "Şut Tercihleri & Zaman Çizelgesi" : "Shot Decisions & Timeline" },
+    { id: "set_plays", label: language === "TR" ? "Duran Top Organizasyonları & Analizleri" : "Set Plays & Dead Ball Analysis" }
+  ], [language]);
 
-  const handleSelectTab = (categoryId: CategoryId, tabId: TabId) => {
-    setHighLevelTab(categoryId);
-    setActiveTab(tabId as any);
-    setIsSidebarOpen(false);
-  };
+  const SCOUT_ENGINE_TABS = useMemo(() => [
+    { id: "in_possession", label: language === "TR" ? "Ofansif KPI & Hücum Göstergeleri" : "Offensive KPIs & On-the-ball Actions" },
+    { id: "out_possession", label: language === "TR" ? "Defansif KPI & Savunma Göstergeleri" : "Defensive KPIs & Off-the-ball Actions" },
+    { id: "defensive_actions", label: language === "TR" ? "Savunma Müdahaleleri & Top Kazanma" : "Defensive Duels & Ball Recoveries" },
+    { id: "defensive_pressure", label: language === "TR" ? "Pres Şiddeti & Savunma Baskısı" : "Pressing & Defensive Pressure Analytics" },
+    { id: "physical", label: language === "TR" ? "Atletik Performans & Fiziksel Güç" : "Physical Metrics & Athletic Performance" }
+  ], [language]);
+
+  const TOURNAMENT_INSIGHTS_TABS = useMemo(() => [
+    { id: "tournament_analytics", label: language === "TR" ? "🏆 Turnuva Genel Tablosu & Puan Durumu" : "🏆 Tournament Stage & Group Standings" },
+    { id: "tournament_comparison", label: language === "TR" ? "📊 Takım Karşılaştırma & Turnuva DNA'sı" : "📊 Team Comparison & Tournament DNA" },
+    { id: "xg_analysis", label: language === "TR" ? "📈 xG Analiz Portalı" : "📈 xG Analysis Portal" },
+    { id: "varyans_engine", label: language === "TR" ? "⚡ VARYANS Yapay Zeka (AI) Öneri Motoru" : "⚡ VARYANS AI Recommendation Engine" },
+    { id: "football_hackers_lab", label: language === "TR" ? "💻 Football Hackers SQL Sorgu Laboratuvarı" : "💻 Football Hackers SQL & Raw Data Lab" },
+    { id: "team_poster_report", label: language === "TR" ? "📋 Takım Analiz İnfografiği & PDF İndirme" : "📋 Team Analysis Infographic & PDF Export" },
+    { id: "tactical_report", label: language === "TR" ? "🧠 Teknik Heyet Özel Gelişmiş Taktik Raporu" : "🧠 Technical Staff Advanced Tactical Report" },
+    { id: "export_hub", label: language === "TR" ? "🚀 Karar Destek Sistemi & Veri Dışa Aktarma" : "🚀 Decision Support System & Data Export Hub" }
+  ], [language]);
+
+  const [highLevelTab, setHighLevelTab] = useState<"match_lab" | "scout_engine" | "tournament_insights">("tournament_insights");
+  const [expandedParents, setExpandedParents] = useState<Record<string, boolean>>({ match_lab: true, scout_engine: true });
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
 
   const [activeTab, setActiveTab] = useState<
@@ -1276,13 +1298,14 @@ export default function App() {
 
   // Synchronize highLevelTab when activeTab changes (e.g. from global search or nav)
   React.useEffect(() => {
-    const owningCategory = NAV_CATEGORIES.find(cat =>
-      [...cat.core, ...cat.more].some(t => t.id === activeTab)
-    );
-    if (owningCategory) {
-      setHighLevelTab(owningCategory.id);
+    if (MATCH_LAB_TABS.some(t => t.id === activeTab)) {
+      setHighLevelTab("match_lab");
+    } else if (SCOUT_ENGINE_TABS.some(t => t.id === activeTab)) {
+      setHighLevelTab("scout_engine");
+    } else if (TOURNAMENT_INSIGHTS_TABS.some(t => t.id === activeTab)) {
+      setHighLevelTab("tournament_insights");
     }
-  }, [activeTab]);
+  }, [activeTab, MATCH_LAB_TABS, SCOUT_ENGINE_TABS, TOURNAMENT_INSIGHTS_TABS]);
 
   // Tab container ref for horizontal scrolling
   const tabsScrollContainerRef = useRef<HTMLDivElement>(null);
@@ -3883,16 +3906,184 @@ export default function App() {
                 </button>
               </div>
 
-              <NavContent
-                language={language}
-                activeTab={activeTab as TabId}
-                activeCategory={highLevelTab}
-                expandedMore={expandedMore}
-                onSelectTab={handleSelectTab}
-                onToggleMore={(id) => setExpandedMore(prev => ({ ...prev, [id]: !prev[id] }))}
-                onOpenSettings={() => setIsSettingsOpen(true)}
-                onClose={() => setIsSidebarOpen(false)}
-              />
+              <div className="flex-1 flex flex-col gap-5 py-2">
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[9px] font-mono font-bold tracking-widest text-slate-400 px-3 uppercase">
+                    {language === "TR" ? "TEMEL ANALİZLER" : "BASIC ANALYSES"}
+                  </span>
+                  
+                  <button
+                    onClick={() => {
+                      setHighLevelTab("tournament_insights");
+                      setActiveTab("tournament_analytics");
+                      setIsSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left font-semibold text-xs transition-all ${
+                      activeTab === "tournament_analytics"
+                        ? "bg-indigo-600 text-white shadow-md"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                    }`}
+                  >
+                    <Trophy className="w-4 h-4 shrink-0" />
+                    <span className="flex-1 truncate">{language === "TR" ? "🏆 Turnuva & Grup" : "🏆 Tournament Stage"}</span>
+                  </button>
+
+                  <div className="flex flex-col">
+                    <button
+                      onClick={() => {
+                        setExpandedParents(prev => ({ ...prev, match_lab: !prev.match_lab }));
+                        if (highLevelTab !== "match_lab") {
+                          setHighLevelTab("match_lab");
+                          setActiveTab("overview");
+                        }
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left font-semibold text-xs transition-all ${
+                        highLevelTab === "match_lab"
+                          ? "bg-indigo-55 dark:bg-indigo-950/25 text-indigo-700 dark:text-indigo-450"
+                          : "text-slate-600 dark:text-slate-300 hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Activity className="w-4 h-4 shrink-0 text-slate-400" />
+                        <span className="truncate">{language === "TR" ? "⚽ Maç Analiz Merkezi" : "⚽ Match Analysis Centre"}</span>
+                      </div>
+                      {expandedParents.match_lab ? <ChevronUp className="w-3.5 h-3.5 shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 shrink-0" />}
+                    </button>
+                    {expandedParents.match_lab && (
+                      <div className="pl-6 pr-1 mt-1 border-l border-slate-100 dark:border-slate-800 ml-5 flex flex-col gap-1 py-1">
+                        {MATCH_LAB_TABS.map(sub => (
+                          <button
+                            key={sub.id}
+                            onClick={() => {
+                              setHighLevelTab("match_lab");
+                              setActiveTab(sub.id as any);
+                              setIsSidebarOpen(false);
+                            }}
+                            className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-left text-[11px] font-medium transition-all ${
+                              activeTab === sub.id
+                                ? "text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50/50"
+                                : "text-slate-500 hover:text-slate-800"
+                            }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${activeTab === sub.id ? "bg-indigo-500" : "bg-slate-350"}`} />
+                            <span className="truncate">{sub.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col">
+                    <button
+                      onClick={() => {
+                        setExpandedParents(prev => ({ ...prev, scout_engine: !prev.scout_engine }));
+                        if (highLevelTab !== "scout_engine") {
+                          setHighLevelTab("scout_engine");
+                          setActiveTab("in_possession");
+                        }
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left font-semibold text-xs transition-all ${
+                        highLevelTab === "scout_engine"
+                          ? "bg-indigo-55 dark:bg-indigo-950/25 text-indigo-700 dark:text-indigo-450"
+                          : "text-slate-600 dark:text-slate-300 hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <User className="w-4 h-4 shrink-0 text-slate-400" />
+                        <span className="truncate">{language === "TR" ? "🏃 Scout Oyuncu Raporları" : "🏃 Scout Engine"}</span>
+                      </div>
+                      {expandedParents.scout_engine ? <ChevronUp className="w-3.5 h-3.5 shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 shrink-0" />}
+                    </button>
+                    {expandedParents.scout_engine && (
+                      <div className="pl-6 pr-1 mt-1 border-l border-slate-100 dark:border-slate-800 ml-5 flex flex-col gap-1 py-1">
+                        {SCOUT_ENGINE_TABS.map(sub => (
+                          <button
+                            key={sub.id}
+                            onClick={() => {
+                              setHighLevelTab("scout_engine");
+                              setActiveTab(sub.id as any);
+                              setIsSidebarOpen(false);
+                            }}
+                            className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-left text-[11px] font-medium transition-all ${
+                              activeTab === sub.id
+                                ? "text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50/50"
+                                : "text-slate-500 hover:text-slate-800"
+                            }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${activeTab === sub.id ? "bg-indigo-500" : "bg-slate-350"}`} />
+                            <span className="truncate">{sub.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[9px] font-mono font-bold tracking-widest text-slate-400 px-3 uppercase">
+                    {language === "TR" ? "GELİŞMİŞ ANALİZLER" : "ADVANCED ANALYSES"}
+                  </span>
+                  {[
+                    { id: "tactical_report", icon: FileText },
+                    { id: "varyans_engine", icon: Sparkles },
+                    { id: "xg_analysis", icon: LineChart },
+                    { id: "football_hackers_lab", icon: Database },
+                    { id: "tournament_comparison", icon: SlidersHorizontal },
+                    { id: "team_poster_report", icon: Download }
+                  ].map(item => {
+                    const matchedTab = TOURNAMENT_INSIGHTS_TABS.find(t => t.id === item.id);
+                    const label = matchedTab ? matchedTab.label : item.id;
+                    const IconComponent = item.icon;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          setHighLevelTab("tournament_insights");
+                          setActiveTab(item.id as any);
+                          setIsSidebarOpen(false);
+                        }}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left font-semibold text-xs transition-all ${
+                          activeTab === item.id
+                            ? "bg-indigo-600 text-white shadow-md"
+                            : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                        }`}
+                      >
+                        <IconComponent className="w-4 h-4 shrink-0" />
+                        <span className="flex-1 truncate">{label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex flex-col gap-1.5 mt-auto pt-4 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    onClick={() => {
+                      setHighLevelTab("tournament_insights");
+                      setActiveTab("export_hub");
+                      setIsSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left font-semibold text-xs transition-all ${
+                      activeTab === "export_hub"
+                        ? "bg-indigo-600 text-white shadow-md"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                    }`}
+                  >
+                    <Download className="w-4 h-4 shrink-0" />
+                    <span className="flex-1 truncate">{language === "TR" ? "🚀 Karar Akışı & İndirme" : "🚀 Decision & Export"}</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsSettingsOpen(true);
+                      setIsSidebarOpen(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left font-semibold text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all"
+                  >
+                    <SlidersHorizontal className="w-4 h-4 shrink-0 text-amber-500 animate-pulse" />
+                    <span className="flex-1 truncate">{language === "TR" ? "⚙️ Sistem Ayarları" : "⚙️ System Settings"}</span>
+                  </button>
+                </div>
+              </div>
             </motion.aside>
           </>
         )}
@@ -3910,15 +4101,176 @@ export default function App() {
             </h3>
           </div>
 
-          <NavContent
-            language={language}
-            activeTab={activeTab as TabId}
-            activeCategory={highLevelTab}
-            expandedMore={expandedMore}
-            onSelectTab={handleSelectTab}
-            onToggleMore={(id) => setExpandedMore(prev => ({ ...prev, [id]: !prev[id] }))}
-            onOpenSettings={() => setIsSettingsOpen(true)}
-          />
+          <div className="flex-1 flex flex-col gap-5 py-2">
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[9px] font-mono font-bold tracking-widest text-slate-400 px-3 uppercase">
+                {language === "TR" ? "TEMEL ANALİZLER" : "BASIC ANALYSES"}
+              </span>
+              
+              <button
+                onClick={() => {
+                  setHighLevelTab("tournament_insights");
+                  setActiveTab("tournament_analytics");
+                }}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left font-semibold text-xs transition-all ${
+                  activeTab === "tournament_analytics"
+                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/10"
+                    : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                }`}
+              >
+                <Trophy className="w-4 h-4 shrink-0 text-amber-500" />
+                <span className="flex-1 truncate font-bold">{language === "TR" ? "🏆 Turnuva & Grup Tabloları" : "Tournament & Group Stage"}</span>
+              </button>
+
+              <div className="flex flex-col">
+                <button
+                  onClick={() => {
+                    setExpandedParents(prev => ({ ...prev, match_lab: !prev.match_lab }));
+                    if (highLevelTab !== "match_lab") {
+                      setHighLevelTab("match_lab");
+                      setActiveTab("overview");
+                    }
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left font-semibold text-xs transition-all ${
+                    highLevelTab === "match_lab"
+                      ? "bg-indigo-50 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400 font-extrabold"
+                      : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Activity className="w-4 h-4 shrink-0 text-slate-400 animate-pulse" />
+                    <span className="truncate">{language === "TR" ? "⚽ Maç Analiz Merkezi (Match Analysis Centre)" : "⚽ Match Analysis Centre (Match Lab)"}</span>
+                  </div>
+                  {expandedParents.match_lab ? <ChevronUp className="w-3.5 h-3.5 shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 shrink-0" />}
+                </button>
+                {expandedParents.match_lab && (
+                  <div className="pl-6 pr-1 mt-1 border-l border-slate-100 dark:border-slate-800 ml-5 flex flex-col gap-1 py-1">
+                    {MATCH_LAB_TABS.map(sub => (
+                      <button
+                        key={sub.id}
+                        onClick={() => {
+                          setHighLevelTab("match_lab");
+                          setActiveTab(sub.id as any);
+                        }}
+                        className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-left text-[11px] font-medium transition-all ${
+                          activeTab === sub.id
+                            ? "text-indigo-600 dark:text-indigo-400 font-extrabold bg-indigo-50/50 dark:bg-indigo-950/10"
+                            : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-100"
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${activeTab === sub.id ? "bg-indigo-500" : "bg-slate-350"}`} />
+                        <span className="truncate">{sub.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col">
+                <button
+                  onClick={() => {
+                    setExpandedParents(prev => ({ ...prev, scout_engine: !prev.scout_engine }));
+                    if (highLevelTab !== "scout_engine") {
+                      setHighLevelTab("scout_engine");
+                      setActiveTab("in_possession");
+                    }
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left font-semibold text-xs transition-all ${
+                    highLevelTab === "scout_engine"
+                      ? "bg-indigo-55 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400 font-extrabold"
+                      : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <User className="w-4 h-4 shrink-0 text-slate-400" />
+                    <span className="truncate">{language === "TR" ? "🏃 Scout Oyuncu Raporları" : "🏃 Scout Engine"}</span>
+                  </div>
+                  {expandedParents.scout_engine ? <ChevronUp className="w-3.5 h-3.5 shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 shrink-0" />}
+                </button>
+                {expandedParents.scout_engine && (
+                  <div className="pl-6 pr-1 mt-1 border-l border-slate-100 dark:border-slate-800 ml-5 flex flex-col gap-1 py-1">
+                    {SCOUT_ENGINE_TABS.map(sub => (
+                      <button
+                        key={sub.id}
+                        onClick={() => {
+                          setHighLevelTab("scout_engine");
+                          setActiveTab(sub.id as any);
+                        }}
+                        className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-left text-[11px] font-medium transition-all ${
+                          activeTab === sub.id
+                            ? "text-indigo-600 dark:text-indigo-400 font-extrabold bg-indigo-50/50 dark:bg-indigo-950/10"
+                            : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-100"
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${activeTab === sub.id ? "bg-indigo-500" : "bg-slate-350"}`} />
+                        <span className="truncate">{sub.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[9px] font-mono font-bold tracking-widest text-slate-400 px-3 uppercase">
+                {language === "TR" ? "GELİŞMİŞ ANALİZLER" : "ADVANCED ANALYSES"}
+              </span>
+              {[
+                { id: "tactical_report", icon: FileText },
+                { id: "varyans_engine", icon: Sparkles },
+                { id: "xg_analysis", icon: LineChart },
+                { id: "football_hackers_lab", icon: Database },
+                { id: "tournament_comparison", icon: SlidersHorizontal },
+                { id: "team_poster_report", icon: Download }
+              ].map(item => {
+                const matchedTab = TOURNAMENT_INSIGHTS_TABS.find(t => t.id === item.id);
+                const label = matchedTab ? matchedTab.label : item.id;
+                const IconComponent = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setHighLevelTab("tournament_insights");
+                      setActiveTab(item.id as any);
+                    }}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left font-semibold text-xs transition-all ${
+                      activeTab === item.id
+                        ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/10"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                    }`}
+                  >
+                    <IconComponent className="w-4 h-4 shrink-0" />
+                    <span className="flex-1 truncate">{label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-col gap-1.5 mt-auto pt-4 border-t border-slate-100 dark:border-slate-800">
+              <button
+                onClick={() => {
+                  setHighLevelTab("tournament_insights");
+                  setActiveTab("export_hub");
+                }}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left font-semibold text-xs transition-all ${
+                  activeTab === "export_hub"
+                    ? "bg-indigo-600 text-white shadow-md"
+                    : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                }`}
+              >
+                <Download className="w-4 h-4 shrink-0 text-emerald-500" />
+                <span className="flex-1 truncate font-bold">{language === "TR" ? "🚀 Karar Akışı & İndirme" : "🚀 Decision & Export"}</span>
+              </button>
+
+              <button
+                onClick={() => setIsSettingsOpen(true)}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left font-semibold text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all"
+              >
+                <SlidersHorizontal className="w-4 h-4 shrink-0 text-amber-500 animate-pulse" />
+                <span className="flex-1 truncate">{language === "TR" ? "⚙️ Sistem Ayarları (Yönetici)" : "⚙️ System Settings"}</span>
+              </button>
+            </div>
+          </div>
         </aside>
 
         {/* RIGHT WORKSPACE PANELS */}
@@ -4713,9 +5065,12 @@ export default function App() {
             className="flex-1 overflow-x-auto scrollbar-none flex items-center justify-between gap-4 scroll-smooth"
           >
             <div className="flex items-center gap-1 whitespace-nowrap">
-              {(NAV_CATEGORIES.find(cat => cat.id === highLevelTab)?.core ?? [])
-                .concat(NAV_CATEGORIES.find(cat => cat.id === highLevelTab)?.more ?? [])
-                .map(tab => (
+              {(highLevelTab === "match_lab" 
+                ? MATCH_LAB_TABS 
+                : highLevelTab === "scout_engine" 
+                ? SCOUT_ENGINE_TABS 
+                : TOURNAMENT_INSIGHTS_TABS
+              ).map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => {
@@ -4723,14 +5078,13 @@ export default function App() {
                     // Reset player filters
                     setSortField("");
                   }}
-                  title={tab.fullLabel[language]}
                   className={`pb-2.5 pt-1.5 px-3 font-semibold text-xs tracking-tight transition cursor-pointer relative ${
                     activeTab === tab.id
                       ? "text-indigo-600 font-extrabold border-b-2 border-indigo-600"
                       : "text-slate-500 hover:text-slate-800"
                   }`}
                 >
-                  {tab.shortLabel[language]}
+                  {tab.label}
                 </button>
               ))}
             </div>

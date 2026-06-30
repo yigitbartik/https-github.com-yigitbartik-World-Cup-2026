@@ -332,17 +332,28 @@ export default function CustomGroupBuilder({
 
   // Chart data formatting
   const comparisonChartData = useMemo(() => {
+    const scaleDistance = (val: number) => Math.min(100, Math.round((val / 11000) * 100)) || 10;
+    const scaleSprints = (val: number) => Math.min(100, Math.round((val / 50) * 100)) || 10;
+    const scaleZone4 = (val: number) => Math.min(100, Math.round((val / 800) * 100)) || 10;
+    const scaleHSR = (val: number) => Math.min(100, Math.round((val / 1000) * 100)) || 10;
+    const scaleLineBreaks = (val: number) => Math.min(100, Math.round((val / 12) * 100)) || 10;
+    const scalePasses = (val: number) => Math.min(100, Math.round((val / 75) * 100)) || 10;
+    const scaleTackles = (val: number) => Math.min(100, Math.round((val / 3.5) * 100)) || 10;
+    const scaleInterceptions = (val: number) => Math.min(100, Math.round((val / 3.5) * 100)) || 10;
+    const scaleRegains = (val: number) => Math.min(100, Math.round((val / 8) * 100)) || 10;
+    const scaleClearances = (val: number) => Math.min(100, Math.round((val / 8) * 100)) || 10;
+
     return [
-      { name: "Toplam Koşu (x100m)", A: Math.round(avgA.totalDistance / 100), B: Math.round(avgB.totalDistance / 100) },
-      { name: "Z5 Sprints (Sürat)", A: Math.round(avgA.sprints), B: Math.round(avgB.sprints) },
-      { name: "Z4 Koşuları (m)", A: Math.round(avgA.zone4), B: Math.round(avgB.zone4) },
-      { name: "Yüksek Şiddet (m/10)", A: Math.round(avgA.highSpeedRuns / 10), B: Math.round(avgB.highSpeedRuns / 10) },
-      { name: "Hat Kıran Paslar", A: Math.round(avgA.lineBreaksCompleted * 3), B: Math.round(avgB.lineBreaksCompleted * 3) },
-      { name: "Pas İsabeti (Adet)", A: Math.round(avgA.passesCompleted), B: Math.round(avgB.passesCompleted) },
-      { name: "Top Çalmalılar (x5)", A: Math.round(avgA.tackles * 5), B: Math.round(avgB.tackles * 5) },
-      { name: "Pas Araları (x5)", A: Math.round(avgA.interceptions * 5), B: Math.round(avgB.interceptions * 5) },
-      { name: "Top Kazanmalar (x5)", A: Math.round(avgA.regains * 5), B: Math.round(avgB.regains * 5) },
-      { name: "Uzaklaştırma (x5)", A: Math.round(avgA.clearances * 5), B: Math.round(avgB.clearances * 5) }
+      { name: "Toplam Koşu", A: scaleDistance(avgA.totalDistance), B: scaleDistance(avgB.totalDistance) },
+      { name: "Z5 Sprints", A: scaleSprints(avgA.sprints), B: scaleSprints(avgB.sprints) },
+      { name: "Z4 Koşuları", A: scaleZone4(avgA.zone4), B: scaleZone4(avgB.zone4) },
+      { name: "Yüksek Şiddet", A: scaleHSR(avgA.highSpeedRuns), B: scaleHSR(avgB.highSpeedRuns) },
+      { name: "Hat Kıran Paslar", A: scaleLineBreaks(avgA.lineBreaksCompleted), B: scaleLineBreaks(avgB.lineBreaksCompleted) },
+      { name: "Pas İsabeti", A: scalePasses(avgA.passesCompleted), B: scalePasses(avgB.passesCompleted) },
+      { name: "Top Çalmalılar", A: scaleTackles(avgA.tackles), B: scaleTackles(avgB.tackles) },
+      { name: "Pas Araları", A: scaleInterceptions(avgA.interceptions), B: scaleInterceptions(avgB.interceptions) },
+      { name: "Top Kazanmalar", A: scaleRegains(avgA.regains), B: scaleRegains(avgB.regains) },
+      { name: "Uzaklaştırma", A: scaleClearances(avgA.clearances), B: scaleClearances(avgB.clearances) }
     ];
   }, [avgA, avgB]);
 
@@ -919,7 +930,7 @@ export default function CustomGroupBuilder({
                   <RadarChart cx="50%" cy="48%" outerRadius="72%" data={comparisonChartData}>
                     <PolarGrid gridType="circle" stroke="#cbd5e1" strokeDasharray="3 3" />
                     <PolarAngleAxis dataKey="name" tick={{ fill: "#334155", fontSize: 8.5, fontWeight: 700, fontFamily: "Inter" }} />
-                    <PolarRadiusAxis angle={30} domain={[0, "auto"]} tick={{ fill: "#64748b", fontSize: 8, fontWeight: 500 }} />
+                    <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: "#64748b", fontSize: 8, fontWeight: 500 }} />
                     
                     <Radar 
                       name={groupAName} 
