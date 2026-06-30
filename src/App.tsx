@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef } from "react";
+import { Analytics } from '@vercel/analytics/react';
 import { motion, AnimatePresence } from "motion/react";
 import * as XLSX from "xlsx";
 import {
@@ -7821,6 +7822,7 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
+      <Analytics />
 
     </div>
   );
