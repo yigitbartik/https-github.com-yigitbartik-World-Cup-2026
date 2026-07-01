@@ -68,6 +68,101 @@ export const cleanGroupName = (name: string): string => {
   return cleaned.trim() || "Genel";
 };
 
+export const extractMatchNumFromMatch = (match: MatchReport, allList: MatchReport[]): number | null => {
+  const fileName = (match.matchInfo as any).fileName || "";
+  const title = match.matchInfo.title || "";
+  const groupField = match.matchInfo.group || "";
+
+  // Determine if it is explicitly a Round of 32 (Knockout) match.
+  // "Round of 32 yazmayanlar grup maçları" -> if it doesn't say "Round of 32" or "Son 32", it's a group match.
+  const isKnockout = 
+    groupField.toLowerCase().includes("round of 32") ||
+    groupField.toLowerCase().includes("son 32") ||
+    title.toLowerCase().includes("round of 32") ||
+    title.toLowerCase().includes("son 32") ||
+    fileName.toLowerCase().includes("round of 32") ||
+    fileName.toLowerCase().includes("son 32");
+
+  const extractMatchNum = (str: string): number | null => {
+    if (!str) return null;
+    // Strip out 4-digit years first (like 2026 or 2024) to avoid matching them as match numbers
+    const cleanStr = str.replace(/\b\d{4}\b/g, "").replace(/\b202\d\b/g, "");
+    
+    // 1. Look for explicit match prefixes (e.g. "Match 73", "Maç 73", "M73", "M_73", "No 73")
+    const explicitPattern = cleanStr.match(/(?:match|maç|no\.?|m)\s*[-_]?\s*(\d+)\b/i);
+    if (explicitPattern) {
+      return parseInt(explicitPattern[1], 10);
+    }
+    
+    // 2. Look for stand-alone numbers that could be match numbers (1 to 104)
+    const standalonePattern = cleanStr.match(/\b(\d{1,3})\b/);
+    if (standalonePattern) {
+      const val = parseInt(standalonePattern[1], 10);
+      if (val >= 1 && val <= 104) {
+        return val;
+      }
+    }
+    
+    // 3. Absolute fallback: first digits in the string
+    const firstDigits = cleanStr.match(/\d+/);
+    if (firstDigits) {
+      const val = parseInt(firstDigits[0], 10);
+      if (val >= 1 && val <= 104) {
+        return val;
+      }
+    }
+    return null;
+  };
+
+  if (!isKnockout) {
+    // Group stage match: must return a number between 1 and 72!
+    let matchNum = extractMatchNum(groupField);
+    if (matchNum === null) {
+      matchNum = extractMatchNum(fileName);
+    }
+    if (matchNum === null) {
+      matchNum = extractMatchNum(title);
+    }
+
+    if (matchNum !== null && matchNum >= 1 && matchNum <= 72) {
+      return matchNum;
+    }
+
+    // Default fallback based on home/away team play counts (1 to 3) to choose a group stage match number
+    const idx = allList.indexOf(match);
+    if (idx !== -1) {
+      const home = match.matchInfo.homeTeam;
+      const away = match.matchInfo.awayTeam;
+      let homeCount = 0;
+      let awayCount = 0;
+      for (let i = 0; i <= idx; i++) {
+        const m = allList[i];
+        if (m.matchInfo.homeTeam === home || m.matchInfo.awayTeam === home) homeCount++;
+        if (m.matchInfo.homeTeam === away || m.matchInfo.awayTeam === away) awayCount++;
+      }
+      const num = Math.max(homeCount, awayCount);
+      if (num === 1) return 1;
+      if (num === 2) return 25;
+      return 49;
+    }
+    return 1;
+  } else {
+    // Explicit Knockout match: must return a number >= 73
+    let matchNum = extractMatchNum(groupField);
+    if (matchNum === null) {
+      matchNum = extractMatchNum(fileName);
+    }
+    if (matchNum === null) {
+      matchNum = extractMatchNum(title);
+    }
+
+    if (matchNum !== null && matchNum >= 73) {
+      return matchNum;
+    }
+    return 73; // Fallback to 73 for knockout stage matches
+  }
+};
+
 interface TournamentAnalyticsViewProps {
   uploadedMatches: MatchReport[];
   setActiveMatchIndex: (index: number) => void;
@@ -1538,6 +1633,36 @@ export default function TournamentAnalyticsView({
     return ["All", ...Array.from(list).sort((a, b) => a.localeCompare(b))];
   }, [uploadedMatches]);
 
+  const knockoutMatches = useMemo(() => {
+    return uploadedMatches.filter(m => {
+      const matchNum = extractMatchNumFromMatch(m, uploadedMatches);
+      if (matchNum !== null && matchNum >= 73) {
+        return true;
+      }
+      const grp = m.matchInfo.group || "";
+      const title = m.matchInfo.title || "";
+      const fileName = (m as any).fileName || "";
+      const isKO = 
+        grp.toLowerCase().includes("round of 32") ||
+        grp.toLowerCase().includes("son 32") ||
+        title.toLowerCase().includes("round of 32") ||
+        title.toLowerCase().includes("son 32") ||
+        fileName.toLowerCase().includes("round of 32") ||
+        fileName.toLowerCase().includes("son 32");
+      return isKO;
+    });
+  }, [uploadedMatches]);
+
+  const isSelectedKnockout = useMemo(() => {
+    const filterLower = selectedGroupFilter.toLowerCase();
+    return (
+      filterLower.includes("round of 32") ||
+      filterLower.includes("son 32") ||
+      filterLower.includes("knockout") ||
+      filterLower.includes("eleme")
+    );
+  }, [selectedGroupFilter]);
+
   const filteredVaryansMatches = useMemo(() => {
     let list = uploadedMatches;
     if (varyansGroup !== "All") {
@@ -2246,6 +2371,12 @@ export default function TournamentAnalyticsView({
     const stats: { [key: string]: TeamAggregate } = {};
 
     uploadedMatches.forEach(m => {
+      // Exclude Knockout/Round of 32 stage matches (73 and above) from the group standings!
+      const matchNum = extractMatchNumFromMatch(m, uploadedMatches);
+      if (matchNum !== null && matchNum >= 73) {
+        return;
+      }
+
       const home = m.matchInfo.homeTeam;
       const away = m.matchInfo.awayTeam;
       const hGoals = Number(m.matchInfo.homeScore ?? 0);
@@ -3703,10 +3834,14 @@ export default function TournamentAnalyticsView({
                   <span className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
                     <FolderDot className="w-4 h-4" />
                   </span>
-                  Aggregated Standings & Tactical Group Matrix
+                  {isSelectedKnockout 
+                    ? translate("Eleme Aşaması Maçları & Detayları", "Knockout Stage Matches & Details") 
+                    : translate("Grup Puan Durumları & Taktiksel Matris", "Aggregated Standings & Tactical Group Matrix")}
                 </h3>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  Grup puan durumları ve taktiksel metrikleri. Seviye 3 detaylarına dalmak için herhangi bir takım ismine tıklayın.
+                  {isSelectedKnockout 
+                    ? translate("Eleme aşamasında (Round of 32 / Son 32) puan durumu bulunmamaktadır. Tüm eşleşmeler ve detaylar aşağıda listelenmiştir.", "There is no standings table in the knockout stage. All matches and details are listed below.") 
+                    : translate("Grup puan durumları ve taktiksel metrikleri. Seviye 3 detaylarına dalmak için herhangi bir takım ismine tıklayın.", "Group standings and tactical metrics. Click any team name to drilldown to Level 3 details.")}
                 </p>
               </div>
 
@@ -3728,206 +3863,330 @@ export default function TournamentAnalyticsView({
               </div>
             </div>
 
-            {/* Standings table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs font-sans border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-150 text-[10px] font-mono text-slate-500 uppercase tracking-widest font-bold">
-                    <th className="py-2.5 pb-3">Sıra & Takım Adı (Click to Drilldown Team Detail)</th>
-                    <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("gp")}>GP</th>
-                    <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("w")}>W</th>
-                    <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("d")}>D</th>
-                    <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("l")}>L</th>
-                    <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("gf")}>GF (Gol)</th>
-                    <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("ga")}>GA</th>
-                    <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("gd")}>GD (Avr)</th>
-                    <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("points")}>PTS (Puan)</th>
-                    <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("totalPossessionSum")}>POSS% (Topa S.)</th>
-                    <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("totalLineBreaks")}>Hat Kıran Pas</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-55">
-                  {filteredTeams.map((t, idx) => {
-                    // Precompute maxes for matrix coloring
-                    const allPoints = filteredTeams.map(item => item.points);
-                    const maxPt = Math.max(...allPoints, 1);
-                    const allGF = filteredTeams.map(item => item.gf);
-                    const maxGFVal = Math.max(...allGF, 1);
-                    const allBreaks = filteredTeams.map(item => item.totalLineBreaks);
-                    const maxBreak = Math.max(...allBreaks, 1);
+            {/* Standings table or Knockout Match list */}
+            {isSelectedKnockout ? (
+              <div className="flex flex-col gap-4">
+                <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 text-xs text-indigo-800 leading-relaxed">
+                  <strong className="block font-sans font-bold text-sm mb-1">
+                    {translate("ℹ️ Eleme Aşaması Bilgilendirmesi", "ℹ️ Knockout Stage Information")}
+                  </strong>
+                  {translate(
+                    "Eleme turlarında (Round of 32 / Son 32) grup aşamalarındaki gibi bir puan durumu tablosu bulunmamaktadır. Bu aşamada oynanan tüm eleme maçları, skorları ve taktiksel istatistik özetleri aşağıda alt alta listelenmiştir. Detaylı analizlerine ulaşmak için maçların üzerindeki butonları kullanabilirsiniz.",
+                    "There is no standings/points table in the Round of 32 knockout stage. All matches and match reports are listed below with their scores and tactical statistic summaries. You can click 'Detailed Match Report' to explore full Level 1 & Level 2 analysis of each match."
+                  )}
+                </div>
 
-                    const isTopPt = t.points === maxPt;
-                    const isHighGF = t.gf >= maxGFVal * 0.75;
-                    const isHighBreak = t.totalLineBreaks >= maxBreak * 0.75;
+                {knockoutMatches.length === 0 ? (
+                  <div className="text-center py-12 border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 font-sans text-xs">
+                    {translate("Bu aşamaya ait henüz yüklenmiş bir maç bulunmuyor.", "No matches uploaded for this stage yet.")}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {knockoutMatches.map((m, idx) => {
+                      const originalIndex = uploadedMatches.indexOf(m);
+                      const home = m.matchInfo.homeTeam;
+                      const away = m.matchInfo.awayTeam;
+                      const hScore = m.matchInfo.homeScore;
+                      const aScore = m.matchInfo.awayScore;
+                      const matchNum = extractMatchNumFromMatch(m, uploadedMatches);
+                      
+                      // Extract key stats for mini-grid
+                      const homeXG = m.keyStats?.home?.xG ?? null;
+                      const awayXG = m.keyStats?.away?.xG ?? null;
+                      const homePoss = m.keyStats?.home?.possession ?? null;
+                      const awayPoss = m.keyStats?.away?.possession ?? null;
+                      
+                      // Calculate line breaks
+                      let homeBreaks = 0;
+                      let awayBreaks = 0;
+                      if (m.lineBreaks && Array.isArray(m.lineBreaks.playerSummary)) {
+                        m.lineBreaks.playerSummary.forEach((p: any) => {
+                          if (p.team === home) {
+                            homeBreaks += Number(p.completed || 0);
+                          } else if (p.team === away) {
+                            awayBreaks += Number(p.completed || 0);
+                          }
+                        });
+                      }
 
-                    return (
-                      <tr key={idx} className="hover:bg-indigo-50/20 transition-all">
-                        <td className="py-3.5 font-bold text-slate-905 flex items-center gap-2.5">
-                          <span className="w-5 text-slate-400 font-mono font-bold text-xs">{idx + 1}.</span>
-                          <span 
-                            onClick={() => {
-                              setSelectedTeam(t.team);
-                              setSubTab("team");
-                            }}
-                            className="cursor-pointer hover:text-indigo-600 hover:underline inline-flex items-center gap-2 group"
-                            title={`${t.team} Detaylarını İncele`}
-                          >
-                            <TeamFlag team={t.team} getTeamFlag={getTeamFlag} className="w-8 h-5 object-cover rounded-sm shrink-0 border border-slate-200 shadow-xs" fallbackTextSize="text-lg" />
-                            <span className="font-extrabold text-sm">{t.team}</span>
-                            <span className="text-[9px] font-mono bg-indigo-50 text-indigo-600 py-0.5 px-1.5 rounded-sm shrink-0 opacity-0 group-hover:opacity-100 transition">
-                              Seviye 3 ➡️
+                      return (
+                        <div key={idx} className="bg-white border border-slate-200 hover:border-indigo-250 hover:shadow-sm rounded-2xl p-5 transition-all flex flex-col justify-between gap-4">
+                          {/* Match Header */}
+                          <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                            <span className="text-[10px] font-mono font-bold text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full">
+                              {matchNum ? translate(`Maç #${matchNum}`, `Match #${matchNum}`) : translate(`Eleme Maçı`, `Knockout Match`)}
                             </span>
-                          </span>
-                        </td>
-                        <td className="py-3.5 text-center font-mono font-semibold text-slate-700">{t.gp}</td>
-                        <td className="py-3.5 text-center font-mono text-slate-600">{t.w}</td>
-                        <td className="py-3.5 text-center font-mono text-slate-600">{t.d}</td>
-                        <td className="py-3.5 text-center font-mono text-slate-600">{t.l}</td>
-                        
-                        {/* GF Matrix Cell */}
-                        <td className={`py-3.5 text-center font-mono font-medium transition-colors ${
-                          isHighGF ? "bg-emerald-500/10 text-emerald-800 font-bold" : "text-slate-600"
-                        }`}>{t.gf}</td>
-                        
-                        <td className="py-3.5 text-center font-mono text-slate-600">{t.ga}</td>
-                        
-                        {/* GD Cell */}
-                        <td className={`py-3.5 text-center font-mono font-bold ${t.gd >= 0 ? "text-emerald-600" : "text-red-500"}`}>
-                          {t.gd > 0 ? `+${t.gd}` : t.gd}
-                        </td>
-                        
-                        {/* PTS Matrix Cell */}
-                        <td className={`py-3.5 text-center font-mono font-bold transition-colors ${
-                          isTopPt ? "bg-indigo-600/15 text-indigo-850 rounded-md ring-1 ring-indigo-200/60" : "text-indigo-700 bg-indigo-50/40"
-                        }`}>{t.points}</td>
-                        
-                        {/* Possession Cell */}
-                        <td className={`py-3.5 text-center font-mono font-semibold ${
-                          t.gp > 0 && Math.round(t.totalPossessionSum / t.gp) >= 50 ? "bg-emerald-50 text-emerald-800" : "text-slate-600"
-                        }`}>
-                          {t.gp > 0 ? `${Math.round(t.totalPossessionSum / t.gp)}%` : "-"}
-                        </td>
-                        
-                        {/* Line Breaks Matrix Cell */}
-                        <td className={`py-3.5 text-center font-mono font-bold transition-colors ${
-                          isHighBreak ? "bg-violet-500/10 text-violet-850" : "text-slate-600"
-                        }`}>{t.totalLineBreaks}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                            <span className="text-[10px] font-mono text-slate-400">
+                              {m.matchInfo.date || ""} {m.matchInfo.time || ""}
+                            </span>
+                          </div>
+
+                          {/* Scoreboard block */}
+                          <div className="flex items-center justify-between gap-2 my-2">
+                            {/* Home Team */}
+                            <div className="flex-1 flex flex-col items-center text-center gap-1.5">
+                              <TeamFlag team={home} getTeamFlag={getTeamFlag} className="w-10 h-6.5 object-cover rounded shadow-xs border border-slate-200" fallbackTextSize="text-xl" />
+                              <span className="font-extrabold text-xs text-slate-800 line-clamp-1">{home}</span>
+                            </div>
+
+                            {/* Score Display */}
+                            <div className="px-4 py-1.5 bg-slate-950 text-white rounded-xl font-mono font-extrabold text-sm tracking-widest min-w-[70px] text-center shadow-xs">
+                              {hScore !== undefined && aScore !== undefined ? `${hScore} - ${aScore}` : translate("vs", "vs")}
+                            </div>
+
+                            {/* Away Team */}
+                            <div className="flex-1 flex flex-col items-center text-center gap-1.5">
+                              <TeamFlag team={away} getTeamFlag={getTeamFlag} className="w-10 h-6.5 object-cover rounded shadow-xs border border-slate-200" fallbackTextSize="text-xl" />
+                              <span className="font-extrabold text-xs text-slate-800 line-clamp-1">{away}</span>
+                            </div>
+                          </div>
+
+                          {/* Stadium Info */}
+                          {m.matchInfo.stadium && (
+                            <div className="text-center text-[10px] text-slate-400 font-sans italic">
+                              📍 {m.matchInfo.stadium}
+                            </div>
+                          )}
+
+                          {/* Mini Stat Comparison Grid */}
+                          <div className="bg-slate-50 rounded-xl p-3 grid grid-cols-3 gap-2 text-[10px] font-mono text-slate-600">
+                            {/* Possession */}
+                            <div className="text-left font-bold">{homePoss !== null ? `${homePoss}%` : "-"}</div>
+                            <div className="text-center text-slate-400 font-sans">{translate("Topa Sahip Olma", "Possession")}</div>
+                            <div className="text-right font-bold">{awayPoss !== null ? `${awayPoss}%` : "-"}</div>
+
+                            {/* xG */}
+                            <div className="text-left font-bold">{homeXG !== null ? homeXG : "-"}</div>
+                            <div className="text-center text-slate-400 font-sans">{translate("xG (Beklenen Gol)", "xG (Expected Goals)")}</div>
+                            <div className="text-right font-bold">{awayXG !== null ? awayXG : "-"}</div>
+
+                            {/* Line Breaks */}
+                            <div className="text-left font-bold">{homeBreaks}</div>
+                            <div className="text-center text-slate-400 font-sans">{translate("Hat Kıran Pas", "Line Breaks")}</div>
+                            <div className="text-right font-bold">{awayBreaks}</div>
+                          </div>
+
+                          {/* CTA Button */}
+                          <button
+                            onClick={() => {
+                              if (originalIndex !== -1) {
+                                setActiveMatchIndex(originalIndex);
+                                setActiveTab("overview");
+                              }
+                            }}
+                            className="w-full mt-1 bg-indigo-600 hover:bg-indigo-700 text-white font-sans font-bold text-xs py-2 rounded-xl transition shadow-xs flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            <span>{translate("📊 Detaylı Maç Raporuna Git", "📊 Go to Detailed Match Report")}</span>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs font-sans border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-150 text-[10px] font-mono text-slate-500 uppercase tracking-widest font-bold">
+                      <th className="py-2.5 pb-3">Sıra & Takım Adı (Click to Drilldown Team Detail)</th>
+                      <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("gp")}>GP</th>
+                      <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("w")}>W</th>
+                      <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("d")}>D</th>
+                      <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("l")}>L</th>
+                      <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("gf")}>GF (Gol)</th>
+                      <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("ga")}>GA</th>
+                      <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("gd")}>GD (Avr)</th>
+                      <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("points")}>PTS (Puan)</th>
+                      <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("totalPossessionSum")}>POSS% (Topa S.)</th>
+                      <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("totalLineBreaks")}>Hat Kıran Pas</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-55">
+                    {filteredTeams.map((t, idx) => {
+                      // Precompute maxes for matrix coloring
+                      const allPoints = filteredTeams.map(item => item.points);
+                      const maxPt = Math.max(...allPoints, 1);
+                      const allGF = filteredTeams.map(item => item.gf);
+                      const maxGFVal = Math.max(...allGF, 1);
+                      const allBreaks = filteredTeams.map(item => item.totalLineBreaks);
+                      const maxBreak = Math.max(...allBreaks, 1);
+
+                      const isTopPt = t.points === maxPt;
+                      const isHighGF = t.gf >= maxGFVal * 0.75;
+                      const isHighBreak = t.totalLineBreaks >= maxBreak * 0.75;
+
+                      return (
+                        <tr key={idx} className="hover:bg-indigo-50/20 transition-all">
+                          <td className="py-3.5 font-bold text-slate-905 flex items-center gap-2.5">
+                            <span className="w-5 text-slate-400 font-mono font-bold text-xs">{idx + 1}.</span>
+                            <span 
+                              onClick={() => {
+                                setSelectedTeam(t.team);
+                                setSubTab("team");
+                              }}
+                              className="cursor-pointer hover:text-indigo-600 hover:underline inline-flex items-center gap-2 group"
+                              title={`${t.team} Detaylarını İncele`}
+                            >
+                              <TeamFlag team={t.team} getTeamFlag={getTeamFlag} className="w-8 h-5 object-cover rounded-sm shrink-0 border border-slate-200 shadow-xs" fallbackTextSize="text-lg" />
+                              <span className="font-extrabold text-sm">{t.team}</span>
+                              <span className="text-[9px] font-mono bg-indigo-50 text-indigo-600 py-0.5 px-1.5 rounded-sm shrink-0 opacity-0 group-hover:opacity-100 transition">
+                                Seviye 3 ➡️
+                              </span>
+                            </span>
+                          </td>
+                          <td className="py-3.5 text-center font-mono font-semibold text-slate-700">{t.gp}</td>
+                          <td className="py-3.5 text-center font-mono text-slate-600">{t.w}</td>
+                          <td className="py-3.5 text-center font-mono text-slate-600">{t.d}</td>
+                          <td className="py-3.5 text-center font-mono text-slate-600">{t.l}</td>
+                          
+                          {/* GF Matrix Cell */}
+                          <td className={`py-3.5 text-center font-mono font-medium transition-colors ${
+                            isHighGF ? "bg-emerald-500/10 text-emerald-800 font-bold" : "text-slate-600"
+                          }`}>{t.gf}</td>
+                          
+                          <td className="py-3.5 text-center font-mono text-slate-600">{t.ga}</td>
+                          
+                          {/* GD Cell */}
+                          <td className={`py-3.5 text-center font-mono font-bold ${t.gd >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                            {t.gd > 0 ? `+${t.gd}` : t.gd}
+                          </td>
+                          
+                          {/* PTS Matrix Cell */}
+                          <td className={`py-3.5 text-center font-mono font-bold transition-colors ${
+                            isTopPt ? "bg-indigo-600/15 text-indigo-850 rounded-md ring-1 ring-indigo-200/60" : "text-indigo-700 bg-indigo-50/40"
+                          }`}>{t.points}</td>
+                          
+                          {/* Possession Cell */}
+                          <td className={`py-3.5 text-center font-mono font-semibold ${
+                            t.gp > 0 && Math.round(t.totalPossessionSum / t.gp) >= 50 ? "bg-emerald-50 text-emerald-800" : "text-slate-600"
+                          }`}>
+                            {t.gp > 0 ? `${Math.round(t.totalPossessionSum / t.gp)}%` : "-"}
+                          </td>
+                          
+                          {/* Line Breaks Matrix Cell */}
+                          <td className={`py-3.5 text-center font-mono font-bold transition-colors ${
+                            isHighBreak ? "bg-violet-500/10 text-violet-850" : "text-slate-600"
+                          }`}>{t.totalLineBreaks}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           {/* DEDICATED GROUP REPORT PAGE (Grup Özel Sayfası) */}
-          <div className="bg-gradient-to-br from-indigo-50/40 via-white to-indigo-50/20 border border-slate-200/60 rounded-3xl p-6 shadow-xs flex flex-col gap-5 mt-2">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-3">
-              <div>
-                <h4 className="font-sans font-extrabold text-slate-905 text-xs flex items-center gap-1.5 uppercase">
-                  <span className="w-2 h-2 rounded-full bg-indigo-600 inline-block animate-pulse"></span>
-                  📁 Dedicated Page: {selectedGroupFilter} Performans Analiz Raporu
-                </h4>
-                <p className="text-[10px] text-slate-400 mt-1">
-                  Gruba ait anlık istatistikler ve dikkat çeken taktiksel performanslar.
-                </p>
-              </div>
-              <div className="text-[10px] font-mono font-black text-indigo-700 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100">
-                LİDER: {filteredTeams[0]?.team || "Belirlenmedi"}
-              </div>
-            </div>
-
-            {/* Group KPIs bento grids */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-3xmin">
-                <span className="text-[8px] font-sans font-extrabold text-slate-400 block uppercase">GRUP GOL ORTALAMASI</span>
-                <strong className="text-xl font-mono text-slate-800 block mt-1">
-                  {(() => {
-                    const totalGoals = filteredTeams.reduce((acc, t) => acc + t.gf, 0);
-                    const totalGP = filteredTeams.reduce((acc, t) => acc + t.gp, 0);
-                    return totalGP > 0 ? (totalGoals / totalGP).toFixed(2) : "0.00";
-                  })()} <span className="text-xs font-semibold text-slate-450">gol / maç</span>
-                </strong>
-                <p className="text-[9px] text-slate-400 mt-1">
-                  Grupta oynanan maçlardaki ofansif verimlilik katsayısı.
-                </p>
+          {!isSelectedKnockout && (
+            <div className="bg-gradient-to-br from-indigo-50/40 via-white to-indigo-50/20 border border-slate-200/60 rounded-3xl p-6 shadow-xs flex flex-col gap-5 mt-2">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-3">
+                <div>
+                  <h4 className="font-sans font-extrabold text-slate-905 text-xs flex items-center gap-1.5 uppercase">
+                    <span className="w-2 h-2 rounded-full bg-indigo-600 inline-block animate-pulse"></span>
+                    📁 Dedicated Page: {selectedGroupFilter} Performans Analiz Raporu
+                  </h4>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Gruba ait anlık istatistikler ve dikkat çeken taktiksel performanslar.
+                  </p>
+                </div>
+                <div className="text-[10px] font-mono font-black text-indigo-700 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100">
+                  LİDER: {filteredTeams[0]?.team || "Belirlenmedi"}
+                </div>
               </div>
 
-              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-3xmin">
-                <span className="text-[8px] font-sans font-extrabold text-slate-400 block uppercase">GRUP ORTALAMA TOPA SAHİP OLMA</span>
-                <strong className="text-xl font-mono text-slate-800 block mt-1">
-                  {(() => {
-                    const totalPoss = filteredTeams.reduce((acc, t) => acc + (t.totalPossessionSum / (t.gp || 1)), 0);
-                    return filteredTeams.length > 0 ? Math.round(totalPoss / filteredTeams.length) : 50;
-                  })()}%
-                </strong>
-                <p className="text-[9px] text-slate-400 mt-1">
-                  Grup genelindeki takımların ortalama topa sahip olma oranı.
-                </p>
+              {/* Group KPIs bento grids */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-3xmin">
+                  <span className="text-[8px] font-sans font-extrabold text-slate-400 block uppercase">GRUP GOL ORTALAMASI</span>
+                  <strong className="text-xl font-mono text-slate-800 block mt-1">
+                    {(() => {
+                      const totalGoals = filteredTeams.reduce((acc, t) => acc + t.gf, 0);
+                      const totalGP = filteredTeams.reduce((acc, t) => acc + t.gp, 0);
+                      return totalGP > 0 ? (totalGoals / totalGP).toFixed(2) : "0.00";
+                    })()} <span className="text-xs font-semibold text-slate-450">gol / maç</span>
+                  </strong>
+                  <p className="text-[9px] text-slate-400 mt-1">
+                    Grupta oynanan maçlardaki ofansif verimlilik katsayısı.
+                  </p>
+                </div>
+
+                <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-3xmin">
+                  <span className="text-[8px] font-sans font-extrabold text-slate-400 block uppercase">GRUP ORTALAMA TOPA SAHİP OLMA</span>
+                  <strong className="text-xl font-mono text-slate-800 block mt-1">
+                    {(() => {
+                      const totalPoss = filteredTeams.reduce((acc, t) => acc + (t.totalPossessionSum / (t.gp || 1)), 0);
+                      return filteredTeams.length > 0 ? Math.round(totalPoss / filteredTeams.length) : 50;
+                    })()}%
+                  </strong>
+                  <p className="text-[9px] text-slate-400 mt-1">
+                    Grup genelindeki takımların ortalama topa sahip olma oranı.
+                  </p>
+                </div>
+
+                <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-3xmin">
+                  <span className="text-[8px] font-sans font-extrabold text-slate-400 block uppercase">TOPLAM DESTEKLEYİCİ AKSİYON</span>
+                  <strong className="text-xl font-mono text-emerald-650 block mt-1">
+                    {filteredTeams.reduce((acc, t) => acc + t.totalRegains, 0)} <span className="text-xs font-semibold text-slate-400 font-bold">Regains</span>
+                  </strong>
+                  <p className="text-[9px] text-slate-400 mt-1">
+                    Tüm grupta kazanılan toplam savunma eylemleri hacmi.
+                  </p>
+                </div>
               </div>
 
-              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-3xmin">
-                <span className="text-[8px] font-sans font-extrabold text-slate-400 block uppercase">TOPLAM DESTEKLEYİCİ AKSİYON</span>
-                <strong className="text-xl font-mono text-emerald-650 block mt-1">
-                  {filteredTeams.reduce((acc, t) => acc + t.totalRegains, 0)} <span className="text-xs font-semibold text-slate-400 font-bold">Regains</span>
-                </strong>
-                <p className="text-[9px] text-slate-400 mt-1">
-                  Tüm grupta kazanılan toplam savunma eylemleri hacmi.
-                </p>
-              </div>
-            </div>
+              {/* Tactical Strengths & Weaknesses of Group's Teams */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-3xs">
+                <h5 className="text-[10px] font-mono font-bold text-slate-400 uppercase mb-3">Gruptaki Takımların Taktik Profili (Team Strengths & Weaknesses)</h5>
+                <div className="space-y-3">
+                  {filteredTeams.map((t) => {
+                    const ptsPerMac = t.gp > 0 ? t.points / t.gp : 0;
+                    const passesRatio = t.totalPassesAttempted > 0 ? (t.totalPassesCompleted / t.totalPassesAttempted) * 100 : 0;
+                    
+                    let strength = "Takım Disiplini ve Pres Kararlılığı";
+                    let weakness = "Son Pas Kalitesi ve Karar Alma Oranı";
 
-            {/* Tactical Strengths & Weaknesses of Group's Teams */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-3xs">
-              <h5 className="text-[10px] font-mono font-bold text-slate-400 uppercase mb-3">Gruptaki Takımların Taktik Profili (Team Strengths & Weaknesses)</h5>
-              <div className="space-y-3">
-                {filteredTeams.map((t) => {
-                  const ptsPerMac = t.gp > 0 ? t.points / t.gp : 0;
-                  const passesRatio = t.totalPassesAttempted > 0 ? (t.totalPassesCompleted / t.totalPassesAttempted) * 100 : 0;
-                  
-                  let strength = "Takım Disiplini ve Pres Kararlılığı";
-                  let weakness = "Son Pas Kalitesi ve Karar Alma Oranı";
+                    if (ptsPerMac >= 1.5) {
+                      strength = "Skor Gücü ve Ofansif Çeşitlilik";
+                    } else if (passesRatio >= 78) {
+                      strength = "Kısa Paslarla Sabırlı Oyun Kurumu";
+                    } else if (t.totalLineBreaks >= 15) {
+                      strength = "Dikine Geçiş Hücumları";
+                    }
 
-                  if (ptsPerMac >= 1.5) {
-                    strength = "Skor Gücü ve Ofansif Çeşitlilik";
-                  } else if (passesRatio >= 78) {
-                    strength = "Kısa Paslarla Sabırlı Oyun Kurumu";
-                  } else if (t.totalLineBreaks >= 15) {
-                    strength = "Dikine Geçiş Hücumları";
-                  }
+                    if (t.ga > t.gf) {
+                      weakness = "Savunma Yerleşimi ve Blok Arası Sızıntılar";
+                    } else if (t.totalPossessionSum / (t.gp || 1) < 45) {
+                      weakness = "Baskı Altında Oyun Kuramama";
+                    }
 
-                  if (t.ga > t.gf) {
-                    weakness = "Savunma Yerleşimi ve Blok Arası Sızıntılar";
-                  } else if (t.totalPossessionSum / (t.gp || 1) < 45) {
-                    weakness = "Baskı Altında Oyun Kuramama";
-                  }
-
-                  return (
-                    <div key={t.team} className="p-3 bg-slate-50 hover:bg-slate-100/40 rounded-xl border border-slate-100/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors">
-                      <div>
-                        <strong className="text-xs text-slate-800 flex items-center gap-1.5 font-bold">
-                          <TeamFlag team={t.team} getTeamFlag={getTeamFlag} className="w-4 h-2.5 object-cover rounded-xs shrink-0 border border-slate-200" fallbackTextSize="text-xs" />
-                          {t.team}
-                        </strong>
-                        <span className="text-[9.5px] text-slate-400 font-mono block mt-0.5">
-                          Puan: {t.points} | Gol: {t.gf}-{t.ga} | Başarılı Pas: {Math.round(passesRatio)}%
-                        </span>
-                      </div>
-
-                      <div className="flex flex-col gap-1 text-[10px]">
-                        <div className="flex items-center gap-1 font-bold text-emerald-700">
-                          <span>💚 Güçlü:</span> <span>{strength}</span>
+                    return (
+                      <div key={t.team} className="p-3 bg-slate-50 hover:bg-slate-100/40 rounded-xl border border-slate-100/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors">
+                        <div>
+                          <strong className="text-xs text-slate-800 flex items-center gap-1.5 font-bold">
+                            <TeamFlag team={t.team} getTeamFlag={getTeamFlag} className="w-4 h-2.5 object-cover rounded-xs shrink-0 border border-slate-200" fallbackTextSize="text-xs" />
+                            {t.team}
+                          </strong>
+                          <span className="text-[9.5px] text-slate-400 font-mono block mt-0.5">
+                            Puan: {t.points} | Gol: {t.gf}-{t.ga} | Başarılı Pas: {Math.round(passesRatio)}%
+                          </span>
                         </div>
-                        <div className="flex items-center gap-1 text-slate-500 font-medium">
-                          <span>🤍 Limit:</span> <span>{weakness}</span>
+
+                        <div className="flex flex-col gap-1 text-[10px]">
+                          <div className="flex items-center gap-1 font-bold text-emerald-700">
+                            <span>💚 Güçlü:</span> <span>{strength}</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-slate-500 font-medium">
+                            <span>🤍 Limit:</span> <span>{weakness}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
       {/* 3. Head-to-Head compare engine */}
       <div className="bg-slate-950 text-slate-100 rounded-3xl p-6 shadow-md flex flex-col gap-5 border border-slate-800 relative overflow-hidden">

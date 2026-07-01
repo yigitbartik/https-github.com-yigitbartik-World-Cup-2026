@@ -648,7 +648,7 @@ export function AthleticCampaignReport({
         </div>
 
         {/* Dynamic Positional Rankings & Strengths Card */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           
           {/* Rank 1: In Formation/Team */}
           <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-3xs flex items-center gap-3">
@@ -732,10 +732,10 @@ export function AthleticCampaignReport({
         )}
 
         {/* 10 CORE VISUALIZATION GRIDS (Physical Performance Metrics) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           
           {/* Chart 1: MINUTES PLAYED */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col h-[230px]">
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col h-[270px]">
             <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight flex justify-between items-center border-b border-slate-100 pb-2">
               <span>1- {translate("SÜRE (DAKİKA)", "MINUTES PLAYED")}</span>
               <span className="text-[10px] text-slate-400 font-normal">Min/Max</span>
@@ -759,7 +759,7 @@ export function AthleticCampaignReport({
           </div>
 
           {/* Chart 2: TOTAL DISTANCE WITH GREY BAND */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col h-[230px]">
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col h-[270px]">
             <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight flex justify-between items-center border-b border-slate-100 pb-2">
               <span>2- {translate("TOPLAM MESAFE (m)", "TOTAL DISTANCE (m)")}</span>
               <span className="text-[9px] text-indigo-600 font-mono font-bold">{translate("GRI ALAN: MIN/MAX", "GREY AREA: MIN/MAX")}</span>
@@ -797,7 +797,7 @@ export function AthleticCampaignReport({
           </div>
 
           {/* Chart 3: MAX SPEED WITH GREY BAND */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col h-[230px]">
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col h-[270px]">
             <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight flex justify-between items-center border-b border-slate-100 pb-2">
               <span>3- {translate("MAKSİMUM HIZ (km/h)", "MAX SPEED (km/h)")}</span>
               <span className="text-[9px] text-slate-400 font-mono">{translate("GRI ALAN: MIN/MAX", "GREY AREA: MIN/MAX")}</span>
@@ -822,7 +822,7 @@ export function AthleticCampaignReport({
           </div>
 
           {/* Chart 4: ZONE 1 DISTANCE */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col h-[230px]">
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col h-[270px]">
             <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight flex justify-between items-center border-b border-slate-100 pb-2">
               <span>4- {translate("BÖLGE 1 (0-7 km/h) (m)", "ZONE 1 DISTANCE (0-7 km/h) (m)")}</span>
               <span className="text-[9px] text-slate-400 font-mono">Min/Max</span>
@@ -846,7 +846,7 @@ export function AthleticCampaignReport({
           </div>
 
           {/* Chart 5: ZONE 2 DISTANCE */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col h-[230px]">
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col h-[270px]">
             <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight flex justify-between items-center border-b border-slate-100 pb-2">
               <span>5- {translate("BÖLGE 2 (7-15 km/h) (m)", "ZONE 2 DISTANCE (7-15 km/h) (m)")}</span>
               <span className="text-[9px] text-slate-400 font-mono">Min/Max</span>
@@ -870,7 +870,7 @@ export function AthleticCampaignReport({
           </div>
 
           {/* Chart 6: ZONE 3 DISTANCE */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col h-[230px]">
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col h-[270px]">
             <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight flex justify-between items-center border-b border-slate-100 pb-2">
               <span>6- {translate("BÖLGE 3 (15-20 km/h) (m)", "ZONE 3 DISTANCE (15-20 km/h) (m)")}</span>
               <span className="text-[9px] text-slate-400 font-mono">Min/Max</span>
@@ -894,7 +894,7 @@ export function AthleticCampaignReport({
           </div>
 
           {/* Chart 7: ZONE 4 DISTANCE */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col h-[230px]">
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col h-[270px]">
             <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight flex justify-between items-center border-b border-slate-100 pb-2">
               <span>7- {translate("BÖLGE 4 (20-25 km/h) (m)", "ZONE 4 DISTANCE (20-25 km/h) (m)")}</span>
               <span className="text-[9px] text-slate-400 font-mono">Min/Max</span>
@@ -918,7 +918,7 @@ export function AthleticCampaignReport({
           </div>
 
           {/* Chart 8: ZONE 5 DISTANCE */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col h-[230px]">
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col h-[270px]">
             <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight flex justify-between items-center border-b border-slate-100 pb-2">
               <span>8- {translate("BÖLGE 5 (25+ km/h) (m)", "ZONE 5 DISTANCE (25+ km/h) (m)")}</span>
               <span className="text-[9px] text-slate-400 font-mono">Min/Max</span>
@@ -942,7 +942,7 @@ export function AthleticCampaignReport({
           </div>
 
           {/* Chart 9: HIGH SPEED RUNS */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col h-[230px]">
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col h-[270px]">
             <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight flex justify-between items-center border-b border-slate-100 pb-2">
               <span>9- {translate("YÜKSEK ŞİDDETLİ KOŞU (m)", "HIGH SPEED RUNS (m)")}</span>
               <span className="text-[9px] text-slate-400 font-mono">Min/Max</span>
@@ -966,7 +966,7 @@ export function AthleticCampaignReport({
           </div>
 
           {/* Chart 10: SPRINT COUNT */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col h-[230px]">
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col h-[270px]">
             <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight flex justify-between items-center border-b border-slate-100 pb-2">
               <span>10- {translate("SPRİNT SAYISI (Adet)", "SPRINT COUNT")}</span>
               <span className="text-[9px] text-slate-400 font-mono">Count</span>

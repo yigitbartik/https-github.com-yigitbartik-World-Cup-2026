@@ -562,7 +562,10 @@ const MarqueeFlag = ({ country }: { country: string }) => {
         </svg>
       );
     case "TÜRKİYE":
+    case "TURKİYE":
     case "TURKIYE":
+    case "TURKEY":
+    case "TUR":
       return (
         <svg className="w-5 h-3.5 rounded-xs shadow-xs border border-slate-700/30" viewBox="0 0 30 20">
           <rect width="30" height="20" fill="#e30a17" />
@@ -640,13 +643,17 @@ const MarqueeFlag = ({ country }: { country: string }) => {
       );
     default: {
       const emojiMap: Record<string, string> = {
-        "ITALY": "🇮🇹",
         "NETHERLANDS": "🇳🇱",
         "BELGIUM": "🇧🇪",
         "PORTUGAL": "🇵🇹",
         "URUGUAY": "🇺🇾",
         "SOUTH KOREA": "🇰🇷",
         "USA": "🇺🇸",
+        "TÜRKİYE": "🇹🇷",
+        "TURKİYE": "🇹🇷",
+        "TURKIYE": "🇹🇷",
+        "TURKEY": "🇹🇷",
+        "TUR": "🇹🇷",
         "MOROCCO": "🇲🇦",
         "CANADA": "🇨🇦"
       };
@@ -725,45 +732,73 @@ export default function App() {
   const [globalMatchdayFilter, setGlobalMatchdayFilter] = useState<string>("All");
 
   const getMatchdayForMatch = React.useCallback((match: MatchReport, allList: MatchReport[]) => {
-    // Try to get match number from fileName or title
-    let fileName = (match.matchInfo as any).fileName || "";
-    let title = match.matchInfo.title || "";
-    
-    // Check if filename has digits
-    let matchNum: number | null = null;
-    if (fileName) {
-      const matchDigits = fileName.match(/\d+/);
-      if (matchDigits) {
-        matchNum = parseInt(matchDigits[0], 10);
-      }
-    }
-    
-    // If no digit in filename, try to find in title
-    if (matchNum === null && title) {
-      const titleDigits = title.match(/\d+/);
-      if (titleDigits) {
-        matchNum = parseInt(titleDigits[0], 10);
-      }
+    // Try to get match number from fileName, title, or group field
+    const fileName = (match.matchInfo as any).fileName || "";
+    const title = match.matchInfo.title || "";
+    const groupField = match.matchInfo.group || "";
+
+    // Determine if it is explicitly a Round of 32 (Knockout) match.
+    // "Round of 32 yazmayanlar grup maçları" -> Those that do not say 'Round of 32' are group matches.
+    const isKnockout = 
+      groupField.toLowerCase().includes("round of 32") ||
+      groupField.toLowerCase().includes("son 32") ||
+      title.toLowerCase().includes("round of 32") ||
+      title.toLowerCase().includes("son 32") ||
+      fileName.toLowerCase().includes("round of 32") ||
+      fileName.toLowerCase().includes("son 32");
+
+    if (isKnockout) {
+      return "KO";
     }
 
-    // If still null, try finding by index in the list (1-indexed)
-    if (matchNum === null) {
-      const idx = allList.indexOf(match);
-      if (idx !== -1) {
-        matchNum = idx + 1;
+    const extractMatchNum = (str: string): number | null => {
+      if (!str) return null;
+      // Strip out 4-digit years first (like 2026 or 2024) to avoid matching them as match numbers
+      const cleanStr = str.replace(/\b\d{4}\b/g, "").replace(/\b202\d\b/g, "");
+
+      // 1. Look for explicit match prefixes (e.g. "Match 73", "Maç 73", "M73", "M_73", "No 73")
+      const explicitPattern = cleanStr.match(/(?:match|maç|no\.?|m)\s*[-_]?\s*(\d+)\b/i);
+      if (explicitPattern) {
+        return parseInt(explicitPattern[1], 10);
       }
+      
+      // 2. Look for stand-alone numbers that could be match numbers (1 to 104)
+      const standalonePattern = cleanStr.match(/\b(\d{1,3})\b/);
+      if (standalonePattern) {
+        const val = parseInt(standalonePattern[1], 10);
+        if (val >= 1 && val <= 104) {
+          return val;
+        }
+      }
+      
+      // 3. Absolute fallback: first digits in the string (not including 4-digit years)
+      const firstDigits = cleanStr.match(/\d+/);
+      if (firstDigits) {
+        const val = parseInt(firstDigits[0], 10);
+        if (val >= 1 && val <= 104) {
+          return val;
+        }
+      }
+      return null;
+    };
+
+    let matchNum = extractMatchNum(groupField);
+    if (matchNum === null) {
+      matchNum = extractMatchNum(fileName);
+    }
+    if (matchNum === null) {
+      matchNum = extractMatchNum(title);
     }
 
     if (matchNum !== null) {
       if (matchNum >= 1 && matchNum <= 24) return "1";
       if (matchNum >= 25 && matchNum <= 48) return "2";
       if (matchNum >= 49 && matchNum <= 72) return "3";
-      if (matchNum >= 73) return "KO";
     }
 
     // Default fallback
     const idx = allList.indexOf(match);
-    if (idx === -1) return "All";
+    if (idx === -1) return "1";
     const home = match.matchInfo.homeTeam;
     const away = match.matchInfo.awayTeam;
     let homeCount = 0;
@@ -776,9 +811,27 @@ export default function App() {
     const num = Math.max(homeCount, awayCount);
     if (num === 1) return "1";
     if (num === 2) return "2";
-    if (num === 3) return "3";
-    return "KO";
+    return "3";
   }, []);
+
+  const availableGroups = React.useMemo(() => {
+    const groups = new Set<string>();
+    uploadedMatches.forEach(m => {
+      const rawGrp = m.matchInfo.group || "";
+      if (rawGrp) {
+        let cleaned = rawGrp.replace(/\s*-\s*(Match|Maç)\s*\d+/gi, "");
+        cleaned = cleaned.replace(/\s*(Match|Maç)\s*\d+/gi, "");
+        cleaned = cleaned.replace(/\s*-\s*$/g, "").trim();
+        if (cleaned && !cleaned.toLowerCase().includes("round of 32") && !cleaned.toLowerCase().includes("son 32")) {
+          groups.add(cleaned);
+        }
+      }
+    });
+    if (groups.size === 0) {
+      return ["Group A", "Group B", "Group C", "Group D", "Group E", "Group F", "Group G", "Group H"];
+    }
+    return Array.from(groups).sort((a, b) => a.localeCompare(b));
+  }, [uploadedMatches]);
 
   React.useEffect(() => {
     if (uploadedMatches.length === 0) return;
@@ -986,16 +1039,30 @@ export default function App() {
 
   // --- Virtual SQL Query Engine and Settings Drawer States ---
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isSettingsUnlocked, setIsSettingsUnlocked] = useState(() => {
-    try {
-      const saved = localStorage.getItem("__varyans_settings_unlocked_session");
-      return saved === "true";
-    } catch (e) {}
-    return false;
-  });
+  const [isSettingsUnlocked, setIsSettingsUnlocked] = useState(false);
   const [isPassModalOpen, setIsPassModalOpen] = useState(false);
   const [settingsPasswordInput, setSettingsPasswordInput] = useState("");
   const [passwordError, setPasswordError] = useState("");
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState("");
+  const [confirmPasswordError, setConfirmPasswordError] = useState("");
+
+  const handleOpenSettings = () => {
+    if (isSettingsUnlocked) {
+      setIsSettingsOpen(true);
+    } else {
+      setIsPassModalOpen(true);
+      setPasswordError("");
+      setSettingsPasswordInput("");
+    }
+  };
+
+  const handleCloseSettings = () => {
+    setIsSettingsOpen(false);
+    setIsSettingsUnlocked(false);
+    try {
+      localStorage.removeItem("__varyans_settings_unlocked_session");
+    } catch (e) {}
+  };
 
   const [settingsSubTab, setSettingsSubTab] = useState<"upload" | "sync" | "photos" | "sql">("upload");
   const [sqlQuery, setSqlQuery] = useState<string>(
@@ -1238,22 +1305,6 @@ export default function App() {
     scout_engine: false,
     tournament_insights: false
   });
-
-  const handleSelectTab = (categoryId: CategoryId, tabId: TabId) => {
-    setHighLevelTab(categoryId);
-    setActiveTab(tabId as any);
-    setIsSidebarOpen(false);
-  };
-
-  const handleOpenSettings = () => {
-    if (isSettingsUnlocked) {
-      setIsSettingsOpen(true);
-    } else {
-      setIsPassModalOpen(true);
-      setPasswordError("");
-      setSettingsPasswordInput("");
-    }
-  };
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
 
   const [activeTab, setActiveTab] = useState<
@@ -1283,6 +1334,12 @@ export default function App() {
     | "football_hackers_lab"
     | "export_hub"
   >("tournament_analytics"); // Default to Tournament & Group stage tab so they can see this new capability instantly!
+
+  const handleSelectTab = (categoryId: CategoryId, tabId: TabId) => {
+    setHighLevelTab(categoryId);
+    setActiveTab(tabId as any);
+    setIsSidebarOpen(false); // mobilde otomatik kapansın
+  };
 
   // Synchronize highLevelTab when activeTab changes (e.g. from global search or nav)
   React.useEffect(() => {
@@ -1342,11 +1399,7 @@ export default function App() {
 
   // Custom Country Flags Override State
   const [teamFlags, setTeamFlags] = useState<Record<string, string>>(() => {
-    try {
-      const saved = localStorage.getItem("fifa_team_override_flags");
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return {
+    const defaults = {
       "MEXICO": "🇲🇽",
       "SOUTH AFRICA": "🇿🇦",
       "MEX": "🇲🇽",
@@ -1356,7 +1409,6 @@ export default function App() {
       "BRAZIL": "🇧🇷",
       "GERMANY": "🇩🇪",
       "SPAIN": "🇪🇸",
-      "ITALY": "🇮🇹",
       "ENGLAND": "🏴󠁧󠁢󠁥󠁮󠁧󠁿",
       "NETHERLANDS": "🇳🇱",
       "BELGIUM": "🇧🇪",
@@ -1370,13 +1422,22 @@ export default function App() {
       "KOR": "🇰🇷",
       "USA": "🇺🇸",
       "TÜRKİYE": "🇹🇷",
+      "TURKİYE": "🇹🇷",
       "TURKIYE": "🇹🇷",
+      "TURKEY": "🇹🇷",
       "TUR": "🇹🇷",
       "MOROCCO": "🇲🇦",
       "MAR": "🇲🇦",
       "CANADA": "🇨🇦",
       "CAN": "🇨🇦"
     };
+    try {
+      const saved = localStorage.getItem("fifa_team_override_flags");
+      if (saved) {
+        return { ...defaults, ...JSON.parse(saved) };
+      }
+    } catch (e) {}
+    return defaults;
   });
 
   const [activeFlagEditingTeam, setActiveFlagEditingTeam] = useState<"home" | "away" | null>(null);
@@ -1467,6 +1528,7 @@ export default function App() {
     confirmText?: string;
     cancelText?: string;
     onConfirm: () => void;
+    requirePassword?: boolean;
   }>({
     isOpen: false,
     title: "",
@@ -3348,6 +3410,7 @@ export default function App() {
       message: "Yüklenmiş tüm maç analiz raporlarını silip, arşivi tamamen boşaltmak istediğinize emin misiniz? Bulut Firestore veritabanı da dahil tüm veriler kalıcı olarak sıfırlanacaktır.",
       confirmText: "Evet, Sıfırla",
       cancelText: "Vazgeç",
+      requirePassword: true,
       onConfirm: async () => {
         try {
           await clearAllMatchesFromDB();
@@ -3374,6 +3437,7 @@ export default function App() {
       message: `"${activeMatch.matchInfo.title}" maç performans analiz raporunu arşivden silmek istediğinize emin misiniz?`,
       confirmText: "Evet, Sil",
       cancelText: "Vazgeç",
+      requirePassword: true,
       onConfirm: async () => {
         const matchId = getMatchId(activeMatch);
         try {
@@ -3755,7 +3819,6 @@ export default function App() {
               { countryKey: "ENGLAND", text: "ENGLAND", color: "text-stone-300" },
               { countryKey: "CROATIA", text: "CROATIA", color: "text-red-500" },
               { countryKey: "JAPAN", text: "JAPAN", color: "text-indigo-300" },
-              { countryKey: "ITALY", text: "ITALY", color: "text-emerald-500" },
               { countryKey: "NETHERLANDS", text: "NETHERLANDS", color: "text-orange-400" },
               { countryKey: "BELGIUM", text: "BELGIUM", color: "text-yellow-500" },
               { countryKey: "PORTUGAL", text: "PORTUGAL", color: "text-red-400" },
@@ -3780,7 +3843,6 @@ export default function App() {
               { countryKey: "ENGLAND", text: "ENGLAND", color: "text-stone-300" },
               { countryKey: "CROATIA", text: "CROATIA", color: "text-red-500" },
               { countryKey: "JAPAN", text: "JAPAN", color: "text-indigo-300" },
-              { countryKey: "ITALY", text: "ITALY", color: "text-emerald-500" },
               { countryKey: "NETHERLANDS", text: "NETHERLANDS", color: "text-orange-400" },
               { countryKey: "BELGIUM", text: "BELGIUM", color: "text-yellow-500" },
               { countryKey: "PORTUGAL", text: "PORTUGAL", color: "text-red-400" },
@@ -3962,14 +4024,9 @@ export default function App() {
                 className="bg-slate-950 border border-slate-800 hover:border-slate-700 px-3 py-2.5 rounded-xl text-xs font-sans font-semibold text-slate-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer transition-all"
               >
                 <option value="All">{language === "TR" ? "Tüm Gruplar" : "All Groups"}</option>
-                <option value="Group A">Group A</option>
-                <option value="Group B">Group B</option>
-                <option value="Group C">Group C</option>
-                <option value="Group D">Group D</option>
-                <option value="Group E">Group E</option>
-                <option value="Group F">Group F</option>
-                <option value="Group G">Group G</option>
-                <option value="Group H">Group H</option>
+                {availableGroups.map(grp => (
+                  <option key={grp} value={grp}>{grp}</option>
+                ))}
               </select>
             </div>
 
@@ -4408,14 +4465,16 @@ export default function App() {
                   <div>
                     <div className="flex items-center gap-2 mb-1">
                       <span className="p-1 px-2.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono text-[10px] uppercase tracking-wider font-bold">
-                        ⚡ Akıllı Başlangıç Giriş Sayfası & Kılavuzu
+                        {language === "TR" ? "⚡ Akıllı Başlangıç Giriş Sayfası & Kılavuzu" : "⚡ Smart Onboarding Guide & System Walkthrough"}
                       </span>
                     </div>
                     <h2 className="text-xl md:text-2xl font-sans font-extrabold text-white tracking-tight">
-                      FIFA Post-Match Analiz ve Turnuva Keşif Sistemi
+                      {language === "TR" ? "FIFA Post-Match Analiz ve Turnuva Keşif Sistemi" : "FIFA Post-Match Analysis & Tournament Discovery System"}
                     </h2>
                     <p className="text-xs text-slate-300 max-w-3xl mt-1">
-                      Bu gelişmiş platform, FIFA maç rapor dosyalarındaki fiziksel yoğunluk verileri ile taktiksel aksiyonları otomatik işler, yapay zeka entegrasyonuyla anlamlı korelasyonlar ve hiyerarşik analizler sunar.
+                      {language === "TR" 
+                        ? "Bu gelişmiş platform, FIFA maç rapor dosyalarındaki fiziksel yoğunluk verileri ile taktiksel aksiyonları otomatik işler, yapay zeka entegrasyonuyla anlamlı korelasyonlar ve hiyerarşik analizler sunar."
+                        : "This advanced platform automatically processes physical intensity metrics and tactical actions from FIFA match reports, delivering insightful correlations and hierarchical analysis through AI integration."}
                     </p>
                   </div>
                   <button
@@ -4426,7 +4485,7 @@ export default function App() {
                       } catch (e) {}
                     }}
                     className="p-1.5 hover:bg-white/10 border border-white/10 rounded-xl transition text-slate-300 hover:text-white cursor-pointer"
-                    title="Kılavuzu Kapat"
+                    title={language === "TR" ? "Kılavuzu Kapat" : "Close Guide"}
                   >
                     <X className="w-5 h-5" />
                   </button>
@@ -4436,7 +4495,7 @@ export default function App() {
                 <div className="mb-8">
                   <h3 className="text-xs font-mono font-bold text-indigo-300 uppercase tracking-widest mb-4 flex items-center gap-2">
                     <Compass className="w-4 h-4 text-emerald-400" />
-                    SİSTEM AKIŞ VE VERİ HİYERARŞİ HARİTASI
+                    {language === "TR" ? "SİSTEM AKIŞ VE VERİ HİYERARŞİ HARİTASI" : "SYSTEM FLOW & DATA HIERARCHY MAP"}
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4 relative">
                     
@@ -4446,9 +4505,13 @@ export default function App() {
                       <div className="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-300 flex items-center justify-center mb-3">
                         <Trophy className="w-4 h-4 text-amber-400" />
                       </div>
-                      <h4 className="text-sm font-bold text-white mb-1">Turnuva Seviyesi</h4>
+                      <h4 className="text-sm font-bold text-white mb-1">
+                        {language === "TR" ? "Turnuva Seviyesi" : "Tournament Level"}
+                      </h4>
                       <p className="text-[11px] text-slate-300">
-                        Hiyerarşinin zirvesi. Tüm turnuvanın maç fikstürleri, takımların genel metrikleri ve fiziksel-taktiksel regresyon modellerini içerir.
+                        {language === "TR" 
+                          ? "Hiyerarşinin zirvesi. Tüm turnuvanın maç fikstürleri, takımların genel metrikleri ve fiziksel-taktiksel regresyon modellerini içerir."
+                          : "The pinnacle of the hierarchy. Contains match fixtures, overall team metrics, and physical-tactical regression models."}
                       </p>
                     </div>
 
@@ -4458,9 +4521,13 @@ export default function App() {
                       <div className="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-300 flex items-center justify-center mb-3">
                         <Folder className="w-4 h-4 text-sky-400" />
                       </div>
-                      <h4 className="text-sm font-bold text-white mb-1">Grup Seviyesi</h4>
+                      <h4 className="text-sm font-bold text-white mb-1">
+                        {language === "TR" ? "Grup Seviyesi" : "Group Level"}
+                      </h4>
                       <p className="text-[11px] text-slate-300">
-                        Takımların gruplandırılmış puan durumları, averajlar ve gruptaki genel gol/pas isabet matrislerinin kıyaslama ekranıdır.
+                        {language === "TR" 
+                          ? "Takımların gruplandırılmış puan durumları, averajlar ve gruptaki genel gol/pas isabet matrislerinin kıyaslama ekranıdır."
+                          : "Provides grouped standings, goal differences, and comparisons of overall pass/goal accuracy matrices."}
                       </p>
                     </div>
 
@@ -4470,9 +4537,13 @@ export default function App() {
                       <div className="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-300 flex items-center justify-center mb-3">
                         <Shield className="w-4 h-4 text-indigo-400" />
                       </div>
-                      <h4 className="text-sm font-bold text-white mb-1">Takım Seviyesi</h4>
+                      <h4 className="text-sm font-bold text-white mb-1">
+                        {language === "TR" ? "Takım Seviyesi" : "Team Level"}
+                      </h4>
                       <p className="text-[11px] text-slate-300">
-                        Her takımın kullandığı ana taktiksel diziliş, savunma derinliği (Line Height), fiziksel koşu özetleri ve aktif oyuncu kadrosudur.
+                        {language === "TR" 
+                          ? "Her takımın kullandığı ana taktiksel diziliş, savunma derinliği (Line Height), fiziksel koşu özetleri ve aktif oyuncu kadrosudur."
+                          : "Shows each team's tactical formations, defensive line height, physical running profiles, and active squads."}
                       </p>
                     </div>
 
@@ -4482,9 +4553,13 @@ export default function App() {
                       <div className="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-300 flex items-center justify-center mb-3">
                         <User className="w-4 h-4 text-emerald-400" />
                       </div>
-                      <h4 className="text-sm font-bold text-white mb-1">Oyuncu Seviyesi</h4>
+                      <h4 className="text-sm font-bold text-white mb-1">
+                        {language === "TR" ? "Oyuncu Seviyesi" : "Player Level"}
+                      </h4>
                       <p className="text-[11px] text-slate-300">
-                        Hiyerarşinin son basamağı. Bireysel radar DNA'ları, performans yüzdelikleri, aksiyon isabet oranları ve özel fotolu profillerdir.
+                        {language === "TR" 
+                          ? "Hiyerarşinin son basamağı. Bireysel radar DNA'ları, performans yüzdelikleri, aksiyon isabet oranları ve özel fotolu profillerdir."
+                          : "The granular level. Individual radar DNAs, performance percentiles, action completion rates, and photo profiles."}
                       </p>
                     </div>
 
@@ -4496,20 +4571,32 @@ export default function App() {
                   <div>
                     <h4 className="text-xs font-mono font-bold text-slate-300 uppercase tracking-widest mb-3 flex items-center gap-1.5">
                       <Info className="w-3.5 h-3.5 text-blue-400" />
-                      SİSTEMDE NASIL GEZİNİLİR? (HIZLI NAVİGASYON)
+                      {language === "TR" ? "SİSTEMDE NASIL GEZİNİLİR? (HIZLI NAVİGASYON)" : "HOW TO NAVIGATE THE SYSTEM? (QUICK GUIDE)"}
                     </h4>
                     <ul className="space-y-2 text-[11px] text-slate-300">
                       <li className="flex items-center gap-2">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                        <span><b>Önerilen Akış:</b> İlk sekme olan 🏆 <b>Tournament & Group Analytics</b> alanını kullanarak tüm seviyeleri birbiriyle bütünleşik inceleyin.</span>
+                        {language === "TR" ? (
+                          <span><b>Önerilen Akış:</b> İlk sekme olan 🏆 <b>Tournament & Group Analytics</b> alanını kullanarak tüm seviyeleri birbiriyle bütünleşik inceleyin.</span>
+                        ) : (
+                          <span><b>Recommended Flow:</b> Use the first tab 🏆 <b>Tournament & Group Analytics</b> to explore all levels in an integrated view.</span>
+                        )}
                       </li>
                       <li className="flex items-center gap-2">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                        <span><b>Takım Sayfalarına Geçiş:</b> Turnuva veya Puan tablosunda bir takım adına tıkladığınızda otomatik olarak o takımın detay ve taktik profili açılır.</span>
+                        {language === "TR" ? (
+                          <span><b>Takım Sayfalarına Geçiş:</b> Turnuva veya Puan tablosunda bir takım adına tıkladığınızda otomatik olarak o takımın detay ve taktik profili açılır.</span>
+                        ) : (
+                          <span><b>Accessing Team Profiles:</b> Click on any team name in the Standings or Tournament tables to open their detailed tactical profile.</span>
+                        )}
                       </li>
                       <li className="flex items-center gap-2">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                        <span><b>Oyuncu Sayfalarına Geçiş:</b> Takım kadro listesinde bulunan herhangi bir oyuncunun adına tıklarsanız, doğrudan o oyuncunun detaylı radar profil sayfasına gidersiniz.</span>
+                        {language === "TR" ? (
+                          <span><b>Oyuncu Sayfalarına Geçiş:</b> Takım kadro listesinde bulunan herhangi bir oyuncunun adına tıklarsanız, doğrudan o oyuncunun detaylı radar profil sayfasına gidersiniz.</span>
+                        ) : (
+                          <span><b>Accessing Player Profiles:</b> Click on any player in the squad roster to jump straight to their detailed radar DNA and performance profiles.</span>
+                        )}
                       </li>
                     </ul>
                   </div>
@@ -4517,19 +4604,21 @@ export default function App() {
                   <div>
                     <h4 className="text-xs font-mono font-bold text-slate-300 uppercase tracking-widest mb-3 flex items-center gap-1.5">
                       <Flame className="w-3.5 h-3.5 text-orange-400" />
-                      İNTERAKTİF MATRİS RENKLERİNİN ANLAMI
+                      {language === "TR" ? "İNTERAKTİF MATRİS RENKLERİNİN ANLAMI" : "INTERACTIVE COLOR SCALING LEGEND"}
                     </h4>
                     <p className="text-[11.5px] text-slate-300 mb-2 leading-relaxed font-sans">
-                      Düz ham tablolarda ve matrislerde fark yaratan elit oyuncuları ve istisnai istatistikleri ayırt etmeniz için hücreler arka planda renk matrislerine dönüştürülmüştür:
+                      {language === "TR" 
+                        ? "Düz ham tablolarda ve matrislerde fark yaratan elit oyuncuları ve istisnai istatistikleri ayırt etmeniz için hücreler arka planda renk matrislerine dönüştürülmüştür:"
+                        : "To help you identify elite performers and statistical outliers, table cells are styled using dynamic color heatmaps based on value distributions:"}
                     </p>
                     <div className="flex flex-wrap gap-4">
                       <div className="flex items-center gap-1.5 font-mono text-[10px]">
                         <span className="w-4 h-4 rounded bg-emerald-500/20 border border-emerald-500/40 inline-block"></span>
-                        <span>Zirve Performans (Max'ın ≥%80'i)</span>
+                        <span>{language === "TR" ? "Zirve Performans (Max'ın ≥%80'i)" : "Peak Performance (≥80% of Max)"}</span>
                       </div>
                       <div className="flex items-center gap-1.5 font-mono text-[10px]">
                         <span className="w-4 h-4 rounded bg-indigo-500/15 border border-indigo-500/30 inline-block"></span>
-                        <span>Yüksek Etki (Max'ın ≥%50'si)</span>
+                        <span>{language === "TR" ? "Yüksek Etki (Max'ın ≥%50'si)" : "High Impact (≥50% of Max)"}</span>
                       </div>
                     </div>
                   </div>
@@ -4539,40 +4628,66 @@ export default function App() {
                 <div className="mt-8 border-t border-white/10 pt-6">
                   <h3 className="text-xs font-mono font-bold text-indigo-300 uppercase tracking-widest mb-4 flex items-center gap-2">
                     <Zap className="w-4 h-4 text-amber-400" />
-                    SİSTEM TASARIMI VE STRATEJİK YOL HARİTASI (ROADMAP)
+                    {language === "TR" ? "SİSTEM TASARIMI VE STRATEJİK YOL HARİTASI (ROADMAP)" : "SYSTEM DESIGN & STRATEGIC PLATFORM ROADMAP"}
                   </h3>
                   
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div className="p-4 rounded-2xl bg-white/5 border border-white/5 border-l-2 border-l-indigo-400">
-                      <span className="text-[10px] font-mono text-indigo-300 font-bold tracking-wider">PHASE 1 (Tamamlandı)</span>
-                      <h5 className="text-[11px] font-bold text-white mt-1">Multi-PDF Analiz Motoru</h5>
+                      <span className="text-[10px] font-mono text-indigo-300 font-bold tracking-wider">
+                        {language === "TR" ? "PHASE 1 (Tamamlandı)" : "PHASE 1 (Completed)"}
+                      </span>
+                      <h5 className="text-[11px] font-bold text-white mt-1">
+                        {language === "TR" ? "Multi-PDF Analiz Motoru" : "Multi-PDF Analytics Engine"}
+                      </h5>
                       <p className="text-[10px] text-slate-300 mt-1 leading-relaxed">
-                        FIFA maç raporlarındaki statik verilerin otomatik ayıklanması, toplu PDF işleme, IndexedDB yerel veri tabanı entegrasyonu.
+                        {language === "TR" 
+                          ? "FIFA maç raporlarındaki statik verilerin otomatik ayıklanması, toplu PDF işleme, IndexedDB yerel veri tabanı entegrasyonu."
+                          : "Automated extraction of static data from FIFA match reports, bulk PDF ingestion, and local storage/database integration."}
                       </p>
                     </div>
 
                     <div className="p-4 rounded-2xl bg-white/5 border border-white/5 border-l-2 border-l-emerald-400">
-                      <span className="text-[10px] font-mono text-emerald-300 font-bold tracking-wider">PHASE 2 (Tamamlandı)</span>
-                      <h5 className="text-[11px] font-bold text-white mt-1 font-extrabold text-white">Varyans Etki Skoru (VES)</h5>
+                      <span className="text-[10px] font-mono text-emerald-300 font-bold tracking-wider">
+                        {language === "TR" ? "PHASE 2 (Tamamlandı)" : "PHASE 2 (Completed)"}
+                      </span>
+                      <h5 className="text-[11px] font-bold text-white mt-1 font-extrabold text-white">
+                        {language === "TR" ? "Varyans Etki Skoru (VES)" : "Varyans Efficiency Score (VES)"}
+                      </h5>
                       <p className="text-[10px] text-slate-300 mt-1 leading-relaxed">
-                        Fiziksel yoğunluk Z-Skor çarpanıyla zenginleştirilmiş, role göre özelleşmiş (Playmaker, Attacking, Defensive) profesyonel veri modellemesi.
+                        {language === "TR" 
+                          ? "Fiziksel yoğunluk Z-Skor çarpanıyla zenrichleştirilmiş, role göre özelleşmiş (Playmaker, Attacking, Defensive) profesyonel veri modellemesi."
+                          : "Advanced role-based modeling (Playmaker, Attacking, Defensive) enriched with physical intensity Z-Score weighting."}
                       </p>
                     </div>
 
                     <div className="p-4 rounded-2xl bg-white/5 border border-white/5 border-l-2 border-l-sky-400">
-                      <span className="text-[10px] font-mono text-sky-300 font-bold tracking-wider">PHASE 3 (Tamamlandı)</span>
-                      <h5 className="text-[11px] font-bold text-white mt-1">Gelişmiş Görselleştirme</h5>
+                      <span className="text-[10px] font-mono text-sky-300 font-bold tracking-wider">
+                        {language === "TR" ? "PHASE 3 (Tamamlandı)" : "PHASE 3 (Completed)"}
+                      </span>
+                      <h5 className="text-[11px] font-bold text-white mt-1">
+                        {language === "TR" ? "Gelişmiş Görselleştirme" : "Advanced Visualizations"}
+                      </h5>
                       <p className="text-[10px] text-slate-300 mt-1 leading-relaxed">
-                        İnteraktif Scatter Plot analizi, top-3 kürsüsü, dinamik Güçlü/Zayıf yan analizleri içeren özel Grup, Takım ve Oyuncu sayfaları.
+                        {language === "TR" 
+                          ? "İnteraktif Scatter Plot analizi, top-3 kürsüsü, dinamik Güçlü/Zayıf yan analizleri içeren özel Grup, Takım ve Oyuncu sayfaları."
+                          : "Interactive scatter plot analysis, Top 3 podiums, and dynamic Strength/Weakness profilers across Group, Team, and Player views."}
                       </p>
                     </div>
 
                     <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 border-l-2 border-l-emerald-400 relative">
-                      <span className="absolute top-2 right-2 text-[8px] bg-emerald-500/20 text-emerald-300 py-0.5 px-1.5 rounded-full font-mono font-bold font-semibold uppercase tracking-wide">YAKINDA</span>
-                      <span className="text-[10px] font-mono text-emerald-300 font-bold tracking-wider">PHASE 4 (Gelecek Vizyon)</span>
-                      <h5 className="text-[11px] font-bold text-white mt-1 font-mono text-emerald-400">Tahminci AI & Video Tagging</h5>
+                      <span className="absolute top-2 right-2 text-[8px] bg-emerald-500/20 text-emerald-300 py-0.5 px-1.5 rounded-full font-mono font-bold font-semibold uppercase tracking-wide">
+                        {language === "TR" ? "YAKINDA" : "COMING SOON"}
+                      </span>
+                      <span className="text-[10px] font-mono text-emerald-300 font-bold tracking-wider">
+                        {language === "TR" ? "PHASE 4 (Gelecek Vizyon)" : "PHASE 4 (Future Vision)"}
+                      </span>
+                      <h5 className="text-[11px] font-bold text-white mt-1 font-mono text-emerald-400">
+                        {language === "TR" ? "Tahminci AI & Video Tagging" : "Predictive AI & Video Tagging"}
+                      </h5>
                       <p className="text-[10px] text-slate-300 mt-1 leading-relaxed">
-                        Makine öğrenmesi modelleri ile yorgunluk/sakatlık riski tespiti ve taktik faz veri etiketleri ile entegre video eşleme modülü.
+                        {language === "TR" 
+                          ? "Makine öğrenmesi modelleri ile yorgunluk/sakatlık riski tespiti ve taktik faz veri etiketleri ile entegre video eşleme modülü."
+                          : "Fatigue and injury risk forecasting using machine learning models, paired with automated tactical phase video tagging."}
                       </p>
                     </div>
                   </div>
@@ -4580,7 +4695,9 @@ export default function App() {
 
                 <div className="mt-6 pt-4 border-t border-white/5 flex flex-col sm:flex-row justify-between items-center gap-4">
                   <span className="text-[10px] text-slate-400 font-mono">
-                    Kılavuza dilediğiniz an sayfa üstündeki yardımlaşma butonuyla erişebilirsiniz.
+                    {language === "TR" 
+                      ? "Kılavuza dilediğiniz an sayfa üstündeki yardımlaşma butonuyla erişebilirsiniz."
+                      : "You can open this guide at any time by clicking the help button at the top of the page."}
                   </span>
                   <button
                     onClick={() => {
@@ -4591,7 +4708,7 @@ export default function App() {
                     }}
                     className="px-6 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold font-sans text-xs rounded-xl shadow-md transition-all cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0 text-center"
                   >
-                    Anladım, Analize Başla!
+                    {language === "TR" ? "Anladım, Analize Başla!" : "Understood, Let's Analyze!"}
                   </button>
                 </div>
 
@@ -4604,7 +4721,7 @@ export default function App() {
                 className="inline-flex items-center gap-1.5 p-2 px-3 bg-white hover:bg-indigo-50 text-indigo-700 font-mono text-xs font-bold rounded-xl border border-indigo-100 shadow-2xs cursor-pointer transition-all hover:scale-102"
               >
                 <Compass className="w-4 h-4" />
-                <span>❓ Kılavuz & Sistem Akış Haritası</span>
+                <span>{language === "TR" ? "❓ Kılavuz & Sistem Akış Haritası" : "❓ Onboarding & System Flow Map"}</span>
               </button>
             </div>
           )}
@@ -7200,19 +7317,52 @@ export default function App() {
             <h3 className="text-base font-bold text-slate-100 font-sans tracking-tight mb-2">
               {confirmState.title}
             </h3>
-            <p className="text-xs text-slate-400 font-normal leading-relaxed mb-6">
+            <p className="text-xs text-slate-400 font-normal leading-relaxed mb-4">
               {confirmState.message}
             </p>
+
+            {confirmState.requirePassword && (
+              <div className="mb-5 space-y-1.5">
+                <label className="text-[10px] font-mono uppercase text-slate-400 block font-bold">Yönetici Şifresi (Gerekli)</label>
+                <input
+                  type="password"
+                  value={confirmPasswordInput}
+                  onChange={(e) => {
+                    setConfirmPasswordInput(e.target.value);
+                    setConfirmPasswordError("");
+                  }}
+                  placeholder="Yönetici şifresini girin..."
+                  className="w-full bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-red-500 px-3 py-2 rounded-xl font-mono text-xs tracking-widest text-white shadow-inner focus:outline-none focus:ring-1 focus:ring-red-500 transition-all"
+                />
+                {confirmPasswordError && (
+                  <p className="text-rose-400 text-[10px] font-bold mt-1">{confirmPasswordError}</p>
+                )}
+              </div>
+            )}
+
             <div className="flex items-center justify-end gap-3 font-medium text-xs">
               <button
-                onClick={() => setConfirmState(prev => ({ ...prev, isOpen: false }))}
+                onClick={() => {
+                  setConfirmState(prev => ({ ...prev, isOpen: false }));
+                  setConfirmPasswordInput("");
+                  setConfirmPasswordError("");
+                }}
                 className="px-4 py-2 border border-slate-700 hover:bg-slate-800 text-slate-300 rounded-xl transition-all cursor-pointer select-none"
               >
                 {confirmState.cancelText || "Vazgeç"}
               </button>
               <button
                 onClick={() => {
+                  if (confirmState.requirePassword) {
+                    const cleanInput = confirmPasswordInput.trim();
+                    if (cleanInput !== "1923" && cleanInput.toLowerCase() !== "admin" && cleanInput.toLowerCase() !== "varyans" && cleanInput.toLowerCase() !== "yigit") {
+                      setConfirmPasswordError("Hatalı Şifre! Veri silme yetkisi reddedildi.");
+                      return;
+                    }
+                  }
                   setConfirmState(prev => ({ ...prev, isOpen: false }));
+                  setConfirmPasswordInput("");
+                  setConfirmPasswordError("");
                   confirmState.onConfirm();
                 }}
                 className="px-4 py-2 bg-red-650 hover:bg-red-600 rounded-xl text-white transition-all shadow-md shadow-red-950/20 cursor-pointer select-none font-bold"
@@ -7316,7 +7466,7 @@ export default function App() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setIsSettingsOpen(false)}
+              onClick={handleCloseSettings}
               className="absolute inset-0 bg-black/60 backdrop-blur-xs"
             />
 
@@ -7342,14 +7492,7 @@ export default function App() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => {
-                      setIsSettingsUnlocked(false);
-                      try {
-                        localStorage.removeItem("__varyans_settings_unlocked_session");
-                      } catch(e){}
-                      setIsSettingsOpen(false);
-                      triggerToast("Ayarlar paneli güvenli bir şekilde kilitlendi!");
-                    }}
+                    onClick={handleCloseSettings}
                     className="p-1.5 px-2.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-500 rounded-lg text-[10px] font-black transition flex items-center gap-1 cursor-pointer select-none"
                     title="Yetkiyi Kaldır & Kilitle"
                   >
@@ -7357,7 +7500,7 @@ export default function App() {
                     <span>Paneli Kilitle</span>
                   </button>
                   <button
-                    onClick={() => setIsSettingsOpen(false)}
+                    onClick={handleCloseSettings}
                     className="p-2 hover:bg-slate-100/10 rounded-xl transition cursor-pointer"
                   >
                     <X className="w-4 h-4 text-slate-400 hover:text-slate-650" />
@@ -7684,7 +7827,7 @@ export default function App() {
                       <button
                         onClick={() => {
                           setIsSquadModalOpen(true);
-                          setIsSettingsOpen(false); // Close settings drawer to open photo manager cleanly!
+                          handleCloseSettings(); // Close settings drawer to open photo manager cleanly!
                         }}
                         className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs py-3 rounded-xl shadow-md transition active:scale-98 cursor-pointer select-none"
                       >
@@ -7798,7 +7941,7 @@ export default function App() {
                         </div>
                         <button
                           onClick={() => {
-                            setIsSettingsOpen(false);
+                            handleCloseSettings();
                             triggerReset();
                           }}
                           className="bg-rose-650 hover:bg-rose-600 text-white font-bold text-xs py-2.5 rounded-xl shadow-xs transition active:scale-98 cursor-pointer select-none"

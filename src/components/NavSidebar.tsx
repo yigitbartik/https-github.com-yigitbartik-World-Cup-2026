@@ -75,7 +75,7 @@ export const NAV_CATEGORIES: CategoryDef[] = [
     icon: User,
     label: t("🏃 Scout Motoru", "🏃 Scout Engine"),
     core: [
-      { id: "in_possession", shortLabel: t("Ofansif KPI", "Offensive KPIs"), fullLabel: t("Ofansif KPI & Hücum Göstergeleri", "Offensive KPIs & On-the-ball Actions") },
+      { id: "in_possession", shortLabel: t("Ofansif KPI", "Offensive KPIs"), fullLabel: t("Ofansif KPI & Hücum Göstergeleri", "Ofansif KPIs & On-the-ball Actions") },
       { id: "out_possession", shortLabel: t("Defansif KPI", "Defensive KPIs"), fullLabel: t("Defansif KPI & Savunma Göstergeleri", "Defensive KPIs & Off-the-ball Actions") }
     ],
     more: [
@@ -218,32 +218,3 @@ export function NavContent({
     </div>
   );
 }
-
-/**
- * KULLANIM (App.tsx içinde):
- *
- * const [expandedMore, setExpandedMore] = useState<Record<CategoryId, boolean>>({
- *   match_lab: false, scout_engine: false, tournament_insights: false
- * });
- *
- * const handleSelectTab = (categoryId: CategoryId, tabId: TabId) => {
- *   setHighLevelTab(categoryId);
- *   setActiveTab(tabId);
- *   setIsSidebarOpen(false); // mobilde otomatik kapansın
- * };
- *
- * // Mobil drawer içinde:
- * <NavContent language={language} activeTab={activeTab} activeCategory={highLevelTab}
- *   expandedMore={expandedMore} onSelectTab={handleSelectTab}
- *   onToggleMore={(id) => setExpandedMore(p => ({ ...p, [id]: !p[id] }))}
- *   onOpenSettings={() => setIsSettingsOpen(true)}
- *   onClose={() => setIsSidebarOpen(false)} />
- *
- * // Masaüstü sidebar içinde (aynı bileşen, onClose verilmez):
- * <NavContent language={language} activeTab={activeTab} activeCategory={highLevelTab}
- *   expandedMore={expandedMore} onSelectTab={handleSelectTab}
- *   onToggleMore={(id) => setExpandedMore(p => ({ ...p, [id]: !p[id] }))}
- *   onOpenSettings={() => setIsSettingsOpen(true)} />
- *
- * Bu, App.tsx'teki 3900-4270 satır aralığındaki iki kopya bloğun YERİNE geçer.
- */
