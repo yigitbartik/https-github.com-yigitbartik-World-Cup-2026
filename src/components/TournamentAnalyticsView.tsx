@@ -3989,17 +3989,17 @@ export default function TournamentAnalyticsView({
                 <table className="w-full text-left text-xs font-sans border-collapse">
                   <thead>
                     <tr className="border-b border-slate-150 text-[10px] font-mono text-slate-500 uppercase tracking-widest font-bold">
-                      <th className="py-2.5 pb-3">Sıra & Takım Adı (Click to Drilldown Team Detail)</th>
-                      <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("gp")}>GP</th>
-                      <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("w")}>W</th>
-                      <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("d")}>D</th>
-                      <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("l")}>L</th>
-                      <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("gf")}>GF (Gol)</th>
-                      <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("ga")}>GA</th>
-                      <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("gd")}>GD (Avr)</th>
-                      <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("points")}>PTS (Puan)</th>
-                      <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("totalPossessionSum")}>POSS% (Topa S.)</th>
-                      <th className="py-2.5 pb-3 text-center cursor-pointer hover:text-indigo-600" onClick={() => handleTeamHeaderClick("totalLineBreaks")}>Hat Kıran Pas</th>
+                      <th className="py-2.5 pb-3 pr-4 font-sans">Sıra & Takım Adı (Click to Drilldown Team Detail)</th>
+                      <th className="py-2.5 pb-3 px-2 text-center cursor-pointer hover:text-indigo-600 min-w-[40px]" onClick={() => handleTeamHeaderClick("gp")}>GP</th>
+                      <th className="py-2.5 pb-3 px-2 text-center cursor-pointer hover:text-indigo-600 min-w-[40px]" onClick={() => handleTeamHeaderClick("w")}>W</th>
+                      <th className="py-2.5 pb-3 px-2 text-center cursor-pointer hover:text-indigo-600 min-w-[40px]" onClick={() => handleTeamHeaderClick("d")}>D</th>
+                      <th className="py-2.5 pb-3 px-2 text-center cursor-pointer hover:text-indigo-600 min-w-[40px]" onClick={() => handleTeamHeaderClick("l")}>L</th>
+                      <th className="py-2.5 pb-3 px-2 text-center cursor-pointer hover:text-indigo-600 min-w-[65px]" onClick={() => handleTeamHeaderClick("gf")}>GF (Gol)</th>
+                      <th className="py-2.5 pb-3 px-2 text-center cursor-pointer hover:text-indigo-600 min-w-[45px]" onClick={() => handleTeamHeaderClick("ga")}>GA</th>
+                      <th className="py-2.5 pb-3 px-2 text-center cursor-pointer hover:text-indigo-600 min-w-[65px]" onClick={() => handleTeamHeaderClick("gd")}>GD (Avr)</th>
+                      <th className="py-2.5 pb-3 px-2 text-center cursor-pointer hover:text-indigo-600 min-w-[75px]" onClick={() => handleTeamHeaderClick("points")}>PTS (Puan)</th>
+                      <th className="py-2.5 pb-3 px-2 text-center cursor-pointer hover:text-indigo-600 min-w-[105px]" onClick={() => handleTeamHeaderClick("totalPossessionSum")}>POSS% (Topa S.)</th>
+                      <th className="py-2.5 pb-3 px-2 text-center cursor-pointer hover:text-indigo-600 min-w-[95px]" onClick={() => handleTeamHeaderClick("totalLineBreaks")}>Hat Kıran Pas</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-55">
@@ -4018,7 +4018,7 @@ export default function TournamentAnalyticsView({
 
                       return (
                         <tr key={idx} className="hover:bg-indigo-50/20 transition-all">
-                          <td className="py-3.5 font-bold text-slate-905 flex items-center gap-2.5">
+                          <td className="py-3.5 pr-4 font-bold text-slate-905 flex items-center gap-2.5">
                             <span className="w-5 text-slate-400 font-mono font-bold text-xs">{idx + 1}.</span>
                             <span 
                               onClick={() => {
@@ -4035,37 +4035,37 @@ export default function TournamentAnalyticsView({
                               </span>
                             </span>
                           </td>
-                          <td className="py-3.5 text-center font-mono font-semibold text-slate-700">{t.gp}</td>
-                          <td className="py-3.5 text-center font-mono text-slate-600">{t.w}</td>
-                          <td className="py-3.5 text-center font-mono text-slate-600">{t.d}</td>
-                          <td className="py-3.5 text-center font-mono text-slate-600">{t.l}</td>
+                          <td className="py-3.5 px-2 text-center font-mono font-semibold text-slate-700 min-w-[40px]">{t.gp}</td>
+                          <td className="py-3.5 px-2 text-center font-mono text-slate-600 min-w-[40px]">{t.w}</td>
+                          <td className="py-3.5 px-2 text-center font-mono text-slate-600 min-w-[40px]">{t.d}</td>
+                          <td className="py-3.5 px-2 text-center font-mono text-slate-600 min-w-[40px]">{t.l}</td>
                           
                           {/* GF Matrix Cell */}
-                          <td className={`py-3.5 text-center font-mono font-medium transition-colors ${
+                          <td className={`py-3.5 px-2 text-center font-mono font-medium transition-colors min-w-[65px] ${
                             isHighGF ? "bg-emerald-500/10 text-emerald-800 font-bold" : "text-slate-600"
                           }`}>{t.gf}</td>
                           
-                          <td className="py-3.5 text-center font-mono text-slate-600">{t.ga}</td>
+                          <td className="py-3.5 px-2 text-center font-mono text-slate-600 min-w-[45px]">{t.ga}</td>
                           
                           {/* GD Cell */}
-                          <td className={`py-3.5 text-center font-mono font-bold ${t.gd >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                          <td className={`py-3.5 px-2 text-center font-mono font-bold min-w-[65px] ${t.gd >= 0 ? "text-emerald-600" : "text-red-500"}`}>
                             {t.gd > 0 ? `+${t.gd}` : t.gd}
                           </td>
                           
                           {/* PTS Matrix Cell */}
-                          <td className={`py-3.5 text-center font-mono font-bold transition-colors ${
+                          <td className={`py-3.5 px-2 text-center font-mono font-bold transition-colors min-w-[75px] ${
                             isTopPt ? "bg-indigo-600/15 text-indigo-850 rounded-md ring-1 ring-indigo-200/60" : "text-indigo-700 bg-indigo-50/40"
                           }`}>{t.points}</td>
                           
                           {/* Possession Cell */}
-                          <td className={`py-3.5 text-center font-mono font-semibold ${
+                          <td className={`py-3.5 px-2 text-center font-mono font-semibold min-w-[105px] ${
                             t.gp > 0 && Math.round(t.totalPossessionSum / t.gp) >= 50 ? "bg-emerald-50 text-emerald-800" : "text-slate-600"
                           }`}>
                             {t.gp > 0 ? `${Math.round(t.totalPossessionSum / t.gp)}%` : "-"}
                           </td>
                           
                           {/* Line Breaks Matrix Cell */}
-                          <td className={`py-3.5 text-center font-mono font-bold transition-colors ${
+                          <td className={`py-3.5 px-2 text-center font-mono font-bold transition-colors min-w-[95px] ${
                             isHighBreak ? "bg-violet-500/10 text-violet-850" : "text-slate-600"
                           }`}>{t.totalLineBreaks}</td>
                         </tr>
