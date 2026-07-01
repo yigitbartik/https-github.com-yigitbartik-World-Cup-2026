@@ -289,6 +289,34 @@ interface TeamFlagProps {
   fallbackTextSize?: string;
 }
 
+const getCDNFlagUrl = (team: string): string | null => {
+  if (!team) return null;
+  const clean = team.toLowerCase().trim();
+  if (clean.includes("mexico") || clean === "mex") return "https://flagcdn.com/w80/mx.png";
+  if (clean.includes("south africa") || clean === "rsa") return "https://flagcdn.com/w80/za.png";
+  if (clean.includes("turkey") || clean.includes("türk") || clean.includes("turk") || clean === "tur") return "https://flagcdn.com/w80/tr.png";
+  if (clean.includes("south korea") || clean.includes("korea") || clean === "kor") return "https://flagcdn.com/w80/kr.png";
+  if (clean.includes("brazil") || clean === "bra") return "https://flagcdn.com/w80/br.png";
+  if (clean.includes("argentina") || clean === "arg") return "https://flagcdn.com/w80/ar.png";
+  if (clean.includes("france") || clean === "fra") return "https://flagcdn.com/w80/fr.png";
+  if (clean.includes("germany") || clean === "ger") return "https://flagcdn.com/w80/de.png";
+  if (clean.includes("spain") || clean === "esp") return "https://flagcdn.com/w80/es.png";
+  if (clean.includes("england") || clean === "eng") return "https://flagcdn.com/w80/gb-eng.png";
+  if (clean.includes("italy") || clean === "ita") return "https://flagcdn.com/w80/it.png";
+  if (clean.includes("netherlands") || clean === "ned") return "https://flagcdn.com/w80/nl.png";
+  if (clean.includes("belgium") || clean === "bel") return "https://flagcdn.com/w80/be.png";
+  if (clean.includes("portugal") || clean === "por") return "https://flagcdn.com/w80/pt.png";
+  if (clean.includes("uruguay") || clean === "uru") return "https://flagcdn.com/w80/uy.png";
+  if (clean.includes("croatia") || clean === "cro") return "https://flagcdn.com/w80/hr.png";
+  if (clean.includes("japan") || clean === "jpn") return "https://flagcdn.com/w80/jp.png";
+  if (clean.includes("usa") || clean.includes("united states")) return "https://flagcdn.com/w80/us.png";
+  if (clean.includes("morocco") || clean === "mar") return "https://flagcdn.com/w80/ma.png";
+  if (clean.includes("canada") || clean === "can") return "https://flagcdn.com/w80/ca.png";
+  if (clean.includes("paraguay") || clean === "py") return "https://flagcdn.com/w80/py.png";
+  if (clean.includes("australia") || clean === "au" || clean === "aus") return "https://flagcdn.com/w80/au.png";
+  return null;
+};
+
 export function TeamFlag({ 
   team, 
   getTeamFlag, 
@@ -296,6 +324,8 @@ export function TeamFlag({
   fallbackTextSize = "text-2xl" 
 }: TeamFlagProps) {
   if (!team) return <span className={`${fallbackTextSize} select-none align-middle`}>🏳️</span>;
+  
+  // 1. If we have a custom uploaded flag image (starts with data:)
   const flag = getTeamFlag ? getTeamFlag(team) : "🏳️";
   if (flag && flag.startsWith("data:")) {
     return (
@@ -307,6 +337,21 @@ export function TeamFlag({
       />
     );
   }
+
+  // 2. Fallback to flagcdn image for a professional look on Windows (which doesn't support emoji flags)
+  const cdnUrl = getCDNFlagUrl(team);
+  if (cdnUrl) {
+    return (
+      <img
+        src={cdnUrl}
+        alt={team}
+        className={className}
+        referrerPolicy="no-referrer"
+      />
+    );
+  }
+
+  // 3. Absolute fallback to the string/emoji
   return <span className={`${fallbackTextSize} select-none align-middle shrink-0 leading-none`}>{flag}</span>;
 }
 

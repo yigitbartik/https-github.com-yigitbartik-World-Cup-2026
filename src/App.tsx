@@ -2159,7 +2159,8 @@ export default function App() {
 
   // Physical Analysis Sheets data joining physical metrics with game metrics
   const physicalAnalysisSheets = useMemo(() => {
-    return uploadedMatches.map(match => {
+    const matchesToMap = uploadedMatches.length > 0 ? uploadedMatches : [mexicoSouthAfricaMatchData];
+    return matchesToMap.map(match => {
       // Home Team sheet
       const homeTeamName = `${match.matchInfo.homeTeam} (${match.matchInfo.date})`;
       const homeStarting = match.homeTeamLineup?.starting || [];
@@ -4186,7 +4187,8 @@ export default function App() {
                             { name: "Germany", flag: "🇩🇪" },
                             { name: "Spain", flag: "🇪🇸" },
                             { name: "England", flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿" },
-                            { name: "Italy", flag: "🇮🇹" },
+                            { name: "Paraguay", flag: "🇵🇾" },
+                            { name: "Australia", flag: "🇦🇺" },
                             { name: "Netherlands", flag: "🇳🇱" },
                             { name: "Portugal", flag: "🇵🇹" },
                             { name: "Belgium", flag: "🇧🇪" },
@@ -4330,7 +4332,8 @@ export default function App() {
                             { name: "Germany", flag: "🇩🇪" },
                             { name: "Spain", flag: "🇪🇸" },
                             { name: "England", flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿" },
-                            { name: "Italy", flag: "🇮🇹" },
+                            { name: "Paraguay", flag: "🇵🇾" },
+                            { name: "Australia", flag: "🇦🇺" },
                             { name: "Netherlands", flag: "🇳🇱" },
                             { name: "Portugal", flag: "🇵🇹" },
                             { name: "Belgium", flag: "🇧🇪" },

@@ -439,6 +439,9 @@ export default function TeamUnifiedPosterReport({ allMatches }: TeamUnifiedPoste
         const opObj = outPoss?.find((x: any) => x.name === normName);
 
         const isStarter = lineup?.starting?.some((x: any) => x.name === normName);
+        const isSubWhoPlayed = lineup?.substitutes?.some((x: any) => x.name === normName && x.extra);
+        const hasPhysicalData = physObj !== undefined && physObj.totalDistance > 1000;
+        const didPlay = isStarter || isSubWhoPlayed || hasPhysicalData;
 
         if (!playersMap[normName]) {
           playersMap[normName] = {
@@ -463,8 +466,24 @@ export default function TeamUnifiedPosterReport({ allMatches }: TeamUnifiedPoste
         }
 
         const p = playersMap[normName];
-        p.appearances += 1;
-        p.minutes += isStarter ? 90 : physObj ? 25 : 15; // Realistic minute aggregation
+        if (didPlay) {
+          p.appearances += 1;
+          if (isStarter) {
+            p.minutes += 90;
+          } else if (isSubWhoPlayed) {
+            const subObj = lineup?.substitutes?.find((x: any) => x.name === normName);
+            const matchMin = subObj?.extra ? subObj.extra.match(/(\d+)/) : null;
+            const parsedMin = matchMin ? parseInt(matchMin[1]) : 20;
+            p.minutes += Math.max(1, 90 - parsedMin);
+          } else if (physObj) {
+            p.minutes += Math.max(5, Math.round(physObj.totalDistance / 110));
+          } else {
+            p.minutes += 15;
+          }
+        } else {
+          p.minutes += 0;
+          p.appearances += 0;
+        }
 
         p.goals += safeInt(ipObj?.goals, 0);
         p.shots += safeInt(ipObj?.attemptsAtGoal, 0);
@@ -953,9 +972,9 @@ export default function TeamUnifiedPosterReport({ allMatches }: TeamUnifiedPoste
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           
           {/* ======================================================= */}
-          {/* LEFT 5 COLUMNS: COACH, KEY FEATURES, TACTICAL FIELD, SHOTS */}
+          {/* LEFT 4 COLUMNS: COACH, KEY FEATURES */}
           {/* ======================================================= */}
-          <div className="lg:col-span-5 flex flex-col gap-6">
+          <div className="lg:col-span-4 flex flex-col gap-6">
             
             {/* 1. COACH & FEATURES PANEL */}
             <div className="bg-slate-900/60 rounded-2xl border border-slate-800/80 p-5 flex flex-col gap-4">
@@ -1057,334 +1076,12 @@ export default function TeamUnifiedPosterReport({ allMatches }: TeamUnifiedPoste
               </div>
             </div>
 
-            {/* 2. FIELD SHAPE VISUALIZER */}
-            <div className="bg-slate-900/60 rounded-2xl border border-slate-800/80 p-5 flex flex-col gap-4">
-              <div className="flex justify-between items-center">
-                <div>
-                  <span className="text-xs font-bold tracking-wider text-slate-400 uppercase">
-                    Taktiksel Diziliş & Ortalama Pozisyonlar
-                  </span>
-                  <p className="text-[9px] text-slate-500 font-mono uppercase mt-0.5">
-                    1-4-2-3-1 / 1-4-3-3 Ana Blok Dağılımı
-                  </p>
-                </div>
-
-                {/* In Possession / Out of Possession Switch */}
-                <div className="no-print bg-slate-950 p-1 rounded-lg border border-slate-800 flex gap-1">
-                  <button
-                    onClick={() => setTacticalShapeMode("in_possession")}
-                    className={`text-[10px] px-2.5 py-1 rounded-md font-bold transition-all cursor-pointer ${
-                      tacticalShapeMode === "in_possession" ? "bg-indigo-600 text-white shadow-md" : "text-slate-400 hover:text-white"
-                    }`}
-                  >
-                    Toplu Oyun
-                  </button>
-                  <button
-                    onClick={() => setTacticalShapeMode("out_of_possession")}
-                    className={`text-[10px] px-2.5 py-1 rounded-md font-bold transition-all cursor-pointer ${
-                      tacticalShapeMode === "out_of_possession" ? "bg-indigo-600 text-white shadow-md" : "text-slate-400 hover:text-white"
-                    }`}
-                  >
-                    Savunma Bloğu
-                  </button>
-                </div>
-              </div>
-
-              {/* VERTICAL SOCCER FIELD */}
-              <div className="relative w-full aspect-[4/5] bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden flex items-center justify-center p-4">
-                {/* Field Grass Lines */}
-                <div className="absolute inset-0 opacity-20 pointer-events-none">
-                  {/* Outer line */}
-                  <div className="absolute inset-2 border border-white" />
-                  {/* Center circle */}
-                  <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 w-28 h-28 border border-white rounded-full mx-auto" />
-                  <div className="absolute inset-x-0 top-1/2 w-full h-px bg-white" />
-                  {/* Penalty Box Top */}
-                  <div className="absolute top-2 inset-x-0 mx-auto w-40 h-20 border border-white" />
-                  <div className="absolute top-2 inset-x-0 mx-auto w-20 h-8 border border-white" />
-                  {/* Penalty Box Bottom */}
-                  <div className="absolute bottom-2 inset-x-0 mx-auto w-40 h-20 border border-white" />
-                  <div className="absolute bottom-2 inset-x-0 mx-auto w-20 h-8 border border-white" />
-                </div>
-
-                {/* Player Dots on Field (Animated based on toggles) */}
-                <div className="absolute inset-0 p-8 flex flex-col justify-between">
-                  
-                  {/* FORWARDS */}
-                  <div className="flex justify-around items-center mt-6">
-                    {/* LW */}
-                    <motion.div 
-                      animate={{ y: tacticalShapeMode === "in_possession" ? 10 : 35, x: tacticalShapeMode === "in_possession" ? -10 : 5 }}
-                      className="flex flex-col items-center cursor-help"
-                    >
-                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">{tacticalPlayers.lw?.number || 11}</div>
-                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">{tacticalPlayers.lw?.name || "LW"}</span>
-                    </motion.div>
-                    
-                    {/* CF / ST */}
-                    <motion.div 
-                      animate={{ y: tacticalShapeMode === "in_possession" ? 0 : 40 }}
-                      className="flex flex-col items-center cursor-help"
-                    >
-                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">{tacticalPlayers.cf?.number || 21}</div>
-                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">{tacticalPlayers.cf?.name || "CF"}</span>
-                    </motion.div>
-
-                    {/* RW */}
-                    <motion.div 
-                      animate={{ y: tacticalShapeMode === "in_possession" ? 10 : 35, x: tacticalShapeMode === "in_possession" ? 10 : -5 }}
-                      className="flex flex-col items-center cursor-help"
-                    >
-                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">{tacticalPlayers.rw?.number || 8}</div>
-                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">{tacticalPlayers.rw?.name || "RW"}</span>
-                    </motion.div>
-                  </div>
-
-                  {/* ATTACKING MIDFIELDER / AM */}
-                  <div className="flex justify-center items-center -mt-4">
-                    <motion.div 
-                      animate={{ y: tacticalShapeMode === "in_possession" ? 10 : 35 }}
-                      className="flex flex-col items-center cursor-help"
-                    >
-                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">{tacticalPlayers.am?.number || 10}</div>
-                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">{tacticalPlayers.am?.name || "AM"}</span>
-                    </motion.div>
-                  </div>
-
-                  {/* MIDFIELDERS (DMs/CMs) */}
-                  <div className="flex justify-around items-center">
-                    {/* LCM */}
-                    <motion.div 
-                      animate={{ y: tacticalShapeMode === "in_possession" ? 15 : 30, x: tacticalShapeMode === "in_possession" ? -5 : 5 }}
-                      className="flex flex-col items-center cursor-help"
-                    >
-                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">{tacticalPlayers.lcm?.number || 16}</div>
-                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">{tacticalPlayers.lcm?.name || "LCM"}</span>
-                    </motion.div>
-
-                    {/* RCM */}
-                    <motion.div 
-                      animate={{ y: tacticalShapeMode === "in_possession" ? 15 : 30, x: tacticalShapeMode === "in_possession" ? 5 : -5 }}
-                      className="flex flex-col items-center cursor-help"
-                    >
-                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">{tacticalPlayers.rcm?.number || 22}</div>
-                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">{tacticalPlayers.rcm?.name || "RCM"}</span>
-                    </motion.div>
-                  </div>
-
-                  {/* DEFENDERS */}
-                  <div className="flex justify-around items-center -mb-2">
-                    {/* LB */}
-                    <motion.div 
-                      animate={{ y: tacticalShapeMode === "in_possession" ? -25 : 10, x: tacticalShapeMode === "in_possession" ? -15 : 5 }}
-                      className="flex flex-col items-center cursor-help"
-                    >
-                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">{tacticalPlayers.lb?.number || 20}</div>
-                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">{tacticalPlayers.lb?.name || "LB"}</span>
-                    </motion.div>
-
-                    {/* LCB */}
-                    <motion.div 
-                      animate={{ y: tacticalShapeMode === "in_possession" ? 5 : 20, x: tacticalShapeMode === "in_possession" ? -5 : 5 }}
-                      className="flex flex-col items-center cursor-help"
-                    >
-                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">{tacticalPlayers.lcb?.number || 14}</div>
-                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">{tacticalPlayers.lcb?.name || "LCB"}</span>
-                    </motion.div>
-
-                    {/* RCB */}
-                    <motion.div 
-                      animate={{ y: tacticalShapeMode === "in_possession" ? 5 : 20, x: tacticalShapeMode === "in_possession" ? 5 : -5 }}
-                      className="flex flex-col items-center cursor-help"
-                    >
-                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">{tacticalPlayers.rcb?.number || 3}</div>
-                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">{tacticalPlayers.rcb?.name || "RCB"}</span>
-                    </motion.div>
-
-                    {/* RB */}
-                    <motion.div 
-                      animate={{ y: tacticalShapeMode === "in_possession" ? -25 : 10, x: tacticalShapeMode === "in_possession" ? 15 : -5 }}
-                      className="flex flex-col items-center cursor-help"
-                    >
-                      <div className="w-7 h-7 rounded-full bg-red-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">{tacticalPlayers.rb?.number || 18}</div>
-                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">{tacticalPlayers.rb?.name || "RB"}</span>
-                    </motion.div>
-                  </div>
-
-                  {/* GOALKEEPER */}
-                  <div className="flex justify-center items-center -mb-4">
-                    <div className="flex flex-col items-center">
-                      <div className="w-7 h-7 rounded-full bg-amber-600 border border-white flex items-center justify-center text-[10px] font-bold shadow-lg">{tacticalPlayers.gk?.number || 1}</div>
-                      <span className="text-[9px] text-slate-300 font-mono mt-1 bg-slate-950/80 px-1 py-0.5 rounded leading-none">{tacticalPlayers.gk?.name || "GK"}</span>
-                    </div>
-                  </div>
-
-                </div>
-
-                {/* Subtitle indicator */}
-                <div className="absolute bottom-3 left-4 flex items-center gap-1.5 text-[9px] font-mono text-slate-400">
-                  <span className="w-2 h-2 rounded-full bg-red-600 border border-white" />
-                  <span>Kırmızı: {selectedTeam} Taktik Dağılımı</span>
-                </div>
-              </div>
-            </div>
-
-            {/* 3. ATTEMPTS (ŞUT GİRİŞİMLERİ) DASHBOARD & SHOT MAP */}
-            <div className="bg-slate-900/60 rounded-2xl border border-slate-800/80 p-5 flex flex-col gap-4">
-              <span className="text-xs font-bold tracking-wider text-slate-400 uppercase flex items-center gap-1.5">
-                <Target className="w-4 h-4 text-rose-500" />
-                Şut & xG Girişimleri Dağılımı
-              </span>
-
-              {/* Aggregated attempts numerical metrics */}
-              <div className="grid grid-cols-4 gap-3">
-                <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-center">
-                  <span className="text-[8.5px] text-slate-500 block">TOPLAM GOL</span>
-                  <strong className="text-xl font-bold text-white">{attemptsStats.totals.goals}</strong>
-                  <span className="text-[8px] text-slate-500 block font-mono mt-0.5">({attemptsStats.avgGoals} / Maç)</span>
-                </div>
-                <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-center">
-                  <span className="text-[8.5px] text-slate-500 block">EXPECTED GOAL</span>
-                  <strong className="text-xl font-bold text-amber-400">xG {attemptsStats.totals.xG}</strong>
-                  <span className="text-[8px] text-slate-500 block font-mono mt-0.5">({attemptsStats.avgXG} / Maç)</span>
-                </div>
-                <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-center">
-                  <span className="text-[8.5px] text-slate-500 block">ŞUT SAYISI</span>
-                  <strong className="text-xl font-bold text-white">{attemptsStats.totals.shots}</strong>
-                  <span className="text-[8px] text-slate-500 block font-mono mt-0.5">({attemptsStats.avgShots} / Maç)</span>
-                </div>
-                <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-center">
-                  <span className="text-[8.5px] text-slate-500 block">İSABETLİ</span>
-                  <strong className="text-xl font-bold text-white">{attemptsStats.totals.onTarget}</strong>
-                  <span className="text-[8px] text-slate-500 block font-mono mt-0.5">({attemptsStats.avgOnTarget} / Maç)</span>
-                </div>
-              </div>
-
-              {/* Progress bars showing the shot outcome percentages exactly like the poster */}
-              <div className="flex flex-col gap-2.5 bg-slate-950/80 p-4 rounded-xl border border-slate-800/60">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  Şut Sonuç Dağılımı (%)
-                </span>
-
-                <div className="flex flex-col gap-2">
-                  {/* Goals */}
-                  <div className="flex flex-col">
-                    <div className="flex justify-between text-[10px] text-slate-400 mb-1 leading-none">
-                      <span>GOL (GOL OLANLAR)</span>
-                      <span className="font-bold text-emerald-400">{attemptsStats.outcomes.goal}%</span>
-                    </div>
-                    <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                      <div className="h-full bg-emerald-500" style={{ width: `${attemptsStats.outcomes.goal}%` }} />
-                    </div>
-                  </div>
-
-                  {/* Saved */}
-                  <div className="flex flex-col">
-                    <div className="flex justify-between text-[10px] text-slate-400 mb-1 leading-none">
-                      <span>KALECİ TARAFINDAN KURTARILAN</span>
-                      <span className="font-bold text-blue-400">{attemptsStats.outcomes.saved}%</span>
-                    </div>
-                    <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                      <div className="h-full bg-blue-500" style={{ width: `${attemptsStats.outcomes.saved}%` }} />
-                    </div>
-                  </div>
-
-                  {/* Blocked */}
-                  <div className="flex flex-col">
-                    <div className="flex justify-between text-[10px] text-slate-400 mb-1 leading-none">
-                      <span>BLOKE EDİLEN / ENGELLENEN</span>
-                      <span className="font-bold text-slate-400">{attemptsStats.outcomes.blocked}%</span>
-                    </div>
-                    <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                      <div className="h-full bg-slate-500" style={{ width: `${attemptsStats.outcomes.blocked}%` }} />
-                    </div>
-                  </div>
-
-                  {/* Woodwork */}
-                  <div className="flex flex-col">
-                    <div className="flex justify-between text-[10px] text-slate-400 mb-1 leading-none">
-                      <span>DİREKTEN DÖNEN</span>
-                      <span className="font-bold text-amber-500">{attemptsStats.outcomes.woodwork}%</span>
-                    </div>
-                    <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                      <div className="h-full bg-amber-500" style={{ width: `${attemptsStats.outcomes.woodwork}%` }} />
-                    </div>
-                  </div>
-
-                  {/* Off Target */}
-                  <div className="flex flex-col">
-                    <div className="flex justify-between text-[10px] text-slate-400 mb-1 leading-none">
-                      <span>KALE DIŞI (İSABETSİZ)</span>
-                      <span className="font-bold text-red-400">{attemptsStats.outcomes.offTarget}%</span>
-                    </div>
-                    <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                      <div className="h-full bg-red-500" style={{ width: `${attemptsStats.outcomes.offTarget}%` }} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* DYNAMIC SHOT MAP OVERLAY (HALF PITCH DIAGRAM) */}
-              <div className="relative w-full aspect-[4/3] bg-slate-950 rounded-xl border border-slate-800/80 overflow-hidden">
-                {/* Half Pitch lines */}
-                <div className="absolute inset-0 opacity-20 pointer-events-none">
-                  <div className="absolute top-2 inset-x-2 border border-white" style={{ bottom: "-10px" }} />
-                  {/* Penalty box */}
-                  <div className="absolute top-2 inset-x-0 mx-auto w-48 h-28 border border-white" />
-                  {/* Small box */}
-                  <div className="absolute top-2 inset-x-0 mx-auto w-24 h-10 border border-white" />
-                  {/* Goal post */}
-                  <div className="absolute top-0 inset-x-0 mx-auto w-16 h-2 bg-white" />
-                  {/* Penalty spot */}
-                  <div className="absolute top-20 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-white rounded-full" />
-                </div>
-
-                {/* Plot actual shot points with hover details */}
-                <div className="absolute inset-0">
-                  {aggregatedShotsList.map((shot, idx) => {
-                    const isGoal = shot.outcome?.toLowerCase().includes("goal") || shot.outcome?.toLowerCase().includes("gol");
-                    const isSave = shot.outcome?.toLowerCase().includes("save");
-                    const isBlock = shot.outcome?.toLowerCase().includes("block");
-                    
-                    let color = "bg-red-500"; // Off Target / Default
-                    if (isGoal) color = "bg-emerald-500 ring-2 ring-emerald-300 scale-125";
-                    else if (isSave) color = "bg-blue-500";
-                    else if (isBlock) color = "bg-slate-400";
-
-                    return (
-                      <div
-                        key={idx}
-                        className={`absolute w-3.5 h-3.5 rounded-full cursor-help hover:scale-150 transition-all ${color} flex items-center justify-center`}
-                        style={{ left: `${shot.x}%`, top: `${shot.y}%` }}
-                        title={`${shot.player} (${shot.outcome}) - ${shot.bodyPart}`}
-                      >
-                        {isGoal && <span className="text-[7px] text-white font-black">G</span>}
-                      </div>
-                    );
-                  })}
-                  {aggregatedShotsList.length === 0 && (
-                    <div className="absolute inset-0 flex items-center justify-center text-xs text-slate-500 italic">
-                      Bu takıma ait şut verisi bulunamadı.
-                    </div>
-                  )}
-                </div>
-
-                {/* Shot map legend */}
-                <div className="absolute bottom-2.5 inset-x-0 flex justify-center gap-3 text-[8.5px] font-mono text-slate-400 bg-slate-950/80 py-1.5">
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" /> Gol</span>
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500" /> Kurtarış</span>
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-400" /> Blok</span>
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" /> İsabetsiz</span>
-                </div>
-              </div>
-            </div>
-
           </div>
 
           {/* ======================================================= */}
-          {/* RIGHT 7 COLUMNS: PLAYER STATS, AVERAGES, RANKINGS */}
+          {/* RIGHT 8 COLUMNS: PLAYER STATS, AVERAGES, RANKINGS */}
           {/* ======================================================= */}
-          <div className="lg:col-span-7 flex flex-col gap-6">
+          <div className="lg:col-span-8 flex flex-col gap-6">
             
             {/* 1. PLAYER STATISTICS TABLE */}
             <div className="bg-slate-900/60 rounded-2xl border border-slate-800/80 p-5 flex flex-col gap-3.5">

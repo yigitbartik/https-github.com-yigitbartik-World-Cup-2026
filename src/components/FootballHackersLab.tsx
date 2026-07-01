@@ -70,7 +70,7 @@ export function FootballHackersLab({ sheets, language = "TR" }: FootballHackersL
   const [netGainsPlayer1, setNetGainsPlayer1] = useState<string>("");
   const [netGainsPlayer2, setNetGainsPlayer2] = useState<string>("");
   const [worldCupIntensityMultiplier, setWorldCupIntensityMultiplier] = useState<number>(1.15);
-  const [selectedWorldCupRole, setSelectedWorldCupRole] = useState<"CB" | "FB" | "CM" | "WM" | "CF">("CF");
+  const [selectedWorldCupRole, setSelectedWorldCupRole] = useState<"CB" | "FB" | "DM" | "CM" | "AM" | "WM" | "CF">("CF");
 
   // Selected Sheet Data
   const activeSheet = useMemo(() => {
@@ -790,6 +790,30 @@ export function FootballHackersLab({ sheets, language = "TR" }: FootballHackersL
           { phase: "Progression", td: 126.3, hsr: 8.4, sd: 2.8, acc: 0.50, dec: 0.70 },
           { phase: "Final Third", td: 135.4, hsr: 15.3, sd: 6.4, acc: 0.50, dec: 0.80 }
         ]
+      },
+      DM: {
+        title: "Defansif Orta Saha (DM) Uzmanlık Profili",
+        desc: "Savunma ile hücum arasındaki geçişlerde (Middle Block ve Low Block) kritik defansif alanları kapatır. Yüksek ani yavaşlama (DEC) ve sürekli yüksek yoğunluklu hareket gerektirir.",
+        stats: [
+          { phase: "Low Block", td: 134.2, hsr: 9.8, sd: 2.3, acc: 0.35, dec: 0.58 },
+          { phase: "Middle Block", td: 135.0, hsr: 7.5, sd: 1.1, acc: 0.35, dec: 0.55 },
+          { phase: "High Press", td: 130.1, hsr: 7.0, sd: 1.6, acc: 0.35, dec: 0.52 },
+          { phase: "Build-up", td: 129.5, hsr: 6.8, sd: 1.2, acc: 0.32, dec: 0.48 },
+          { phase: "Progression", td: 131.0, hsr: 7.2, sd: 1.3, acc: 0.38, dec: 0.54 },
+          { phase: "Final Third", td: 125.8, hsr: 8.0, sd: 1.5, acc: 0.30, dec: 0.45 }
+        ]
+      },
+      AM: {
+        title: "Ofansif Orta Saha / On Numara (AM) Uzmanlık Profili",
+        desc: "Final Üçüncü Bölge hücumlarında ve ön alan baskısında (High Press) kilit rol oynar. Yüksek ivmelenme (ACC), yoğun HSR/min ve rakip stoperleri hat kıran koşularla tehdit etme özellikleriyle donatılmıştır.",
+        stats: [
+          { phase: "Low Block", td: 128.5, hsr: 10.2, sd: 2.2, acc: 0.45, dec: 0.52 },
+          { phase: "Middle Block", td: 131.2, hsr: 8.6, sd: 1.8, acc: 0.45, dec: 0.55 },
+          { phase: "High Press", td: 134.5, hsr: 9.5, sd: 2.2, acc: 0.52, dec: 0.62 },
+          { phase: "Build-up", td: 124.0, hsr: 7.5, sd: 1.4, acc: 0.40, dec: 0.48 },
+          { phase: "Progression", td: 130.5, hsr: 9.0, sd: 1.8, acc: 0.48, dec: 0.58 },
+          { phase: "Final Third", td: 137.2, hsr: 13.5, sd: 4.8, acc: 0.50, dec: 0.72 }
+        ]
       }
     };
 
@@ -809,7 +833,9 @@ export function FootballHackersLab({ sheets, language = "TR" }: FootballHackersL
       const pos = (p["Position"] || "").toUpperCase();
       if (selectedWorldCupRole === "CB") return pos.includes("CB") || pos.includes("DEF") || pos.includes("STOPER") || pos.includes("CENTRE BACK");
       if (selectedWorldCupRole === "FB") return pos.includes("FB") || pos.includes("BEK") || pos.includes("BACK");
-      if (selectedWorldCupRole === "CM") return pos.includes("CM") || pos.includes("MID") || pos.includes("ORTA") || pos.includes("CENTRE MID");
+      if (selectedWorldCupRole === "DM") return pos.includes("DM") || pos.includes("DEFENSIVE MID") || pos.includes("ÖN LİBERO") || pos.includes("DEFANSİF ORTA");
+      if (selectedWorldCupRole === "CM") return pos.includes("CM") || pos.includes("MID") || pos.includes("ORTA") || pos.includes("CENTRE MID") || pos.includes("DM") || pos.includes("AM");
+      if (selectedWorldCupRole === "AM") return pos.includes("AM") || pos.includes("ATTACKING MID") || pos.includes("ON NUMARA") || pos.includes("OFANSİF ORTA");
       if (selectedWorldCupRole === "WM") return pos.includes("WM") || pos.includes("WING") || pos.includes("KANAT");
       if (selectedWorldCupRole === "CF") return pos.includes("CF") || pos.includes("FW") || pos.includes("FOR") || pos.includes("STRIKER");
       return false;
@@ -2446,7 +2472,7 @@ export function FootballHackersLab({ sheets, language = "TR" }: FootballHackersL
 
               {/* Position selector */}
               <div className="flex flex-wrap gap-1.5 shrink-0">
-                {(["CB", "FB", "CM", "WM", "CF"] as const).map((pos) => (
+                {(["CB", "FB", "DM", "CM", "AM", "WM", "CF"] as const).map((pos) => (
                   <button
                     key={pos}
                     onClick={() => {
@@ -2463,7 +2489,9 @@ export function FootballHackersLab({ sheets, language = "TR" }: FootballHackersL
                   >
                     {pos === "CB" && "Stoper (CB)"}
                     {pos === "FB" && "Bek (FB)"}
+                    {pos === "DM" && "Ön Libero / DM"}
                     {pos === "CM" && "Orta Saha (CM)"}
+                    {pos === "AM" && "On Numara / AM"}
                     {pos === "WM" && "Kanat (WM)"}
                     {pos === "CF" && "Santrafor (CF)"}
                   </button>
@@ -2528,7 +2556,9 @@ export function FootballHackersLab({ sheets, language = "TR" }: FootballHackersL
                 <div className="bg-indigo-50/50 border border-indigo-100 p-3 rounded-2xl text-[10.5px] text-slate-500 font-medium leading-relaxed mt-4">
                   <strong>💡 World Cup Taktik Karar Ağacı:</strong> {selectedWorldCupRole === "CB" && "Low Block aşamasındaki yüksek depar sıklığı ve geri adım reaksiyonu (-0.70 DEC/min), stoperler için patlayıcı gücü ön plana çıkarır. Bu evrede sakatlanma riskini azaltmak için egzersizler düşük hızdan ani duruşlara doğru kurgulanmalıdır."}
                   {selectedWorldCupRole === "FB" && "Bekler Low Block aşamasında rakip kanatları kapatırken 12.5 HSR/min değerine çıkarlar. Hücuma çıktıklarında ise Final Third aşamasında 3.6 SD/min sprint dayanıklılığı sunarlar. Tam bir geçiş dinamizmi."}
+                  {selectedWorldCupRole === "DM" && "Defansif orta sahalar (DM), Low Block ve Middle Block'ta savunma önünü süpürürken 134-135 m/dk toplam mesafe ve 9.8 HSR/min ile oynar. Hızlı yön değiştirme becerisi, rakibin dikey pas hatlarını tıkar."}
                   {selectedWorldCupRole === "CM" && "Orta sahalar, topa sahip olunan tüm aşamalarda (Build-up, Progression ve Final Third) toplam 132 m/dk üzeri yoğunluk korur. Bu kesintisiz aerobik koşu hacmi, takımı dengede tutan ana iskelettir."}
+                  {selectedWorldCupRole === "AM" && "Ofansif orta sahalar (AM), Final Third'de 13.5 HSR/min ve High Press'te yüksek ivmelenme (+0.52 ACC/min) ile oynar. Ceza sahası çevresindeki bu patlayıcılık, gol asisti ve şok baskılar yaratmak için anahtardır."}
                   {selectedWorldCupRole === "WM" && "Kanat oyuncuları, Final Third aşamasında 14.7 HSR/min ve 5.5 SD/min sprint değerleriyle en patlayıcı tepe yüküne ulaşır. Bu dikey tehdit, rakip savunmayı en çok deforme eden kuvvettir."}
                   {selectedWorldCupRole === "CF" && "Santraforlar hücum aksiyonlarında 15.3 HSR/min hızıyla zirveyi çekerler. High Press reaksiyonlarında ise rakipten topla çıkışı engellemek için +0.60 ACC/min ivmelenmeyle pres yaparlar."}
                 </div>
